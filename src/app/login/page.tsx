@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,75 +20,46 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      setError('Please enter both email and password.');
+      return;
+    }
     setLoading(true);
     setError('');
 
-    // Client-side validation
-    if (!email.trim()) {
-      setError('Email is required');
-      setLoading(false);
-      return;
-    }
-
-    if (!password) {
-      setError('Password is required');
-      setLoading(false);
-      return;
-    }
-
-    if (!email.includes('@')) {
-      setError('Please enter a valid email address');
-      setLoading(false);
-      return;
-    }
-
     try {
-      console.log('Attempting login for:', email);
-      const { error, data } = await signIn(email.trim(), password);
-      
+      const { error } = await signIn(email.trim(), password);
       if (error) {
-        console.error('Login error:', error);
-        
-        // Handle specific error messages
-        if (error.message.includes('Invalid login credentials')) {
-          setError('Invalid email or password. Please check your credentials and try again.');
-        } else if (error.message.includes('Email not confirmed')) {
-          setError('Please check your email and click the confirmation link before signing in.');
-        } else if (error.message.includes('Too many requests')) {
-          setError('Too many login attempts. Please wait a moment and try again.');
-        } else {
-          setError(error.message || 'Login failed. Please try again.');
-        }
+        setError(error.message || 'Invalid login credentials. Please try again.');
       } else {
-        console.log('Login successful, redirecting to dashboard...');
-        // Clear form only on success
-        setEmail('');
-        setPassword('');
         router.push('/dashboard');
       }
-    } catch (err: any) {
-      console.error('Unexpected login error:', err);
+    } catch (err) {
       setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
+      <div className="flex items-center gap-2 mb-8">
+        <Sparkles className="w-8 h-8 text-primary" />
+        <span className="text-3xl font-bold">QuizCraft</span>
+      </div>
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-          <CardDescription>Sign in to your QuizCraft account</CardDescription>
+          <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+          <CardDescription>Sign in to continue to your dashboard.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="Enter your email" 
+                placeholder="you@example.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -95,11 +67,19 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link
+                        href="/forgot-password"
+                        className="text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
+                    >
+                        Forgot?
+                    </Link>
+                </div>
               <Input 
                 id="password" 
                 type="password" 
-                placeholder="Enter your password" 
+                placeholder="••••••••" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -108,33 +88,27 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
-                {error}
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <span>{error}</span>
               </div>
             )}
 
             <Button 
               type="submit" 
               className="w-full"
-              disabled={loading || !email.trim() || !password}
+              disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Sign In
             </Button>
           </form>
 
-          <div className="text-center space-y-2">
-            <Link
-              href="/forgot-password"
-              className="text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
-            >
-              Forgot your password?
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            Don't have an account?{" "}
+            <Link href="/signup" className="text-primary hover:underline underline-offset-4 font-semibold">
+              Sign Up
             </Link>
-            <div className="text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link href="/signup" className="text-primary hover:underline underline-offset-4">
-                Sign up
-              </Link>
-            </div>
           </div>
         </CardContent>
       </Card>

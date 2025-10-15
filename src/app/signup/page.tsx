@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -17,100 +17,53 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const { signUp } = useAuth();
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
     setMessage('');
-
-    // Client-side validation
-    if (!email.trim()) {
-      setError('Email is required');
-      setLoading(false);
-      return;
-    }
-
-    if (!email.includes('@')) {
-      setError('Please enter a valid email address');
-      setLoading(false);
-      return;
-    }
-
-    if (!password) {
-      setError('Password is required');
-      setLoading(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      setLoading(false);
-      return;
-    }
-
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
+      setError('Passwords do not match.');
       return;
     }
-
-    // Check password strength
-    if (password.length < 8) {
-      setError('For better security, please use a password with at least 8 characters');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
 
     try {
-      console.log('Attempting signup for:', email);
-      const { error, data } = await signUp(email.trim(), password);
-      
+      const { error } = await signUp(email.trim(), password);
       if (error) {
-        console.error('Signup error:', error);
-        
-        // Handle specific error messages
-        if (error.message.includes('User already registered')) {
-          setError('An account with this email already exists. Please try signing in instead.');
-        } else if (error.message.includes('Password should be at least')) {
-          setError('Password must be at least 6 characters long.');
-        } else if (error.message.includes('Invalid email')) {
-          setError('Please enter a valid email address.');
-        } else {
-          setError(error.message || 'Signup failed. Please try again.');
-        }
+        setError(error.message || 'Failed to create an account. Please try again.');
       } else {
-        console.log('Signup successful');
-        setMessage('Account created successfully! Please check your email for a confirmation link to complete your registration.');
-        // Clear form only on success
+        setMessage('Success! Please check your email for a confirmation link.');
         setEmail('');
         setPassword('');
         setConfirmPassword('');
       }
-    } catch (err: any) {
-      console.error('Unexpected signup error:', err);
+    } catch (err) {
       setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
+      <div className="flex items-center gap-2 mb-8">
+        <Sparkles className="w-8 h-8 text-primary" />
+        <span className="text-3xl font-bold">QuizCraft</span>
+      </div>
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Create account</CardTitle>
-          <CardDescription>Get started with QuizCraft today</CardDescription>
+          <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
+          <CardDescription>Join QuizCraft to start creating quizzes.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="Enter your email" 
+                placeholder="you@example.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -122,7 +75,7 @@ export default function SignupPage() {
               <Input 
                 id="password" 
                 type="password" 
-                placeholder="Create a password" 
+                placeholder="6+ characters" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -134,7 +87,7 @@ export default function SignupPage() {
               <Input 
                 id="confirmPassword" 
                 type="password" 
-                placeholder="Confirm your password" 
+                placeholder="Re-enter password" 
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={loading}
@@ -143,33 +96,34 @@ export default function SignupPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
-                {error}
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <span>{error}</span>
               </div>
             )}
 
             {message && (
-              <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-md p-3">
-                {message}
-              </div>
+                <div className="flex items-start gap-3 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+                    <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                    <span>{message}</span>
+                </div>
             )}
 
             <Button 
               type="submit" 
               className="w-full"
-              disabled={loading || !email.trim() || !password || !confirmPassword}
+              disabled={loading || message !== ''}
             >
-              {loading ? 'Creating account...' : 'Create Account'}
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Create Account
             </Button>
           </form>
 
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline underline-offset-4">
-                Sign in
-              </Link>
-            </div>
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary hover:underline underline-offset-4 font-semibold">
+              Sign In
+            </Link>
           </div>
         </CardContent>
       </Card>

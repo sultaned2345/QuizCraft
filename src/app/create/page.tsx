@@ -3,6 +3,7 @@
 import type React from "react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -13,35 +14,59 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, FileText, Loader2, ChevronDown, Settings, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { Upload, FileText, Loader2, Settings, AlertCircle, Sparkles, LogOut, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatFileSize, validateFileType, extractPdfText } from "@/lib/file-parser";
 
 interface QuizSettings {
   questionCount: number;
   difficulty: "easy" | "medium" | "hard";
-  questionType: "multiple-choice" | "true-false" | "mixed";
-  shuffleQuestions: boolean;
 }
+
+// Header component for a consistent authenticated layout
+const DashboardHeader = () => {
+    const { user, signOut } = useAuth();
+    const router = useRouter();
+
+    const handleSignOut = async () => {
+        await signOut();
+        router.push('/login');
+    };
+
+    return (
+        <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+            <Link href="/dashboard" className="flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-primary" />
+                <span className="text-xl font-bold">QuizCraft</span>
+            </Link>
+            <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground hidden sm:inline">
+                    {user?.email}
+                </span>
+                <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                </Button>
+            </div>
+        </header>
+    );
+};
+
 
 export default function CreatePage() {
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [quizSettings, setQuizSettings] = useState<QuizSettings>({
     questionCount: 10,
     difficulty: "medium",
-    questionType: "multiple-choice",
-    shuffleQuestions: false,
   });
   
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
@@ -51,87 +76,66 @@ export default function CreatePage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Enhanced file validation
       const maxSize = 3 * 1024 * 1024; // 3MB
       const isValidType = validateFileType(file.name, file.type);
       
       if (!isValidType) {
-        setError(`Unsupported file type. Please upload only PDF (.pdf) or TXT (.txt) files. Received: ${file.type || 'unknown type'}`);
+        setError("Unsupported file type. Please upload a PDF or TXT file.");
         setSelectedFile(null);
         return;
       }
 
       if (file.size > maxSize) {
-        setError(`File size exceeds 3MB limit. Current size: ${formatFileSize(file.size)}`);
+        setError(`File size exceeds 3MB. Max size is ${formatFileSize(maxSize)}.`);
         setSelectedFile(null);
         return;
       }
-
+      
+      setTextContent(""); // Clear text content when a file is selected
       setSelectedFile(file);
-      setError(""); // Clear any previous errors
+      setError("");
     }
   };
+  
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setTextContent(e.target.value);
+      if(selectedFile) {
+          setSelectedFile(null); // Clear file when text is entered
+      }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-
-    // Check authentication
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    // Validate input
+    if (!user) { router.push("/login"); return; }
     if (!textContent.trim() && !selectedFile) {
-      setError("Please provide text content or upload a file");
+      setError("Please provide text content or upload a file.");
       return;
     }
 
     setIsLoading(true);
+    setError("");
 
     try {
       let finalTextContent = textContent.trim();
 
-      // Handle file upload - extract text if it's a PDF
       if (selectedFile) {
-        if (selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith(".pdf")) {
-          // Extract text from PDF using the new API
-          try {
-            const extractedText = await extractPdfText(selectedFile);
-            finalTextContent = extractedText;
-          } catch (pdfError) {
-            throw new Error(`Failed to extract text from PDF: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
-          }
-        } else if (selectedFile.type === "text/plain" || selectedFile.name.toLowerCase().endsWith(".txt")) {
-          // Read text file content
-          try {
-            const textContent = await selectedFile.text();
-            finalTextContent = textContent;
-          } catch (textError) {
-            throw new Error(`Failed to read text file: ${textError instanceof Error ? textError.message : 'Unknown error'}`);
-          }
-        }
+        finalTextContent = selectedFile.type === "application/pdf"
+            ? await extractPdfText(selectedFile)
+            : await selectedFile.text();
       }
 
-      // Validate that we have content
-      if (!finalTextContent.trim()) {
-        throw new Error("No content available for quiz generation");
+      if (finalTextContent.length < 100) {
+          throw new Error("Content is too short. Please provide at least 100 characters.");
       }
 
-      // Build query parameters for the API
       const queryParams = new URLSearchParams({
         numQuestions: quizSettings.questionCount.toString(),
         difficulty: quizSettings.difficulty,
       });
 
-      // Get the current session token for authentication
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Authentication required. Please log in again.");
-      }
+      if (!session) throw new Error("Authentication failed.");
 
-      // API call to generate quiz with text content
       const response = await fetch(`/api/generate-quiz?${queryParams}`, {
         method: "POST",
         headers: {
@@ -141,34 +145,23 @@ export default function CreatePage() {
         body: finalTextContent,
       });
 
-      const contentType = response.headers.get("content-type");
-      
-      if (!contentType || !contentType.includes("application/json")) {
-        // Response is not JSON, likely an error page
-        const text = await response.text();
-        console.error("Non-JSON response:", text.substring(0, 200));
-        throw new Error("Server error. Please try again or use a smaller file.");
-      }
-
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to generate quiz");
+        throw new Error(result.error || "An unknown error occurred.");
       }
 
       toast({
-        title: "Quiz created successfully!",
-        description: `"${result.title}" has been added to your library.`,
+        title: "Quiz Generated!",
+        description: `Your new quiz "${result.title}" has been created.`,
       });
 
-      // Redirect to quiz detail page or dashboard
       router.push(`/dashboard`);
     } catch (err) {
-      console.error("Quiz generation error:", err);
-      const errorMessage = err instanceof Error ? err.message : "Something went wrong";
+      const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
       setError(errorMessage);
       toast({
-        title: "Error",
+        title: "Generation Failed",
         description: errorMessage,
         variant: "destructive",
       });
@@ -180,235 +173,134 @@ export default function CreatePage() {
   const updateSetting = <K extends keyof QuizSettings>(key: K, value: QuizSettings[K]) => {
     setQuizSettings((prev) => ({ ...prev, [key]: value }));
   };
-
-  // Show loading state while checking authentication
-  if (loading) {
+  
+  if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  // Don't render if not authenticated (will redirect)
-  if (!user) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <div className="max-w-2xl mx-auto pt-8">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Create Your Quiz</CardTitle>
-            <CardDescription>Paste your content or upload a file to generate an AI-powered quiz</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Text Input Section */}
-              <div className="space-y-2">
-                <Label htmlFor="content">Paste Your Content</Label>
-                <Textarea
-                  id="content"
-                  placeholder="Paste your text content here... (articles, notes, study materials, etc.)"
-                  value={textContent}
-                  onChange={(e) => setTextContent(e.target.value)}
-                  className="min-h-32 resize-y"
-                />
-              </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+        <DashboardHeader />
+        <main className="container mx-auto px-4 py-8 md:py-12">
+            <Button variant="ghost" className="mb-6" onClick={() => router.back()}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+            </Button>
+            <Card className="max-w-3xl mx-auto">
+                <CardHeader>
+                    <CardTitle className="text-2xl font-bold">Create a New Quiz</CardTitle>
+                    <CardDescription>Provide your content and configure the settings for your new quiz.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="content" className="text-base font-semibold">
+                                Option 1: Paste Your Content
+                            </Label>
+                            <Textarea
+                                id="content"
+                                placeholder="Paste your article, notes, or any text here..."
+                                value={textContent}
+                                onChange={handleTextChange}
+                                className="min-h-48 text-base"
+                                disabled={isLoading}
+                            />
+                        </div>
 
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or</span>
-                </div>
-              </div>
+                        <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                                <span className="w-full border-t" />
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="bg-card px-2 text-muted-foreground">OR</span>
+                            </div>
+                        </div>
 
-              {/* Enhanced File Upload Section */}
-              <div className="space-y-3">
-                <Label htmlFor="file">Upload a File</Label>
-                <div className="relative">
-                  <Input
-                    id="file"
-                    type="file"
-                    accept=".pdf,.txt"
-                    onChange={handleFileChange}
-                    className="cursor-pointer"
-                    disabled={isLoading}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    {!selectedFile && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Upload className="h-4 w-4" />
-                        <span className="text-sm">Choose PDF or TXT file (max 3MB)</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Enhanced File Information Display */}
-                {selectedFile && (
-                  <div className="border rounded-lg p-3 bg-muted/30">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0">
-                        {selectedFile.type === 'application/pdf' ? (
-                          <FileText className="h-5 w-5 text-red-500" />
-                        ) : (
-                          <FileText className="h-5 w-5 text-blue-500" />
+                        <div className="space-y-3">
+                            <Label htmlFor="file-upload" className="text-base font-semibold">
+                                Option 2: Upload a File
+                            </Label>
+                            <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-6 text-center">
+                                <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
+                                <p className="mt-2 font-semibold">
+                                  {selectedFile ? selectedFile.name : 'Drag & drop or click to upload'}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  PDF or TXT only, max 3MB.
+                                </p>
+                                <Input
+                                    id="file-upload"
+                                    type="file"
+                                    accept=".pdf,.txt"
+                                    onChange={handleFileChange}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        </div>
+
+                        <Collapsible>
+                            <CollapsibleTrigger asChild>
+                                <Button type="button" variant="outline" className="w-full">
+                                    <Settings className="w-4 h-4 mr-2" />
+                                    Quiz Settings
+                                </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-4 space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="question-count">Number of Questions</Label>
+                                        <Select value={String(quizSettings.questionCount)} onValueChange={(v) => updateSetting("questionCount", Number(v))}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="5">5</SelectItem>
+                                                <SelectItem value="10">10</SelectItem>
+                                                <SelectItem value="15">15</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="difficulty">Difficulty</Label>
+                                        <Select value={quizSettings.difficulty} onValueChange={(v: "easy" | "medium" | "hard") => updateSetting("difficulty", v)}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="easy">Easy</SelectItem>
+                                                <SelectItem value="medium">Medium</SelectItem>
+                                                <SelectItem value="hard">Hard</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
+
+                        {error && (
+                            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                                <div>{error}</div>
+                            </div>
                         )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-sm truncate">{selectedFile.name}</span>
-                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatFileSize(selectedFile.size)}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            {selectedFile.type === 'application/pdf' ? 'PDF Document' : 'Text File'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* File Upload Help Text */}
-                <div className="text-xs text-muted-foreground">
-                  <p>Supported formats: PDF and TXT files up to 10MB</p>
-                  <p>PDF files will have their text extracted automatically</p>
-                </div>
-              </div>
 
-              <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between bg-transparent"
-                    onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Settings className="h-4 w-4" />
-                      Advanced Options
-                    </div>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isAdvancedOpen ? "rotate-180" : ""}`} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-4 pt-4">
-                  <Card className="bg-muted/30">
-                    <CardContent className="pt-6 space-y-4">
-                      {/* Number of Questions */}
-                      <div className="space-y-2">
-                        <Label htmlFor="question-count">Number of Questions</Label>
-                        <Select
-                          value={quizSettings.questionCount.toString()}
-                          onValueChange={(value) => updateSetting("questionCount", Number.parseInt(value))}
+                        <Button
+                            type="submit"
+                            size="lg"
+                            className="w-full text-base"
+                            disabled={isLoading || (!textContent.trim() && !selectedFile)}
                         >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5 questions</SelectItem>
-                            <SelectItem value="10">10 questions</SelectItem>
-                            <SelectItem value="15">15 questions</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Difficulty Level */}
-                      <div className="space-y-2">
-                        <Label htmlFor="difficulty">Difficulty Level</Label>
-                        <Select
-                          value={quizSettings.difficulty}
-                          onValueChange={(value: "easy" | "medium" | "hard") => updateSetting("difficulty", value)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="easy">Easy</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="hard">Hard</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Shuffle Questions Toggle */}
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="shuffle-questions">Shuffle Questions</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Randomize the order of questions for each quiz attempt
-                          </p>
-                        </div>
-                        <Switch
-                          id="shuffle-questions"
-                          checked={quizSettings.shuffleQuestions}
-                          onCheckedChange={(checked) => updateSetting("shuffleQuestions", checked)}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Enhanced Error Message Display */}
-              {error && (
-                <div className="border border-destructive/20 bg-destructive/10 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-destructive">
-                      <p className="font-medium">Upload Error</p>
-                      <p className="text-xs mt-1">{error}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Enhanced Submit Button */}
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={isLoading || (!textContent.trim() && !selectedFile)}
-                size="lg"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    {selectedFile ? "Processing File & Generating Quiz..." : "Generating Quiz..."}
-                  </>
-                ) : (
-                  <>
-                    {selectedFile ? (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload and Generate Quiz
-                      </>
-                    ) : (
-                      "Generate Quiz"
-                    )}
-                  </>
-                )}
-              </Button>
-
-              {/* Enhanced Help Text */}
-              <div className="text-xs text-muted-foreground text-center space-y-1">
-                <p>Your quiz will be generated using AI and saved to your account.</p>
-                  <p>Supported formats: PDF and TXT files up to 3MB.</p>
-                <p className="text-green-600">✓ Files are processed securely and text is extracted automatically</p>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+                            {isLoading ? (
+                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Generating Your Quiz...</>
+                            ) : (
+                                <><Sparkles className="w-5 h-5 mr-2" /> Generate Quiz</>
+                            )}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+        </main>
     </div>
   );
 }

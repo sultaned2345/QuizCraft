@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -22,98 +27,70 @@ export default function ForgotPasswordPage() {
     if (error) {
       setError(error.message);
     } else {
-      setMessage('Check your email for a password reset link!');
+      setMessage('If an account with that email exists, we sent a password reset link.');
     }
     
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Reset your password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
-        </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          {error && (
-            <div className="text-red-600 text-sm text-center">
-              {error}
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
+      <div className="flex items-center gap-2 mb-8">
+        <Sparkles className="w-8 h-8 text-primary" />
+        <span className="text-3xl font-bold">QuizCraft</span>
+      </div>
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">Reset Your Password</CardTitle>
+          <CardDescription>Enter your email to get a reset link.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading || message !== ''}
+              />
             </div>
-          )}
 
-          {message && (
-            <div className="text-green-600 text-sm text-center">
-              {message}
-            </div>
-          )}
+            {error && (
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <span>{error}</span>
+              </div>
+            )}
 
-          <div>
-            <button
+            {message && (
+                <div className="flex items-start gap-3 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+                    <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                    <span>{message}</span>
+                </div>
+            )}
+
+            <Button
               type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || message !== ''}
+              className="w-full"
             >
-              {loading ? 'Sending...' : 'Send reset link'}
-            </button>
-          </div>
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Send Reset Link
+            </Button>
+          </form>
 
-          <div className="text-center">
-            <Link
-              href="/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Back to sign in
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            Remembered your password?{" "}
+            <Link href="/login" className="text-primary hover:underline underline-offset-4 font-semibold">
+              Sign In
             </Link>
           </div>
-        </form>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
