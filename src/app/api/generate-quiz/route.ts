@@ -207,8 +207,7 @@ const saved = await prisma.quiz.create({
     return NextResponse.json({ 
       id: saved.id, 
       title: saved.title, 
-      questions: quiz.questions, 
-      sourceType: saved.sourceType, 
+      questions: quiz.questions,  
       createdAt: saved.createdAt 
     });
   } catch (error: any) {
