@@ -182,20 +182,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No input provided" }, { status: 400 });
     }
 
-    const quiz = await callGeminiForQuiz({ text, numQuestions, difficulty });
+    //... inside the POST function in src/app/api/generate-quiz/route.ts
 
-    // Save to DB (Prisma) - Note: model is 'Quiz' not 'quizzes'
-    const saved = await prisma.quiz.create({
-      data: {
-        title: quiz.title || "Generated Quiz",
-        questions: { create: quiz.questions.map(q => ({
-          question_text: q.question,
-          correct_answer: q.answer,
-          options: q.options
-        })) },
-        userId: user.id, // Include user_id
-      },
-    });
+const quiz = await callGeminiForQuiz({ text, numQuestions, difficulty });
+
+// Save to DB (Prisma)
+const saved = await prisma.quiz.create({
+  data: {
+    title: quiz.title || "Generated Quiz",
+    questions: {
+      create: quiz.questions.map((q) => ({
+        // FIX: Use the correct property names from the AI response
+        question_text: q.question_text,
+        correct_answer: q.correct_answer,
+        options: q.options,
+      })),
+    },
+    userId: user.id,
+  },
+});
+
+//...
 
     return NextResponse.json({ 
       id: saved.id, 
