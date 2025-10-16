@@ -108,13 +108,12 @@ export const supabaseHelpers = {
     if (error) throw error;
   },
 
-  // Question operations
+  // lines 103-110 (it will be one line shorter)
   async getQuestions(quizId: string) {
     const { data, error } = await supabase
       .from('questions')
       .select('*')
-      .eq('quiz_id', quizId)
-      .order('created_at', { ascending: true });
+      .eq('quiz_id', quizId); // .order() is now removed
     
     if (error) throw error;
     return data;
