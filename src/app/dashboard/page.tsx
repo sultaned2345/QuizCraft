@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { MoreHorizontal, Copy, Edit, Trash2, Plus, LogOut, Sparkles, FileQuestion, BookCopy } from "lucide-react";
 
-// The interface remains the same as it fits our needs
 interface Quiz {
   id: string;
   title: string;
@@ -22,7 +21,6 @@ interface Quiz {
   questionsCount: number;
 }
 
-// A new Header component specific to the dashboard layout
 const DashboardHeader = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -73,12 +71,10 @@ export default function DashboardPage() {
     setIsLoading(true);
     try {
       const quizzesData = await supabaseHelpers.getQuizzes(user.id);
-      const transformedQuizzes = await Promise.all(
-        quizzesData.map(async (quiz) => {
-          const questions = await supabaseHelpers.getQuestions(quiz.id);
-          return { ...quiz, questionsCount: questions.length };
-        })
-      );
+      const transformedQuizzes = quizzesData.map((quiz: any) => ({
+        ...quiz,
+        questionsCount: quiz.questions.length,
+      }));
       setQuizzes(transformedQuizzes);
     } catch (error) {
       console.error("Error fetching quizzes:", error);
@@ -186,7 +182,7 @@ export default function DashboardPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}>
                           <Edit className="w-4 h-4 mr-2" />
-                          Edit / View
+                          View Quiz
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
                           <Copy className="w-4 h-4 mr-2" />

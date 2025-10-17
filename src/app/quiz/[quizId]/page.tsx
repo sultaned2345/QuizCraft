@@ -64,10 +64,13 @@ export default function QuizPage() {
     setIsLoading(true);
     setError('');
     try {
-      const quizData = await supabaseHelpers.getQuiz(quizId);
-      const questionsData = await supabaseHelpers.getQuestions(quizId);
-      setQuiz(quizData);
-      setQuestions(questionsData);
+      const quizData = await supabaseHelpers.getQuiz(quizId) as any;
+      if (quizData && quizData.questions) {
+        setQuiz(quizData);
+        setQuestions(quizData.questions);
+      } else {
+        setError('Quiz not found or has no questions.');
+      }
     } catch (err) {
       setError('Quiz not found or you do not have permission to view it.');
     } finally {
