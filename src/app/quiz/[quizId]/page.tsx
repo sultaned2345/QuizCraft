@@ -7,21 +7,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabaseHelpers } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Share2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { Quiz, Question } from '@/types/database';
 
-// Re-usable header from your dashboard
 const DashboardHeader = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
-
   const handleSignOut = async () => {
     await signOut();
     router.push('/login');
   };
-
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
       <Link href="/dashboard" className="flex items-center gap-2">
@@ -43,6 +40,7 @@ export default function QuizPage() {
   const [error, setError] = useState('');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [fillInBlankAnswer, setFillInBlankAnswer] = useState('');
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
 
@@ -71,13 +69,7 @@ export default function QuizPage() {
       setQuiz(quizData);
       setQuestions(questionsData);
     } catch (err) {
-      console.error('Error fetching quiz data:', err);
       setError('Quiz not found or you do not have permission to view it.');
-      toast({
-        title: 'Error',
-        description: 'Failed to load the quiz.',
-        variant: 'destructive',
-      });
     } finally {
       setIsLoading(false);
     }
@@ -85,9 +77,12 @@ export default function QuizPage() {
 
   const handleAnswerSelect = (answer: string) => {
     if (isAnswered) return;
+    const currentQuestion = questions[currentQuestionIndex];
+    const isCorrect = answer.toLowerCase().trim() === currentQuestion.correct_answer.toLowerCase().trim();
+
     setSelectedAnswer(answer);
     setIsAnswered(true);
-    if (answer === questions[currentQuestionIndex].correct_answer) {
+    if (isCorrect) {
       setScore(score + 1);
     }
   };
@@ -95,6 +90,7 @@ export default function QuizPage() {
   const handleNextQuestion = () => {
     setIsAnswered(false);
     setSelectedAnswer(null);
+    setFillInBlankAnswer('');
     setCurrentQuestionIndex(currentQuestionIndex + 1);
   };
 
@@ -108,15 +104,7 @@ export default function QuizPage() {
               <Button
                 key={index}
                 variant="outline"
-                className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${
-                  isAnswered && option === question.correct_answer
-                    ? 'bg-green-100 border-green-400 dark:bg-green-900/50'
-                    : ''
-                } ${
-                  isAnswered && selectedAnswer === option && option !== question.correct_answer
-                    ? 'bg-red-100 border-red-400 dark:bg-red-900/50'
-                    : ''
-                }`}
+                className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${isAnswered && option === question.correct_answer ? 'bg-green-100 border-green-400 dark:bg-green-900/50' : ''} ${isAnswered && selectedAnswer === option && option !== question.correct_answer ? 'bg-red-100 border-red-400 dark:bg-red-900/50' : ''}`}
                 onClick={() => handleAnswerSelect(option)}
                 disabled={isAnswered}
               >
@@ -143,24 +131,28 @@ export default function QuizPage() {
         );
       case 'FILL_IN_THE_BLANK':
         return (
-            <div>
-                <p className="text-lg mb-4">{question.question_text.replace("____", "[...]")}</p>
-                <Button onClick={() => handleAnswerSelect(question.correct_answer)}>Show Answer</Button>
+            <div className="space-y-4">
+                <p className="text-lg mb-4" dangerouslySetInnerHTML={{ __html: question.question_text.replace(/____/g, '<strong>[BLANK]</strong>') }}></p>
+                <div className="flex gap-2">
+                    <Input
+                        value={fillInBlankAnswer}
+                        onChange={(e) => setFillInBlankAnswer(e.target.value)}
+                        placeholder="Type your answer here..."
+                        disabled={isAnswered}
+                    />
+                    <Button onClick={() => handleAnswerSelect(fillInBlankAnswer)} disabled={isAnswered}>Submit</Button>
+                </div>
             </div>
         );
       default:
         return <p>Unsupported question type.</p>;
     }
   };
-
-  if (isLoading || authLoading) {
-    // ... loading state ...
-  }
-  if (error) {
-    // ... error state ...
-  }
-
+  
   const isQuizFinished = currentQuestionIndex >= questions.length;
+
+  if (isLoading || authLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  if (error) return <div className="min-h-screen flex items-center justify-center"><p>{error}</p></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -174,9 +166,7 @@ export default function QuizPage() {
           <CardHeader>
             <CardTitle className="text-2xl font-bold">{quiz?.title}</CardTitle>
             <CardDescription>
-              {isQuizFinished
-                ? "Quiz Complete!"
-                : `Question ${currentQuestionIndex + 1} of ${questions.length}`}
+              {isQuizFinished ? "Quiz Complete!" : `Question ${currentQuestionIndex + 1} of ${questions.length}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -190,11 +180,11 @@ export default function QuizPage() {
               </div>
             ) : questions.length > 0 && (
               <div>
-                <p className="text-lg font-semibold mb-4">{questions[currentQuestionIndex].question_text}</p>
+                <div className="text-lg font-semibold mb-4">{questions[currentQuestionIndex].question_text}</div>
                 {renderQuestion()}
                 {isAnswered && (
                   <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    {selectedAnswer === questions[currentQuestionIndex].correct_answer ? (
+                    {selectedAnswer?.toLowerCase().trim() === questions[currentQuestionIndex].correct_answer.toLowerCase().trim() ? (
                       <div className="flex items-center text-green-600 dark:text-green-400">
                         <CheckCircle className="w-5 h-5 mr-2" />
                         <p className="font-semibold">Correct!</p>
@@ -202,7 +192,7 @@ export default function QuizPage() {
                     ) : (
                       <div className="flex items-center text-red-600 dark:text-red-400">
                         <XCircle className="w-5 h-5 mr-2" />
-                        <p className="font-semibold">Incorrect.</p>
+                        <p className="font-semibold">Incorrect. The correct answer is: {questions[currentQuestionIndex].correct_answer}</p>
                       </div>
                     )}
                     <p className="mt-2 text-sm text-muted-foreground">{questions[currentQuestionIndex].explanation}</p>
