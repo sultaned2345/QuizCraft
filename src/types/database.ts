@@ -16,13 +16,19 @@ export interface Quiz {
   is_public: boolean;
 }
 
+export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'FILL_IN_THE_BLANK' | 'MATCHING';
+
 export interface Question {
   id: string;
   quiz_id: string;
   question_text: string;
-  correct_answer: string;
-  options: string[]; // Array of answer options
+  question_type: QuestionType;
+  options: string[] | null; // For MULTIPLE_CHOICE
+  prompts: string[] | null; // For MATCHING
+  correct_answer: string; // For TRUE_FALSE and FILL_IN_THE_BLANK
+  explanation: string | null;
 }
+
 
 export interface Note {
   id: string;
@@ -69,8 +75,11 @@ export interface CreateQuizData {
 
 export interface CreateQuestionData {
   question_text: string;
+  question_type: QuestionType;
   correct_answer: string;
-  options: string[];
+  options?: string[];
+  prompts?: string[];
+  explanation?: string;
 }
 
 export interface UpdateQuizData {
@@ -80,8 +89,11 @@ export interface UpdateQuizData {
 
 export interface UpdateQuestionData {
   question_text?: string;
+  question_type?: QuestionType;
   correct_answer?: string;
   options?: string[];
+  prompts?: string[];
+  explanation?: string;
 }
 
 // Notes form types for creating/updating
@@ -109,4 +121,3 @@ export interface NotesResponse {
   count: number;
   limit: number;
 }
-

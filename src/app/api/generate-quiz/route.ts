@@ -4,15 +4,18 @@ import pdfParse from "pdf-parse-fork";
 
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { Question, QuestionType } from "@/types/database";
 
 export const runtime = "nodejs"; // Required for pdf-parse (Node APIs)
 
 type Difficulty = "easy" | "medium" | "hard";
+type QuestionTypeOption = QuestionType | 'MIXED';
 
-function parseQuery(request: NextRequest): { numQuestions: number; difficulty: Difficulty } {
+function parseQuery(request: NextRequest): { numQuestions: number; difficulty: Difficulty; questionType: QuestionTypeOption } {
   const { searchParams } = new URL(request.url);
   const numQuestionsParam = Number(searchParams.get("numQuestions") ?? "10");
   const difficultyParam = (searchParams.get("difficulty") as Difficulty) ?? "medium";
+  const questionTypeParam = (searchParams.get("questionType") as QuestionTypeOption) ?? "MIXED";
 
   const numQuestions = Number.isFinite(numQuestionsParam)
     ? Math.min(15, Math.max(5, numQuestionsParam))
@@ -22,13 +25,16 @@ function parseQuery(request: NextRequest): { numQuestions: number; difficulty: D
     ? difficultyParam
     : "medium";
 
-  return { numQuestions, difficulty };
+  const questionType: QuestionTypeOption = ["MULTIPLE_CHOICE", "TRUE_FALSE", "FILL_IN_THE_BLANK", "MIXED"].includes(questionTypeParam)
+    ? questionTypeParam
+    : "MIXED";
+
+  return { numQuestions, difficulty, questionType };
 }
 
 async function readMultipartOrText(request: NextRequest): Promise<{ text: string; sourceType: "text" | "file"; }> {
   const contentType = request.headers.get("content-type") || "";
 
-  // If multipart, expect field names: file (optional), text (optional)
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
     const textField = (form.get("text") as string) || "";
@@ -56,14 +62,18 @@ async function readMultipartOrText(request: NextRequest): Promise<{ text: string
     return { text: textField.trim(), sourceType: "text" };
   }
 
-  // Otherwise, treat as raw text body
   const rawText = await request.text();
   return { text: rawText.trim(), sourceType: "text" };
 }
 
-function buildPrompt({ text, numQuestions, difficulty }: { text: string; numQuestions: number; difficulty: Difficulty }) {
-  const system = `You are an assistant that generates high-quality multiple-choice quiz questions based strictly on the provided source content.`;
-  const user = `Generate ${numQuestions} ${difficulty} difficulty multiple-choice questions based on the content below.
+function buildPrompt({ text, numQuestions, difficulty, questionType }: { text: string; numQuestions: number; difficulty: Difficulty; questionType: QuestionTypeOption }) {
+    const questionTypes = questionType === 'MIXED'
+      ? 'MULTIPLE_CHOICE, TRUE_FALSE, and FILL_IN_THE_BLANK'
+      : questionType;
+
+    const system = `You are an expert quiz creator. Based on the provided text, generate ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer.`;
+
+    const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based on the content below.
 
 Content:
 """
@@ -76,24 +86,37 @@ Return ONLY valid JSON with this exact shape:
   "questions": [
     {
       "question_text": string,
+      "question_type": "MULTIPLE_CHOICE",
       "options": [string, string, string, string],
-      "correct_answer": string // must exactly match one of the options
+      "correct_answer": string, // must exactly match one of the options
+      "explanation": string // explanation for the correct answer
+    },
+    {
+      "question_text": string,
+      "question_type": "TRUE_FALSE",
+      "correct_answer": "True" | "False",
+      "explanation": string
+    },
+    {
+      "question_text": string, // use "____" for the blank
+      "question_type": "FILL_IN_THE_BLANK",
+      "correct_answer": string,
+      "explanation": string
     }
   ]
 }`;
-  return { system, user };
+    return { system, user };
 }
 
-async function callGeminiForQuiz({ text, numQuestions, difficulty }: { text: string; numQuestions: number; difficulty: Difficulty }) {
+async function callGeminiForQuiz({ text, numQuestions, difficulty, questionType }: { text: string; numQuestions: number; difficulty: Difficulty, questionType: QuestionTypeOption }): Promise<{ title: string; questions: Question[] }> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
   if (!process.env.GOOGLE_AI_API_KEY) {
     throw new Error("Missing GOOGLE_AI_API_KEY environment variable");
   }
 
-  const { system, user } = buildPrompt({ text, numQuestions, difficulty });
+  const { system, user } = buildPrompt({ text, numQuestions, difficulty, questionType });
 
-  // Get the Gemini 2.5 Flash-Lite model
-  const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash-lite",
     generationConfig: {
       temperature: 0.4,
@@ -110,24 +133,19 @@ async function callGeminiForQuiz({ text, numQuestions, difficulty }: { text: str
     throw new Error("Empty response from Gemini");
   }
 
-  // Clean the response - remove markdown code blocks if present
   let cleanedContent = content.trim();
-  
-  // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+
   if (cleanedContent.startsWith('```')) {
     cleanedContent = cleanedContent.replace(/^```(?:json)?\s*\n?/i, '');
     cleanedContent = cleanedContent.replace(/\n?```\s*$/, '');
     cleanedContent = cleanedContent.trim();
   }
 
-  // Try to parse the JSON
   let parsed: any;
   try {
     parsed = JSON.parse(cleanedContent);
   } catch (parseError) {
     console.error("Failed to parse Gemini response:", cleanedContent.substring(0, 500));
-    
-    // Try to extract JSON from the response using regex as fallback
     const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
@@ -140,82 +158,65 @@ async function callGeminiForQuiz({ text, numQuestions, difficulty }: { text: str
     }
   }
 
-  // Validate the parsed response
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error("Gemini returned invalid data structure");
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+    throw new Error("Gemini returned invalid or empty data structure.");
   }
 
-  if (!Array.isArray(parsed.questions)) {
-    throw new Error("Gemini response missing 'questions' array");
-  }
-
-  if (parsed.questions.length === 0) {
-    throw new Error("Gemini returned zero questions. Please try with different content.");
-  }
-
-  // Validate each question has required fields
   for (let i = 0; i < parsed.questions.length; i++) {
     const q = parsed.questions[i];
-    if (!q.question_text || !Array.isArray(q.options) || !q.correct_answer) {
-      throw new Error(`Question ${i + 1} is missing required fields (question_text, options, or correct_answer)`);
+    if (!q.question_text || !q.question_type || !q.correct_answer) {
+        throw new Error(`Question ${i + 1} is missing required fields.`);
     }
-    if (q.options.length < 2) {
-      throw new Error(`Question ${i + 1} must have at least 2 options`);
+    if (q.question_type === 'MULTIPLE_CHOICE' && (!Array.isArray(q.options) || q.options.length < 2)) {
+        throw new Error(`Question ${i + 1} (MULTIPLE_CHOICE) must have at least 2 options.`);
     }
-    if (!q.options.includes(q.correct_answer)) {
-      throw new Error(`Question ${i + 1}: correct_answer must match one of the options exactly`);
+    if (q.question_type === 'MULTIPLE_CHOICE' && !q.options.includes(q.correct_answer)) {
+        throw new Error(`Question ${i + 1} (MULTIPLE_CHOICE): correct_answer must match one of the options exactly.`);
     }
   }
 
-  return parsed as { title: string; questions: Array<{ question_text: string; options: string[]; correct_answer: string }>; };
+  return parsed as { title: string; questions: Question[] };
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication
     const user = await requireAuth(request);
-    
-    const { numQuestions, difficulty } = parseQuery(request);
-    const { text, sourceType } = await readMultipartOrText(request);
+    const { numQuestions, difficulty, questionType } = parseQuery(request);
+    const { text } = await readMultipartOrText(request);
 
     if (!text) {
       return NextResponse.json({ error: "No input provided" }, { status: 400 });
     }
 
-    //... inside the POST function in src/app/api/generate-quiz/route.ts
+    const quiz = await callGeminiForQuiz({ text, numQuestions, difficulty, questionType });
 
-const quiz = await callGeminiForQuiz({ text, numQuestions, difficulty });
+    const saved = await prisma.quiz.create({
+      data: {
+        title: quiz.title || "Generated Quiz",
+        questions: {
+          create: quiz.questions.map((q) => ({
+            question_text: q.question_text,
+            question_type: q.question_type,
+            correct_answer: q.correct_answer,
+            options: q.options || [],
+            prompts: q.prompts || [],
+            explanation: q.explanation || "",
+          })),
+        },
+        userId: user.id,
+      },
+    });
 
-// Save to DB (Prisma)
-const saved = await prisma.quiz.create({
-  data: {
-    title: quiz.title || "Generated Quiz",
-    questions: {
-      create: quiz.questions.map((q) => ({
-        // FIX: Use the correct property names from the AI response
-        question_text: q.question_text,
-        correct_answer: q.correct_answer,
-        options: q.options,
-      })),
-    },
-    userId: user.id,
-  },
-});
-
-//...
-
-    return NextResponse.json({ 
-      id: saved.id, 
-      title: saved.title, 
-      questions: quiz.questions,  
-      createdAt: saved.createdAt 
+    return NextResponse.json({
+      id: saved.id,
+      title: saved.title,
+      questions: quiz.questions,
+      createdAt: saved.createdAt
     });
   } catch (error: any) {
-    // Handle authentication errors
     if (error instanceof Response) {
       return error;
     }
-    
     console.error("Quiz generation error details:", error);
     const message = error?.message || "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

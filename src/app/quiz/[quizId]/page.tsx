@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Share2, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Share2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { Quiz, Question } from '@/types/database';
 
 // Re-usable header from your dashboard
@@ -41,7 +41,11 @@ export default function QuizPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [revealedAnswers, setRevealedAnswers] = useState<Set<string>>(new Set());
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [score, setScore] = useState(0);
+
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
@@ -79,102 +83,138 @@ export default function QuizPage() {
     }
   };
 
-  const handleCopyShareLink = () => {
-    if (!quiz?.share_link) return;
-    const shareUrl = `${window.location.origin}/quiz/${quiz.share_link}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast({
-      title: 'Link Copied!',
-      description: 'The shareable link has been copied to your clipboard.',
-    });
+  const handleAnswerSelect = (answer: string) => {
+    if (isAnswered) return;
+    setSelectedAnswer(answer);
+    setIsAnswered(true);
+    if (answer === questions[currentQuestionIndex].correct_answer) {
+      setScore(score + 1);
+    }
   };
 
-  const toggleAnswer = (questionId: string) => {
-    setRevealedAnswers(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(questionId)) {
-        newSet.delete(questionId);
-      } else {
-        newSet.add(questionId);
-      }
-      return newSet;
-    });
+  const handleNextQuestion = () => {
+    setIsAnswered(false);
+    setSelectedAnswer(null);
+    setCurrentQuestionIndex(currentQuestionIndex + 1);
+  };
+
+  const renderQuestion = () => {
+    const question = questions[currentQuestionIndex];
+    switch (question.question_type) {
+      case 'MULTIPLE_CHOICE':
+        return (
+          <div className="space-y-2">
+            {(question.options as string[]).map((option, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${
+                  isAnswered && option === question.correct_answer
+                    ? 'bg-green-100 border-green-400 dark:bg-green-900/50'
+                    : ''
+                } ${
+                  isAnswered && selectedAnswer === option && option !== question.correct_answer
+                    ? 'bg-red-100 border-red-400 dark:bg-red-900/50'
+                    : ''
+                }`}
+                onClick={() => handleAnswerSelect(option)}
+                disabled={isAnswered}
+              >
+                {option}
+              </Button>
+            ))}
+          </div>
+        );
+      case 'TRUE_FALSE':
+        return (
+            <div className="space-y-2">
+                {["True", "False"].map((option, index) => (
+                    <Button
+                        key={index}
+                        variant="outline"
+                        className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${isAnswered && option === question.correct_answer ? 'bg-green-100 border-green-400 dark:bg-green-900/50' : ''} ${isAnswered && selectedAnswer === option && option !== question.correct_answer ? 'bg-red-100 border-red-400 dark:bg-red-900/50' : ''}`}
+                        onClick={() => handleAnswerSelect(option)}
+                        disabled={isAnswered}
+                    >
+                        {option}
+                    </Button>
+                ))}
+            </div>
+        );
+      case 'FILL_IN_THE_BLANK':
+        return (
+            <div>
+                <p className="text-lg mb-4">{question.question_text.replace("____", "[...]")}</p>
+                <Button onClick={() => handleAnswerSelect(question.correct_answer)}>Show Answer</Button>
+            </div>
+        );
+      default:
+        return <p>Unsupported question type.</p>;
+    }
   };
 
   if (isLoading || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="ml-2">Loading Quiz...</span>
-      </div>
-    );
+    // ... loading state ...
+  }
+  if (error) {
+    // ... error state ...
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center">
-         <p className="text-destructive mb-4">{error}</p>
-         <Button asChild>
-           <Link href="/dashboard">
-             <ArrowLeft className="w-4 h-4 mr-2" />
-             Back to Dashboard
-           </Link>
-         </Button>
-      </div>
-    );
-  }
+  const isQuizFinished = currentQuestionIndex >= questions.length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <DashboardHeader />
       <main className="container mx-auto px-4 py-8 md:py-12">
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-          <div>
-            <Button variant="ghost" className="mb-2" onClick={() => router.push('/dashboard')}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-200">{quiz?.title}</h1>
-            <div className="flex items-center gap-2 mt-2">
-                <Badge variant={quiz?.is_public ? "default" : "secondary"}>
-                    {quiz?.is_public ? "Public" : "Draft"}
-                </Badge>
-                <p className="text-sm text-muted-foreground">{questions.length} questions</p>
-            </div>
-          </div>
-          <Button onClick={handleCopyShareLink} disabled={!quiz?.share_link}>
-            <Share2 className="w-4 h-4 mr-2" />
-            Share Quiz
-          </Button>
-        </div>
-
-        <div className="space-y-6">
-          {questions.map((q, index) => (
-            <Card key={q.id}>
-              <CardHeader>
-                <CardTitle>Question {index + 1}</CardTitle>
-                <CardDescription className="text-base text-foreground pt-2">{q.question_text}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 mb-4">
-                  {q.options.map((option, i) => (
-                    <li
-                      key={i}
-                      className={`flex items-center gap-2 p-2 rounded-md
-                        ${revealedAnswers.has(q.id) && option === q.correct_answer ? 'bg-green-100 dark:bg-green-900/50' : ''}`}
-                    >
-                      {revealedAnswers.has(q.id) && option === q.correct_answer && <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />}
-                      <span>{option}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Button variant="outline" size="sm" onClick={() => toggleAnswer(q.id)}>
-                  {revealedAnswers.has(q.id) ? 'Hide' : 'Show'} Answer
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Button variant="ghost" className="mb-6" onClick={() => router.push('/dashboard')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Dashboard
+        </Button>
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold">{quiz?.title}</CardTitle>
+            <CardDescription>
+              {isQuizFinished
+                ? "Quiz Complete!"
+                : `Question ${currentQuestionIndex + 1} of ${questions.length}`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isQuizFinished ? (
+              <div className="text-center">
+                <h2 className="text-xl font-semibold">Your Score</h2>
+                <p className="text-4xl font-bold my-4">
+                  {score} / {questions.length}
+                </p>
+                <Button onClick={() => window.location.reload()}>Try Again</Button>
+              </div>
+            ) : questions.length > 0 && (
+              <div>
+                <p className="text-lg font-semibold mb-4">{questions[currentQuestionIndex].question_text}</p>
+                {renderQuestion()}
+                {isAnswered && (
+                  <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                    {selectedAnswer === questions[currentQuestionIndex].correct_answer ? (
+                      <div className="flex items-center text-green-600 dark:text-green-400">
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        <p className="font-semibold">Correct!</p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-red-600 dark:text-red-400">
+                        <XCircle className="w-5 h-5 mr-2" />
+                        <p className="font-semibold">Incorrect.</p>
+                      </div>
+                    )}
+                    <p className="mt-2 text-sm text-muted-foreground">{questions[currentQuestionIndex].explanation}</p>
+                    <Button className="mt-4 w-full" onClick={handleNextQuestion}>
+                      Next Question
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

@@ -22,13 +22,24 @@ CREATE TABLE IF NOT EXISTS quizzes (
     is_public BOOLEAN DEFAULT FALSE
 );
 
--- Create questions table
+-- Drop existing questions table and policies to redefine it
+DROP POLICY IF EXISTS "Users can delete questions of own quizzes" ON questions;
+DROP POLICY IF EXISTS "Users can update questions of own quizzes" ON questions;
+DROP POLICY IF EXISTS "Users can create questions for own quizzes" ON questions;
+DROP POLICY IF EXISTS "Users can view questions of accessible quizzes" ON questions;
+DROP TABLE IF EXISTS questions;
+
+-- Create new questions table with additional fields
 CREATE TABLE IF NOT EXISTS questions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
     question_text TEXT NOT NULL,
-    correct_answer VARCHAR(255) NOT NULL,
-    options JSONB NOT NULL -- Array of answer options
+    question_type VARCHAR(20) NOT NULL,
+    correct_answer TEXT NOT NULL,
+    options JSONB,
+    prompts JSONB,
+    explanation TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create notes table
@@ -78,7 +89,7 @@ CREATE POLICY "Users can update own quizzes" ON quizzes
 CREATE POLICY "Users can delete own quizzes" ON quizzes
     FOR DELETE USING (auth.uid()::text = user_id::text);
 
--- Questions policies
+-- Questions policies (for the new table structure)
 CREATE POLICY "Users can view questions of accessible quizzes" ON questions
     FOR SELECT USING (
         quiz_id IN (

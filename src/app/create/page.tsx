@@ -17,10 +17,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Upload, FileText, Loader2, Settings, AlertCircle, Sparkles, LogOut, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatFileSize, validateFileType, extractPdfText } from "@/lib/file-parser";
+import { QuestionType } from "@/types/database";
 
 interface QuizSettings {
   questionCount: number;
   difficulty: "easy" | "medium" | "hard";
+  questionType: QuestionType | 'MIXED';
 }
 
 // Header component for a consistent authenticated layout
@@ -61,8 +63,9 @@ export default function CreatePage() {
   const [quizSettings, setQuizSettings] = useState<QuizSettings>({
     questionCount: 10,
     difficulty: "medium",
+    questionType: 'MIXED',
   });
-  
+
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
@@ -78,7 +81,7 @@ export default function CreatePage() {
     if (file) {
       const maxSize = 3 * 1024 * 1024; // 3MB
       const isValidType = validateFileType(file.name, file.type);
-      
+
       if (!isValidType) {
         setError("Unsupported file type. Please upload a PDF or TXT file.");
         setSelectedFile(null);
@@ -90,13 +93,13 @@ export default function CreatePage() {
         setSelectedFile(null);
         return;
       }
-      
+
       setTextContent(""); // Clear text content when a file is selected
       setSelectedFile(file);
       setError("");
     }
   };
-  
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setTextContent(e.target.value);
       if(selectedFile) {
@@ -131,6 +134,7 @@ export default function CreatePage() {
       const queryParams = new URLSearchParams({
         numQuestions: quizSettings.questionCount.toString(),
         difficulty: quizSettings.difficulty,
+        questionType: quizSettings.questionType,
       });
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -173,7 +177,7 @@ export default function CreatePage() {
   const updateSetting = <K extends keyof QuizSettings>(key: K, value: QuizSettings[K]) => {
     setQuizSettings((prev) => ({ ...prev, [key]: value }));
   };
-  
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -274,6 +278,18 @@ export default function CreatePage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="question-type">Question Type</Label>
+                                    <Select value={quizSettings.questionType} onValueChange={(v: QuestionType | 'MIXED') => updateSetting("questionType", v)}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="MIXED">Mixed</SelectItem>
+                                            <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
+                                            <SelectItem value="TRUE_FALSE">True/False</SelectItem>
+                                            <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>
