@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Upload, FileText, ArrowRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LandingPage() {
   const [inputMode, setInputMode] = useState<"text" | "file">("text");
@@ -58,7 +59,8 @@ export default function LandingPage() {
           <Sparkles className="w-6 h-6 text-primary" />
           <span className="text-xl font-bold">QuizCraft</span>
         </Link>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
           {loading ? null : user ? (
             <Button onClick={() => router.push("/dashboard")}>Dashboard</Button>
           ) : (
@@ -171,10 +173,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-8 text-center text-muted-foreground text-sm">
-        <p>&copy; {new Date().getFullYear()} QuizCraft. All rights reserved.</p>
-      </footer>
+      {/* Footer is now handled by layout.tsx */}
     </div>
   );
 }

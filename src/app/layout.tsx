@@ -5,6 +5,7 @@ import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
+import { Footer } from "@/components/Footer"
 
 // Main sans-serif font
 const inter = Inter({
@@ -25,10 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className="antialiased">
+      <body className="antialiased flex flex-col min-h-screen">
         <AuthProvider>
           <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
-            <Suspense fallback={null}>{children}</Suspense>
+            <div className="flex-1 flex flex-col">
+              <Suspense fallback={null}>{children}</Suspense>
+            </div>
+            <Footer />
           </ThemeProvider>
         </AuthProvider>
       </body>

@@ -26,29 +26,28 @@
   --ring: oklch(57.56% 0.16 270.38);
   --radius: 0.75rem;
 }
-
 /* src/app/globals.css */
 
 /* Dark Mode Theme - Inspired by YouLearn AI */
 .dark {
-  --background: oklch(5% 0.01 263.88); /* Darker Background */
+  --background: oklch(15% 0 0); /* Dark Gray */
   --foreground: oklch(98.83% 0.01 292.34); /* Light Gray for Text */
-  --card: oklch(15% 0.02 263.88); /* Slightly Lighter Dark Blue */
+  --card: oklch(20% 0 0); /* Slightly Lighter Gray */
   --card-foreground: oklch(98.83% 0.01 292.34);
-  --popover: oklch(5% 0.01 263.88);
+  --popover: oklch(15% 0 0);
   --popover-foreground: oklch(98.83% 0.01 292.34);
   --primary: oklch(65.91% 0.17 270.38); /* Brighter Purple for Dark Mode */
   --primary-foreground: oklch(98.83% 0.01 292.34);
-  --secondary: oklch(20% 0.02 263.88); /* Medium Dark Gray */
+  --secondary: oklch(25% 0 0); /* Medium Dark Gray */
   --secondary-foreground: oklch(98.83% 0.01 292.34);
-  --muted: oklch(20% 0.02 263.88);
+  --muted: oklch(25% 0 0);
   --muted-foreground: oklch(69.83% 0.01 292.34);
-  --accent: oklch(20% 0.02 263.88);
+  --accent: oklch(25% 0 0);
   --accent-foreground: oklch(98.83% 0.01 292.34);
   --destructive: oklch(62.8% 0.22 16.51);
   --destructive-foreground: oklch(98.83% 0.01 292.34);
-  --border: oklch(25% 0.02 263.88);
-  --input: oklch(25% 0.02 263.88);
+  --border: oklch(30% 0 0);
+  --input: oklch(30% 0 0);
   --ring: oklch(65.91% 0.17 270.38);
 }
 @theme inline {

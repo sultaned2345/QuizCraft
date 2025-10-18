@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MoreHorizontal, Copy, Edit, Trash2, Plus, LogOut, Sparkles, FileQuestion, BookCopy } from "lucide-react";
+import { MoreHorizontal, Copy, Edit, Trash2, Plus, LogOut, Sparkles, FileQuestion, BookCopy, Loader2 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface Quiz {
   id: string;
@@ -40,6 +41,7 @@ const DashboardHeader = () => {
         <span className="text-sm text-muted-foreground hidden sm:inline">
           {user?.email}
         </span>
+        <ThemeToggle />
         <Button variant="ghost" size="sm" onClick={handleSignOut}>
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
@@ -130,8 +132,14 @@ export default function DashboardPage() {
 
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <div className="text-muted-foreground">Loading Dashboard...</div>
+      <div className="min-h-screen flex flex-col">
+        <DashboardHeader />
+        <div className="flex-grow flex items-center justify-center">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-lg">Loading your quizzes...</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -181,8 +189,12 @@ export default function DashboardPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}>
-                          <Edit className="w-4 h-4 mr-2" />
+                          <FileQuestion className="w-4 h-4 mr-2" />
                           View Quiz
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Quiz
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
                           <Copy className="w-4 h-4 mr-2" />
