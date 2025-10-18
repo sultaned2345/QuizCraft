@@ -163,3 +163,40 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 CREATE OR REPLACE TRIGGER update_notes_updated_at
   BEFORE UPDATE ON notes
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- --- NEW --- AI Notes Usage Tracking ---
+  
+-- AI Notes Usage Tracking Table
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    -- The month this usage record is for. Stored as the first day of the month.
+    usage_month DATE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Ensure only one record per user per month
+    UNIQUE(user_id, usage_month)
+);
+
+-- RLS Policy for the new table
+ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view and manage their own AI usage" ON ai_usage
+    FOR ALL USING (auth.uid() = user_id);
+
+-- Index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_month ON ai_usage(user_id, usage_month);
+
+-- Function to increment AI usage count (upsert)
+CREATE OR REPLACE FUNCTION increment_ai_usage(p_user_id UUID, p_usage_month DATE, p_increment_by INT)
+RETURNS void AS $$
+BEGIN
+    INSERT INTO public.ai_usage (user_id, usage_month, usage_count, updated_at)
+    VALUES (p_user_id, p_usage_month, p_increment_by, NOW())
+    ON CONFLICT (user_id, usage_month)
+    DO UPDATE SET
+        usage_count = ai_usage.usage_count + p_increment_by,
+        updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;

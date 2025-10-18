@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MoreHorizontal, Copy, Edit, Trash2, Plus, LogOut, Sparkles, FileQuestion, BookCopy, Loader2 } from "lucide-react";
+import { MoreHorizontal, Copy, Edit, Trash2, Plus, LogOut, Sparkles, FileQuestion, BookCopy, Loader2, StickyNote } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 interface Quiz {
@@ -137,7 +137,7 @@ export default function DashboardPage() {
         <div className="flex-grow flex items-center justify-center">
           <div className="flex items-center gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="text-lg">Loading your quizzes...</span>
+            <span className="text-lg">Loading your dashboard...</span>
           </div>
         </div>
       </div>
@@ -152,17 +152,25 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-200">
             My Quizzes
           </h1>
-          <Button asChild>
-            <Link href="/create">
-              <Plus className="w-4 h-4 mr-2" />
-              New Quiz
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/notes">
+                <StickyNote className="w-4 h-4 mr-2" />
+                My Notes
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/create">
+                <Plus className="w-4 h-4 mr-2" />
+                New Quiz
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {quizzes.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg">
-            <BookCopy className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
+            <FileQuestion className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
             <h3 className="mt-4 text-lg font-semibold text-slate-800 dark:text-slate-200">No Quizzes Found</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Get started by creating your first quiz.
