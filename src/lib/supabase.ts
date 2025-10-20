@@ -202,7 +202,7 @@ export const supabaseHelpers = {
   async updateNote(noteId: string, updates: { title?: string, content?: string }): Promise<Note> {
       const { data, error } = await supabase
           .from('notes')
-          .update({ ...updates, updated_at: new Date().toISOString() }) // This line is corrected
+          .update({ ...updates }) // FIX: Removed the manual 'updated_at' update.
           .eq('id', noteId)
           .select()
           .single();
