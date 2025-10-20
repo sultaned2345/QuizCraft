@@ -74,7 +74,8 @@ export default function NotesPage() {
       
       toast({ title: `Note ${isUpdating ? 'Updated' : 'Created'}`, description: "Your note has been saved successfully." });
       
-      // THIS IS THE LINE THAT WAS ADDED
+      // *** THIS IS THE FIX ***
+      // This line re-fetches the notes from the server after a successful save.
       await fetchNotes(); 
       
       setIsEditorOpen(false);
