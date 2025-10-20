@@ -73,7 +73,10 @@ export default function NotesPage() {
       if (!result.success) throw new Error(result.error);
       
       toast({ title: `Note ${isUpdating ? 'Updated' : 'Created'}`, description: "Your note has been saved successfully." });
-      await fetchNotes();
+      
+      // THIS IS THE LINE THAT WAS ADDED
+      await fetchNotes(); 
+      
       setIsEditorOpen(false);
     } catch (error: any) {
       toast({ title: "Save Failed", description: error.message, variant: "destructive" });
