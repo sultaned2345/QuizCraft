@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note } from '@/types/database';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy } from 'lucide-react';
+import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search } from 'lucide-react';
 import { NoteEditor } from '@/components/NoteEditor';
 import { GenerateNotesDialog } from '@/components/GenerateNotesDialog';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
@@ -20,6 +21,7 @@ export default function NotesPage() {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [usage, setUsage] = useState({ count: 0, limit: USAGE_LIMITS.FREE_NOTES });
+  const [searchTerm, setSearchTerm] = useState('');
 
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -96,6 +98,13 @@ export default function NotesPage() {
     }
   };
 
+  const filteredNotes = useMemo(() => {
+    return notes.filter(note =>
+      note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      note.content.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [notes, searchTerm]);
+
   if (authLoading || isLoading) {
     return (
       <div className="flex h-[calc(100vh-8rem)] items-center justify-center">
@@ -128,15 +137,27 @@ export default function NotesPage() {
         </div>
       </div>
 
-      {notes.length === 0 ? (
+      <div className="mb-6 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+              placeholder="Search notes..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+          />
+      </div>
+
+      {filteredNotes.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">No Notes Yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Create your first note or use AI to generate one.</p>
+          <h3 className="mt-4 text-lg font-semibold">{searchTerm ? 'No Matching Notes' : 'No Notes Yet'}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {searchTerm ? 'Try a different search term.' : 'Create your first note or use AI to generate one.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {notes.map((note) => (
+          {filteredNotes.map((note) => (
             <Card key={note.id} className="flex flex-col">
               <CardHeader>
                 <CardTitle className="text-lg truncate">{note.title}</CardTitle>

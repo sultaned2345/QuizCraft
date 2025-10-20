@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Bold, Italic, Underline } from 'lucide-react';
 import { Note } from '@/types/database';
+import { cn } from '@/lib/utils';
 
 interface NoteEditorProps {
   note: Note | null; // Pass a note to edit, or null to create
@@ -27,22 +27,32 @@ export function NoteEditor({ note, isOpen, onClose, onSave }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Populate the form when a note is passed for editing
-    if (note) {
-      setTitle(note.title);
-      setContent(note.content);
-    } else {
-      // Reset for a new note
-      setTitle('');
-      setContent('');
+    if (isOpen) {
+        if (note) {
+          setTitle(note.title);
+          setContent(note.content);
+          if(editorRef.current) {
+            editorRef.current.innerHTML = note.content;
+          }
+        } else {
+          setTitle('');
+          setContent('');
+          if(editorRef.current) {
+            editorRef.current.innerHTML = '';
+          }
+        }
     }
   }, [note, isOpen]);
+  
+  const handleContentChange = (e: React.FormEvent<HTMLDivElement>) => {
+    setContent(e.currentTarget.innerHTML);
+  };
 
   const handleSave = async () => {
     if (!title.trim() || !content.trim()) {
-      // Basic validation
       alert('Title and content cannot be empty.');
       return;
     }
@@ -55,9 +65,14 @@ export function NoteEditor({ note, isOpen, onClose, onSave }: NoteEditorProps) {
     setIsSaving(false);
   };
 
+  const execCommand = (command: string) => {
+    document.execCommand(command, false, undefined);
+    editorRef.current?.focus();
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>{note ? 'Edit Note' : 'Create New Note'}</DialogTitle>
           <DialogDescription>
@@ -81,13 +96,21 @@ export function NoteEditor({ note, isOpen, onClose, onSave }: NoteEditorProps) {
             <Label htmlFor="content" className="text-right pt-2">
               Content
             </Label>
-            <Textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="col-span-3 min-h-[150px]"
-              disabled={isSaving}
-            />
+            <div className="col-span-3">
+                <div className="flex items-center gap-2 border border-input rounded-t-md p-2 bg-transparent">
+                    <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => execCommand('bold')}><Bold className="h-4 w-4" /></Button>
+                    <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => execCommand('italic')}><Italic className="h-4 w-4" /></Button>
+                    <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => execCommand('underline')}><Underline className="h-4 w-4" /></Button>
+                </div>
+                <div
+                    ref={editorRef}
+                    id="content"
+                    contentEditable={!isSaving}
+                    onInput={handleContentChange}
+                    className="w-full min-h-[150px] rounded-b-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    dangerouslySetInnerHTML={{ __html: content }}
+                />
+            </div>
           </div>
         </div>
         <DialogFooter>

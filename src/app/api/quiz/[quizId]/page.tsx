@@ -96,19 +96,26 @@ export default function QuizPage() {
     const currentQuestion = questions[currentQuestionIndex];
     const isCorrect = answer.toLowerCase().trim() === currentQuestion.correct_answer.toLowerCase().trim();
 
+    // Always record the answer
     setSelectedAnswer(answer);
-    setIsAnswered(true);
-    setUserAnswers([...userAnswers, { questionId: currentQuestion.id, selectedAnswer: answer, isCorrect }]);
+    setUserAnswers(prev => [...prev, { questionId: currentQuestion.id, selectedAnswer: answer, isCorrect }]);
+
+    // Conditionally show feedback or move to the next question
+    if (quiz?.immediate_feedback) {
+        setIsAnswered(true);
+    } else {
+        handleNextQuestion();
+    }
   };
 
   const handleNextQuestion = () => {
+    // This function is now also called directly if immediate feedback is off
     if (currentQuestionIndex < questions.length - 1) {
         setIsAnswered(false);
         setSelectedAnswer(null);
         setFillInBlankAnswer('');
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        setCurrentQuestionIndex(prev => prev + 1);
     } else {
-        // Quiz finished, show results
         setViewMode('results');
     }
   };
@@ -123,7 +130,6 @@ export default function QuizPage() {
   };
 
   const renderQuestion = () => {
-    // ... (This function remains unchanged)
     const question = questions[currentQuestionIndex];
     switch (question.question_type) {
       case 'MULTIPLE_CHOICE':
@@ -173,8 +179,9 @@ export default function QuizPage() {
                 </div>
             </div>
         );
+       // Note: UI for 'MATCHING' is not implemented here as it requires more complex state management for drag-and-drop or selection.
       default:
-        return <p>Unsupported question type.</p>;
+        return <p>This question type is not yet supported in the quiz interface.</p>;
     }
   };
   
@@ -208,7 +215,7 @@ export default function QuizPage() {
               <div>
                 <div className="text-lg font-semibold mb-4">{questions[currentQuestionIndex].question_text}</div>
                 {renderQuestion()}
-                {isAnswered && (
+                {isAnswered && quiz?.immediate_feedback && (
                   <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
                     {userAnswers.find(a => a.questionId === questions[currentQuestionIndex].id)?.isCorrect ? (
                       <div className="flex items-center text-green-600 dark:text-green-400">

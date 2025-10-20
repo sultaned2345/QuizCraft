@@ -11,8 +11,9 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Link as LinkIcon, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note } from '@/types/database';
 import {
@@ -23,7 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-
 interface GenerateNotesDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,14 +32,20 @@ interface GenerateNotesDialogProps {
 }
 
 export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: GenerateNotesDialogProps) {
+  const [inputType, setInputType] = useState<'text' | 'url'>('text');
   const [text, setText] = useState('');
+  const [url, setUrl] = useState('');
   const [numberOfNotes, setNumberOfNotes] = useState(5);
   const [isGenerating, setIsGenerating] = useState(false);
   const { session } = useAuth();
 
   const handleGenerate = async () => {
-    if (!text.trim()) {
+    if (inputType === 'text' && !text.trim()) {
       onError('Please paste some text to generate notes from.');
+      return;
+    }
+    if (inputType === 'url' && !url.trim()) {
+      onError('Please enter a URL to generate notes from.');
       return;
     }
     if (!session) {
@@ -49,16 +55,18 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
 
     setIsGenerating(true);
     try {
+      const body = {
+        number_of_notes: numberOfNotes,
+        ...(inputType === 'text' ? { text } : { url }),
+      };
+
       const response = await fetch('/api/generate-notes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          text,
-          number_of_notes: numberOfNotes,
-        }),
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
@@ -68,7 +76,8 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
       }
 
       onSuccess(result.notes);
-      setText(''); // Clear text area on success
+      setText('');
+      setUrl('');
     } catch (error: any) {
       onError(error.message);
     } finally {
@@ -82,21 +91,54 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
         <DialogHeader>
           <DialogTitle>Generate Notes with AI</DialogTitle>
           <DialogDescription>
-            Paste your raw text below, and AI will summarize it into structured notes for you.
+            Provide raw text or a URL, and AI will summarize it into structured notes.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid w-full items-center gap-2">
-            <Label htmlFor="text-content">Source Text</Label>
-            <Textarea
-              id="text-content"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              className="min-h-[200px]"
-              placeholder="Paste a chapter from a textbook, meeting transcript, or lecture notes here..."
-              disabled={isGenerating}
-            />
+          <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto">
+              <Button
+                variant={inputType === "text" ? "secondary" : "ghost"}
+                onClick={() => setInputType("text")}
+                className="w-28"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Text
+              </Button>
+              <Button
+                variant={inputType === "url" ? "secondary" : "ghost"}
+                onClick={() => setInputType("url")}
+                className="w-28"
+              >
+                <LinkIcon className="w-4 h-4 mr-2" />
+                URL
+              </Button>
           </div>
+
+          {inputType === 'text' ? (
+            <div className="grid w-full items-center gap-2">
+                <Label htmlFor="text-content">Source Text</Label>
+                <Textarea
+                id="text-content"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="min-h-[200px]"
+                placeholder="Paste a chapter from a textbook, meeting transcript, or lecture notes here..."
+                disabled={isGenerating}
+                />
+            </div>
+          ) : (
+             <div className="grid w-full items-center gap-2">
+                <Label htmlFor="url-input">Article URL</Label>
+                <Input
+                    id="url-input"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com/article"
+                    disabled={isGenerating}
+                />
+            </div>
+          )}
+
           <div className="grid w-full max-w-sm items-center gap-2">
               <Label htmlFor="number-of-notes">Number of Notes</Label>
                <Select

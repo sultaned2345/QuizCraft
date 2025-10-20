@@ -14,6 +14,7 @@ export interface Quiz {
   share_link: string | null;
   created_at: string;
   is_public: boolean;
+  immediate_feedback: boolean; // Add this line
 }
 
 export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'FILL_IN_THE_BLANK' | 'MATCHING';
@@ -23,9 +24,9 @@ export interface Question {
   quiz_id: string;
   question_text: string;
   question_type: QuestionType;
-  options: string[] | null; // For MULTIPLE_CHOICE
-  prompts: string[] | null; // For MATCHING
-  correct_answer: string; // For TRUE_FALSE and FILL_IN_THE_BLANK
+  options: string[] | null; // For MULTIPLE_CHOICE and MATCHING (answers)
+  prompts: string[] | null; // For MATCHING (prompts)
+  correct_answer: string; // For TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING (JSON string)
   explanation: string | null;
 }
 

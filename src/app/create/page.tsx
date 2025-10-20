@@ -23,6 +23,7 @@ interface QuizSettings {
   questionCount: number;
   difficulty: "easy" | "medium" | "hard";
   questionType: QuestionType | 'MIXED';
+  immediateFeedback: boolean;
 }
 
 // Header component for a consistent authenticated layout
@@ -64,6 +65,7 @@ export default function CreatePage() {
     questionCount: 10,
     difficulty: "medium",
     questionType: 'MIXED',
+    immediateFeedback: true,
   });
 
   const { user, loading } = useAuth();
@@ -135,6 +137,7 @@ export default function CreatePage() {
         numQuestions: quizSettings.questionCount.toString(),
         difficulty: quizSettings.difficulty,
         questionType: quizSettings.questionType,
+        immediateFeedback: String(quizSettings.immediateFeedback),
       });
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -288,8 +291,22 @@ export default function CreatePage() {
                                             <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
                                             <SelectItem value="TRUE_FALSE">True/False</SelectItem>
                                             <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
+                                            <SelectItem value="MATCHING">Matching</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+                                <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="immediate-feedback">Immediate Feedback</Label>
+                                        <CardDescription>
+                                            Show correct answer after each question.
+                                        </CardDescription>
+                                    </div>
+                                    <Switch
+                                        id="immediate-feedback"
+                                        checked={quizSettings.immediateFeedback}
+                                        onCheckedChange={(checked) => updateSetting("immediateFeedback", checked)}
+                                    />
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>

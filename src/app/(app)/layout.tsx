@@ -13,7 +13,10 @@ import {
   StickyNote,
   Layers,
   FileSignature,
+  MessageSquare, // Import the chat icon
 } from 'lucide-react';
+import { useState } from 'react'; // Import useState
+import { ChatbotDialog } from '@/components/ChatbotDialog'; // Import the new chatbot component
 
 // Reusable Header for the authenticated layout
 const AppHeader = () => {
@@ -68,6 +71,8 @@ const SidebarNav = () => {
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
       <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
@@ -85,6 +90,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppHeader />
         <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
       </div>
+
+      {/* Chatbot Trigger Button */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <Button
+          size="icon"
+          className="rounded-full h-14 w-14 shadow-lg"
+          onClick={() => setIsChatbotOpen(true)}
+        >
+          <MessageSquare className="h-6 w-6" />
+          <span className="sr-only">Open AI Tutor</span>
+        </Button>
+      </div>
+
+      {/* Chatbot Dialog Component */}
+      <ChatbotDialog isOpen={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
     </div>
   );
 }
