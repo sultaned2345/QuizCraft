@@ -168,13 +168,44 @@ export const supabaseHelpers = {
    * @returns The newly created note object.
    */
   async createNote(userId: string, title: string, content: string): Promise<Note> {
-    const { data, error } = await supabase
+    // Step 1: Insert the note without selecting immediately
+    const { error: insertError } = await supabase
       .from('notes')
-      .insert({ user_id: userId, title, content })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+      .insert({ user_id: userId, title, content });
+
+    if (insertError) {
+        console.error("Error during note insertion:", insertError);
+        // Rethrow the specific Supabase error
+        throw insertError;
+    }
+
+    // Step 2: Query separately for the note that was just inserted.
+    // We fetch the most recent note by this user matching the title/content.
+    // This assumes title/content are unique enough for recent inserts.
+    const { data: selectData, error: selectError } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('title', title) // Match the title we just inserted
+        .eq('content', content) // Match the content we just inserted
+        .order('created_at', { ascending: false }) // Get the absolute most recent one
+        .limit(1) // We only want one
+        .maybeSingle(); // Use maybeSingle() instead of single() to return null instead of error if 0 rows
+
+    if (selectError) {
+        console.error("Error selecting note immediately after insertion:", selectError);
+        throw new Error(`Note inserted, but failed to retrieve it immediately. Error: ${selectError.message}`);
+    }
+
+    if (!selectData) {
+         // This *really* shouldn't happen if the insert worked and RLS is correct,
+         // but it indicates a persistent visibility problem.
+         console.error("Note inserted, but query returned null immediately after.");
+         throw new Error("Note was saved, but could not be immediately retrieved. Please refresh the notes list.");
+    }
+
+    // If we successfully selected the data, return it
+    return selectData;
   },
 
   /**
