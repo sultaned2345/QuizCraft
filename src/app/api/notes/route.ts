@@ -76,6 +76,12 @@ export async function POST(request: NextRequest) {
 
     // Step 5: Create note in database
     console.log('Step 5: Creating note in database...');
+    console.log('Data to insert:', { 
+      userId: user.id, 
+      titleLength: body.title.trim().length,
+      contentLength: body.content.trim().length 
+    });
+    
     let note;
     try {
       note = await supabaseHelpers.createNote(
@@ -83,17 +89,30 @@ export async function POST(request: NextRequest) {
         body.title.trim(), 
         body.content.trim()
       );
-      console.log('✓ Note created:', note.id);
+      console.log('✓ Note created successfully:', note.id);
     } catch (dbError: any) {
-      console.error('✗ Database error:', {
+      console.error('✗ Database error details:', {
         message: dbError.message,
         code: dbError.code,
         details: dbError.details,
-        hint: dbError.hint
+        hint: dbError.hint,
+        name: dbError.name,
+        stack: dbError.stack
       });
+      
+      // Return a more helpful error message
+      let errorMessage = 'Failed to create note';
+      if (dbError.code === '42501') {
+        errorMessage = 'Permission denied. Please check your database Row Level Security policies.';
+      } else if (dbError.code === '23505') {
+        errorMessage = 'A note with this information already exists.';
+      } else if (dbError.message) {
+        errorMessage = dbError.message;
+      }
+      
       return NextResponse.json<ApiResponse>({
         success: false,
-        error: 'Database error: ' + (dbError.message || 'Failed to create note')
+        error: errorMessage
       }, { status: 500 });
     }
     
