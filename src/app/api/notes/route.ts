@@ -4,6 +4,125 @@ import { requireAuth, validateRequestBody } from '@/lib/auth';
 import { validateNoteCreation } from '@/lib/usage-limits';
 import { ApiResponse, NotesResponse, CreateNoteData, UpdateNoteData } from '@/types/database';
 
+// POST /api/notes - Create a new note
+export async function POST(request: NextRequest) {
+  try {
+    // Step 1: Authenticate user
+    console.log('Step 1: Authenticating user...');
+    let user;
+    try {
+      user = await requireAuth(request);
+      console.log('✓ User authenticated:', user.id);
+    } catch (authError) {
+      console.error('✗ Authentication failed:', authError);
+      if (authError instanceof Response) {
+        return authError;
+      }
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: 'Authentication failed'
+      }, { status: 401 });
+    }
+
+    // Step 2: Parse request body
+    console.log('Step 2: Parsing request body...');
+    let body: CreateNoteData;
+    try {
+      body = await request.json();
+      console.log('✓ Body parsed:', { title: body.title?.substring(0, 20), hasContent: !!body.content });
+    } catch (parseError) {
+      console.error('✗ Failed to parse body:', parseError);
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: 'Invalid JSON in request body'
+      }, { status: 400 });
+    }
+
+    // Step 3: Validate input
+    console.log('Step 3: Validating input...');
+    const validation = validateRequestBody(body, ['title', 'content']);
+    if (!validation.isValid) {
+      console.error('✗ Validation failed:', validation.error);
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: validation.error
+      }, { status: 400 });
+    }
+    console.log('✓ Input validated');
+
+    // Step 4: Check usage limits
+    console.log('Step 4: Checking usage limits...');
+    let limitValidation;
+    try {
+      limitValidation = await validateNoteCreation(user.id);
+      console.log('✓ Limit validation result:', limitValidation);
+    } catch (limitError) {
+      console.error('✗ Limit validation error:', limitError);
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: 'Failed to check usage limits'
+      }, { status: 500 });
+    }
+
+    if (!limitValidation.isValid) {
+      console.log('✗ Usage limit exceeded');
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: limitValidation.error,
+        message: limitValidation.message
+      }, { status: 403 });
+    }
+    console.log('✓ Usage limits OK');
+
+    // Step 5: Create note in database
+    console.log('Step 5: Creating note in database...');
+    let note;
+    try {
+      note = await supabaseHelpers.createNote(
+        user.id, 
+        body.title.trim(), 
+        body.content.trim()
+      );
+      console.log('✓ Note created:', note.id);
+    } catch (dbError: any) {
+      console.error('✗ Database error:', {
+        message: dbError.message,
+        code: dbError.code,
+        details: dbError.details,
+        hint: dbError.hint
+      });
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: 'Database error: ' + (dbError.message || 'Failed to create note')
+      }, { status: 500 });
+    }
+    
+    console.log('✓ POST /api/notes completed successfully');
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: note,
+      message: 'Note created successfully'
+    });
+    
+  } catch (error: any) {
+    // Catch-all error handler
+    console.error('✗ Unexpected error in POST /api/notes:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    if (error instanceof Response) {
+      return error;
+    }
+    
+    return NextResponse.json<ApiResponse>({
+      success: false,
+      error: 'Internal server error: ' + (error.message || 'Unknown error')
+    }, { status: 500 });
+  }
+}
+
 // GET /api/notes - List all notes for the authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -36,51 +155,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/notes - Create a new note
-export async function POST(request: NextRequest) {
-  try {
-    const user = await requireAuth(request);
-    const body: CreateNoteData = await request.json();
-
-    // Validate input
-    const validation = validateRequestBody(body, ['title', 'content']);
-    if (!validation.isValid) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: validation.error
-      }, { status: 400 });
-    }
-
-    // Check usage limits
-    const limitValidation = await validateNoteCreation(user.id);
-    if (!limitValidation.isValid) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: limitValidation.error,
-        message: limitValidation.message
-      }, { status: 403 });
-    }
-
-    const note = await supabaseHelpers.createNote(user.id, body.title.trim(), body.content.trim());
-    
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: note,
-      message: 'Note created successfully'
-    });
-  } catch (error) {
-    if (error instanceof Response) {
-      return error;
-    }
-    console.error('Error creating note:', error);
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: 'Failed to create note'
-    }, { status: 500 });
-  }
-}
-
-// PUT /api/notes - Update a note (expects id in query parameters)
+// PUT /api/notes - Update a note
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -97,7 +172,6 @@ export async function PUT(request: NextRequest) {
     const body: UpdateNoteData = await request.json();
     const { title, content } = body;
 
-    // Validate input
     if (!title && !content) {
       return NextResponse.json<ApiResponse>({
         success: false,
@@ -105,16 +179,14 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check if note belongs to user
     const existingNote = await supabaseHelpers.getNote(noteId);
     if (existingNote.user_id !== user.id) {
       return NextResponse.json<ApiResponse>({
         success: false,
-        error: 'Access denied. Note not found or you do not have permission to update it.'
+        error: 'Access denied'
       }, { status: 403 });
     }
 
-    // Validate and prepare updates
     const updates: { title?: string; content?: string } = {};
     if (title !== undefined) {
       if (title.trim().length === 0) {
@@ -155,7 +227,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/notes - Delete a note (expects id in query parameters)
+// DELETE /api/notes - Delete a note
 export async function DELETE(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -169,12 +241,11 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check if note belongs to user
     const existingNote = await supabaseHelpers.getNote(noteId);
     if (existingNote.user_id !== user.id) {
       return NextResponse.json<ApiResponse>({
         success: false,
-        error: 'Access denied. Note not found or you do not have permission to delete it.'
+        error: 'Access denied'
       }, { status: 403 });
     }
 
