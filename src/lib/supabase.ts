@@ -34,16 +34,27 @@ export const supabaseHelpers = {
    * @param userId The UUID of the user.
    * @returns An object containing the user's subscription_plan.
    */
-  async getUserWithPlan(userId: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('subscription_plan')
-      .eq('id', userId)
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
+  // lib/supabase.ts
+
+async getUserWithPlan(userId: string) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*, subscription_plan')
+    .eq('id', userId)
+    .maybeSingle(); // Use maybeSingle() instead of single()
+  
+  if (error) throw error;
+  
+  // If no user found, return default free plan
+  if (!data) {
+    return {
+      id: userId,
+      subscription_plan: 'free'
+    };
+  }
+  
+  return data;
+},
 
   // --- Quiz Operations ---
 
