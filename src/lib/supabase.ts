@@ -34,27 +34,25 @@ export const supabaseHelpers = {
    * @param userId The UUID of the user.
    * @returns An object containing the user's subscription_plan.
    */
-  // lib/supabase.ts
-
-async getUserWithPlan(userId: string) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*, subscription_plan')
-    .eq('id', userId)
-    .maybeSingle(); // Use maybeSingle() instead of single()
-  
-  if (error) throw error;
-  
-  // If no user found, return default free plan
-  if (!data) {
-    return {
-      id: userId,
-      subscription_plan: 'free'
-    };
-  }
-  
-  return data;
-},
+  async getUserWithPlan(userId: string) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*, subscription_plan')
+      .eq('id', userId)
+      .maybeSingle(); // Use maybeSingle() instead of single()
+    
+    if (error) throw error;
+    
+    // If no user found, return default free plan
+    if (!data) {
+      return {
+        id: userId,
+        subscription_plan: 'free'
+      };
+    }
+    
+    return data;
+  },
 
   // --- Quiz Operations ---
 
@@ -92,6 +90,21 @@ async getUserWithPlan(userId: string) {
     
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Gets the total count of quizzes for a user.
+   * @param userId The UUID of the user.
+   * @returns The number of quizzes.
+   */
+  async getQuizzesCount(userId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('quizzes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return count || 0;
   },
 
   /**
@@ -244,7 +257,7 @@ async getUserWithPlan(userId: string) {
   async updateNote(noteId: string, updates: { title?: string, content?: string }): Promise<Note> {
       const { data, error } = await supabase
           .from('notes')
-          .update({ ...updates }) // FIX: Removed the manual 'updated_at' update.
+          .update({ ...updates })
           .eq('id', noteId)
           .select()
           .single();
@@ -265,6 +278,31 @@ async getUserWithPlan(userId: string) {
   },
 
   // --- AI Usage Operations ---
+
+  /**
+   * Gets the total count of AI generations for a user (across all time).
+   * @param userId The UUID of the user.
+   * @returns The total number of AI generations.
+   */
+  async getAIGenerationCount(userId: string): Promise<number> {
+    try {
+      const { data, error } = await supabase
+        .from('ai_usage')
+        .select('usage_count')
+        .eq('user_id', userId);
+      
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+      
+      // Sum up all usage counts across all months
+      const totalCount = data?.reduce((sum, record) => sum + (record.usage_count || 0), 0) || 0;
+      return totalCount;
+    } catch (error) {
+      console.error('Error getting AI generation count:', error);
+      return 0;
+    }
+  },
 
   /**
    * Retrieves the AI generation usage count for a user in a given month.
