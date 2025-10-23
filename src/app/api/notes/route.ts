@@ -196,6 +196,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
   }
 }
-
-
-I've updated the file with the necessary authentication error handling in the `GET` route and removed all the comments as requested. This version maintains the functionality and performance improvements discussed earlier.
