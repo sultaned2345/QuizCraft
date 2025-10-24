@@ -4,9 +4,8 @@ import { createClient } from '@supabase/supabase-js'; // Import Supabase client 
 
 // Assume supabaseHelpers exists and has necessary functions,
 // OR use Prisma directly if preferred for counts.
-// For Prisma, you'd import the client: import { prisma } from './prisma';
 import { supabaseHelpers } from './supabase'; // Keep if helpers are used
-import { prisma } from './prisma'; // Add prisma import
+import { prisma } from '@/lib/prisma'; // CORRECTED IMPORT PATH
 
 interface ValidationResult {
   isValid: boolean;
@@ -31,7 +30,7 @@ export const USAGE_LIMITS = {
 // --- Existing validation functions ---
 
 export async function validateNoteCreation(userId: string): Promise<ValidationResult> {
-  // ... (keep existing implementation, maybe adapt to use Prisma if switching)
+  // ... (keep existing implementation)
    try {
     console.log('Validating note creation for user:', userId);
     const userProfile = await prisma.profiles.findUnique({ where: { id: userId }, select: { subscription_plan: true } });
@@ -56,13 +55,13 @@ export async function validateNoteCreation(userId: string): Promise<ValidationRe
 }
 
 export async function validateQuizCreation(userId: string): Promise<ValidationResult> {
-  // ... (keep existing implementation, maybe adapt to use Prisma)
+  // ... (keep existing implementation)
   try {
     const userProfile = await prisma.profiles.findUnique({ where: { id: userId }, select: { subscription_plan: true } });
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
 
     if (plan !== 'pro') {
-      const currentCount = await prisma.quiz.count({ where: { userId: userId } });
+      const currentCount = await prisma.quiz.count({ where: { userId: userId } }); // Assuming Quiz model uses 'userId' based on schema
       if (currentCount >= USAGE_LIMITS.FREE_QUIZZES) {
         return {
           isValid: false,
@@ -94,7 +93,10 @@ export async function checkAIGenerationUsageLimit(userId: string): Promise<Valid
 
         // For free users, fetch count (adapt if ai_usage model is used with Prisma)
         // This assumes supabaseHelpers.getAIGenerationCount works or is adapted
-        const currentCount = await supabaseHelpers.getAIGenerationCount(userId); // Or Prisma equivalent
+        // If you have modeled ai_usage in Prisma:
+        // const usageRecords = await prisma.ai_usage.findMany({ where: { user_id: userId }, select: { usage_count: true } });
+        // const currentCount = usageRecords.reduce((sum, record) => sum + record.usage_count, 0);
+        const currentCount = await supabaseHelpers.getAIGenerationCount(userId); // Keep if using Supabase helper
 
         if (currentCount >= limit) {
             return {
@@ -172,9 +174,8 @@ export async function validateFlashcardCreation(userId: string): Promise<Validat
 }
 
 
-// Helper function to get remaining usage for a user (Adapt if needed)
+// Helper function to get remaining usage for a user
 export async function getUserUsage(userId: string) {
-  // ... (keep existing implementation or adapt fully to Prisma)
    try {
     const userProfile = await prisma.profiles.findUnique({ where: { id: userId }, select: { subscription_plan: true } });
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
@@ -182,7 +183,7 @@ export async function getUserUsage(userId: string) {
 
     const [notesCount, quizzesCount, aiGenerationCount, decksCount, flashcardsCount] = await Promise.all([
       prisma.notes.count({ where: { user_id: userId } }),
-      prisma.quiz.count({ where: { userId: userId } }),
+      prisma.quiz.count({ where: { userId: userId } }), // Assuming 'userId' field name
       supabaseHelpers.getAIGenerationCount(userId), // Keep or replace with Prisma if ai_usage is modeled
       prisma.flashcard_decks.count({ where: { user_id: userId } }),
       prisma.flashcards.count({ where: { deck: { user_id: userId } } }),
@@ -205,12 +206,12 @@ export async function getUserUsage(userId: string) {
         limit: isPro ? USAGE_LIMITS.PRO_AI_GENERATIONS : USAGE_LIMITS.FREE_AI_GENERATIONS,
         remaining: isPro ? Infinity : Math.max(0, USAGE_LIMITS.FREE_AI_GENERATIONS - aiGenerationCount)
       },
-      flashcardDecks: { // New section
+      flashcardDecks: {
           used: decksCount,
           limit: isPro ? USAGE_LIMITS.PRO_FLASHCARD_DECKS : USAGE_LIMITS.FREE_FLASHCARD_DECKS,
           remaining: isPro ? Infinity : Math.max(0, USAGE_LIMITS.FREE_FLASHCARD_DECKS - decksCount)
       },
-      flashcards: { // New section
+      flashcards: {
           used: flashcardsCount,
           limit: isPro ? USAGE_LIMITS.PRO_TOTAL_FLASHCARDS : USAGE_LIMITS.FREE_TOTAL_FLASHCARDS,
           remaining: isPro ? Infinity : Math.max(0, USAGE_LIMITS.FREE_TOTAL_FLASHCARDS - flashcardsCount)
