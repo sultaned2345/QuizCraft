@@ -20,12 +20,10 @@ model profiles {
   created_at        DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationships
-  // Relation back to the corresponding entry in auth.users
-  user    users   @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey") 
-  // Quizzes created by this user profile
-  quizzes Quiz[]  
-  // Notes created by this user profile (uncomment if you add the notes model)
-  // notes   notes[] 
+  user            users            @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey")
+  quizzes         Quiz[]
+  notes           notes[]          // Relation to user's notes
+  flashcard_decks flashcard_decks[] // Relation to user's flashcard decks
 
   @@map("profiles") // Maps this model to the 'profiles' table
   @@schema("public") // Specifies this model belongs to the 'public' schema
@@ -39,12 +37,11 @@ model Quiz {
   share_link         String?    @unique // Added share link field
   createdAt          DateTime?  @default(now()) @map("created_at") @db.Timestamptz(6)
   is_public          Boolean?   @default(false)
-  immediate_feedback Boolean?   @default(true) 
+  immediate_feedback Boolean?   @default(true)
 
   // Relationships
   questions questions[] // Questions belonging to this quiz
-  // Relation to the user profile that owns this quiz
-  profile   profiles?  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey") 
+  profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
 
   @@map("quizzes")
   @@schema("public")
@@ -52,38 +49,71 @@ model Quiz {
 
 // Represents a single question within a quiz
 model questions {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  quiz_id        String?  @db.Uuid // Foreign key referencing quizzes.id
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quiz_id        String?   @db.Uuid // Foreign key referencing quizzes.id
   question_text  String
-  question_type  String   // e.g., 'MULTIPLE_CHOICE', 'TRUE_FALSE', etc.
+  question_type  String    // e.g., 'MULTIPLE_CHOICE', 'TRUE_FALSE', etc.
   correct_answer String
-  options        Json?    // Stores options for multiple choice or matching answers
-  prompts        Json?    // Stores prompts for matching questions
+  options        Json?     // Stores options for multiple choice or matching answers
+  prompts        Json?     // Stores prompts for matching questions
   explanation    String?
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6) // Added created_at based on SQL
 
   // Relationship back to the quiz this question belongs to
-  quizzes        Quiz?    @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes        Quiz?     @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("questions")
   @@schema("public")
 }
 
-// Example 'notes' model (uncomment and adjust if needed)
-// model notes {
-//   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-//   user_id   String    @db.Uuid // Foreign key referencing profiles.id
-//   title     String
-//   content   String
-//   created_at DateTime @default(now()) @db.Timestamptz(6)
-//   updated_at DateTime @updatedAt @db.Timestamptz(6) // Prisma can manage this
-//   
-//   // Relation to the user profile that owns this note
-//   profile   profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
-//
-//   @@map("notes")
-//   @@schema("public")
-// }
+// Represents notes created by a user
+model notes {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid // Foreign key referencing profiles.id
+  title      String
+  content    String
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @updatedAt @db.Timestamptz(6) // Prisma can manage this
+
+  // Relation to the user profile that owns this note
+  profile    profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
+
+  @@map("notes")
+  @@schema("public")
+}
+
+// Represents a deck of flashcards created by a user
+model flashcard_decks {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String      @db.Uuid // Foreign key referencing profiles.id
+  title      String
+  created_at DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?   @updatedAt @db.Timestamptz(6) // Prisma can manage this
+
+  // Relationships
+  profile    profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcard_decks_user_id_fkey")
+  flashcards flashcards[] // Flashcards belonging to this deck
+
+  @@map("flashcard_decks")
+  @@schema("public")
+}
+
+// Represents a single flashcard within a deck
+model flashcards {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deck_id       String          @db.Uuid // Foreign key referencing flashcard_decks.id
+  front_content String
+  back_content  String
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?       @updatedAt @db.Timestamptz(6) // Prisma can manage this
+
+  // Relationship back to the deck this flashcard belongs to
+  deck          flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
+
+  @@map("flashcards")
+  @@schema("public")
+}
+
 
 // Example 'ai_usage' model (uncomment and adjust if needed)
 // model ai_usage {
@@ -147,7 +177,7 @@ model users {
   mfa_factors     mfa_factors[]
   one_time_tokens one_time_tokens[]
   sessions        sessions[]
-  profile         profiles? // Changed relation name to singular 'profile'
+  profile         profiles?         // Relation to the public profile
 
   @@index([instance_id])
   @@index([is_anonymous])

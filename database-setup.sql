@@ -1,4 +1,5 @@
 -- QuizCraft Complete Database Setup (Option B: subscription_plan on profiles)
+-- Includes Notes and Flashcards features.
 -- This script is safe to run even if tables/policies/functions/triggers already exist.
 
 -- -----------------------------------------------------------------------------
@@ -60,6 +61,25 @@ CREATE TABLE IF NOT EXISTS public.ai_usage (
     UNIQUE(user_id, usage_month)
 );
 
+-- Create flashcard_decks table, referencing public.profiles
+CREATE TABLE IF NOT EXISTS public.flashcard_decks (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create flashcards table, referencing public.flashcard_decks
+CREATE TABLE IF NOT EXISTS public.flashcards (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    deck_id UUID NOT NULL REFERENCES public.flashcard_decks(id) ON DELETE CASCADE,
+    front_content TEXT NOT NULL,
+    back_content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- -----------------------------------------------------------------------------
 -- Step 2: Create Indexes for Performance
 -- -----------------------------------------------------------------------------
@@ -69,6 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_quizzes_user_id ON public.quizzes(user_id);
 CREATE INDEX IF NOT EXISTS idx_questions_quiz_id ON public.questions(quiz_id);
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON public.notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_user_month ON public.ai_usage(user_id, usage_month);
+CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user_id ON public.flashcard_decks(user_id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_deck_id ON public.flashcards(deck_id);
 
 -- -----------------------------------------------------------------------------
 -- Step 3: Enable Row Level Security (RLS)
@@ -78,21 +100,25 @@ ALTER TABLE public.quizzes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flashcard_decks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flashcards ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
 -- Step 4: Create RLS Policies
 -- -----------------------------------------------------------------------------
 
--- Policies for 'profiles' table (previously 'users')
+-- Policies for 'profiles' table (simplified for clarity)
 DROP POLICY IF EXISTS "Users can manage their own profile" ON public.profiles;
 CREATE POLICY "Users can manage their own profile" ON public.profiles
-    FOR ALL USING (auth.uid() = id); -- Allows users to select/update/delete their own profile
+    FOR ALL USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
 
 -- Policies for 'quizzes' table
 DROP POLICY IF EXISTS "Users can manage their own quizzes" ON public.quizzes;
 DROP POLICY IF EXISTS "Public can view public quizzes" ON public.quizzes;
 CREATE POLICY "Users can manage their own quizzes" ON public.quizzes
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Public can view public quizzes" ON public.quizzes
     FOR SELECT USING (is_public = true);
 
@@ -100,29 +126,35 @@ CREATE POLICY "Public can view public quizzes" ON public.quizzes
 DROP POLICY IF EXISTS "Users can manage questions for their own quizzes" ON public.questions;
 DROP POLICY IF EXISTS "Public can view questions for public quizzes" ON public.questions;
 CREATE POLICY "Users can manage questions for their own quizzes" ON public.questions
-    FOR ALL USING (quiz_id IN (SELECT id FROM public.quizzes WHERE user_id = auth.uid()));
+    FOR ALL USING (quiz_id IN (SELECT id FROM public.quizzes WHERE user_id = auth.uid()))
+    WITH CHECK (quiz_id IN (SELECT id FROM public.quizzes WHERE user_id = auth.uid()));
 CREATE POLICY "Public can view questions for public quizzes" ON public.questions
     FOR SELECT USING (quiz_id IN (SELECT id FROM public.quizzes WHERE is_public = true));
 
 -- Policies for 'notes' table
-DROP POLICY IF EXISTS "Users can view own notes" ON public.notes;
-DROP POLICY IF EXISTS "Users can create own notes" ON public.notes;
-DROP POLICY IF EXISTS "Users can update own notes" ON public.notes;
-DROP POLICY IF EXISTS "Users can delete own notes" ON public.notes;
-
-CREATE POLICY "Users can view own notes" ON public.notes
-    FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create own notes" ON public.notes
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own notes" ON public.notes
-    FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own notes" ON public.notes
-    FOR DELETE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can manage own notes" ON public.notes;
+CREATE POLICY "Users can manage own notes" ON public.notes
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
 -- Policies for 'ai_usage' table
 DROP POLICY IF EXISTS "Users can manage their own AI usage" ON public.ai_usage;
 CREATE POLICY "Users can manage their own AI usage" ON public.ai_usage
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Policies for 'flashcard_decks' table
+DROP POLICY IF EXISTS "Users can manage their own flashcard decks" ON public.flashcard_decks;
+CREATE POLICY "Users can manage their own flashcard decks" ON public.flashcard_decks
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Policies for 'flashcards' table
+DROP POLICY IF EXISTS "Users can manage flashcards in their own decks" ON public.flashcards;
+CREATE POLICY "Users can manage flashcards in their own decks" ON public.flashcards
+    FOR ALL USING (deck_id IN (SELECT id FROM public.flashcard_decks WHERE user_id = auth.uid()))
+    WITH CHECK (deck_id IN (SELECT id FROM public.flashcard_decks WHERE user_id = auth.uid()));
+
 
 -- -----------------------------------------------------------------------------
 -- Step 5: Create Functions & Triggers
@@ -146,20 +178,32 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
 
--- Function to automatically update the 'updated_at' timestamp on notes
+-- Function to automatically update the 'updated_at' timestamp on tables
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER; -- Use SECURITY DEFINER if function needs higher privileges
 
 -- Trigger to update 'notes.updated_at' before any update operation
 DROP TRIGGER IF EXISTS update_notes_updated_at ON public.notes;
 CREATE TRIGGER update_notes_updated_at
   BEFORE UPDATE ON public.notes
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Trigger to update 'flashcard_decks.updated_at' before any update operation
+DROP TRIGGER IF EXISTS update_flashcard_decks_updated_at ON public.flashcard_decks;
+CREATE TRIGGER update_flashcard_decks_updated_at
+  BEFORE UPDATE ON public.flashcard_decks
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column(); -- Reuse function
+
+-- Trigger to update 'flashcards.updated_at' before any update operation
+DROP TRIGGER IF EXISTS update_flashcards_updated_at ON public.flashcards;
+CREATE TRIGGER update_flashcards_updated_at
+  BEFORE UPDATE ON public.flashcards
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column(); -- Reuse function
 
 -- Function to increment AI usage count (upsert logic)
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(p_user_id UUID, p_usage_month DATE, p_increment_by INT)
