@@ -22,11 +22,12 @@ model profiles {
   // Relationships
   user            users            @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey")
   quizzes         Quiz[]
-  notes           notes[]          // Relation to user's notes
-  flashcard_decks flashcard_decks[] // Relation to user's flashcard decks
+  notes           notes[]
+  flashcard_decks flashcard_decks[]
+  documents       documents[] // Add relation to documents
 
-  @@map("profiles") // Maps this model to the 'profiles' table
-  @@schema("public") // Specifies this model belongs to the 'public' schema
+  @@map("profiles")
+  @@schema("public")
 }
 
 // Represents a quiz created by a user
@@ -34,13 +35,13 @@ model Quiz {
   id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId             String?    @map("user_id") @db.Uuid // Foreign key referencing profiles.id
   title              String
-  share_link         String?    @unique // Added share link field
+  share_link         String?    @unique
   createdAt          DateTime?  @default(now()) @map("created_at") @db.Timestamptz(6)
   is_public          Boolean?   @default(false)
   immediate_feedback Boolean?   @default(true)
 
   // Relationships
-  questions questions[] // Questions belonging to this quiz
+  questions questions[]
   profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
 
   @@map("quizzes")
@@ -52,14 +53,14 @@ model questions {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   quiz_id        String?   @db.Uuid // Foreign key referencing quizzes.id
   question_text  String
-  question_type  String    // e.g., 'MULTIPLE_CHOICE', 'TRUE_FALSE', etc.
+  question_type  String
   correct_answer String
-  options        Json?     // Stores options for multiple choice or matching answers
-  prompts        Json?     // Stores prompts for matching questions
+  options        Json?
+  prompts        Json?
   explanation    String?
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6) // Added created_at based on SQL
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  // Relationship back to the quiz this question belongs to
+  // Relationship back to the quiz
   quizzes        Quiz?     @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("questions")
@@ -73,9 +74,9 @@ model notes {
   title      String
   content    String
   created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @updatedAt @db.Timestamptz(6) // Prisma can manage this
+  updated_at DateTime? @updatedAt @db.Timestamptz(6)
 
-  // Relation to the user profile that owns this note
+  // Relation to the user profile
   profile    profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
 
   @@map("notes")
@@ -88,11 +89,11 @@ model flashcard_decks {
   user_id    String      @db.Uuid // Foreign key referencing profiles.id
   title      String
   created_at DateTime?   @default(now()) @db.Timestamptz(6)
-  updated_at DateTime?   @updatedAt @db.Timestamptz(6) // Prisma can manage this
+  updated_at DateTime?   @updatedAt @db.Timestamptz(6)
 
   // Relationships
   profile    profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcard_decks_user_id_fkey")
-  flashcards flashcards[] // Flashcards belonging to this deck
+  flashcards flashcards[]
 
   @@map("flashcard_decks")
   @@schema("public")
@@ -105,35 +106,36 @@ model flashcards {
   front_content String
   back_content  String
   created_at    DateTime?       @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime?       @updatedAt @db.Timestamptz(6) // Prisma can manage this
+  updated_at    DateTime?       @updatedAt @db.Timestamptz(6)
 
-  // Relationship back to the deck this flashcard belongs to
+  // Relationship back to the deck
   deck          flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
 
   @@map("flashcards")
   @@schema("public")
 }
 
+// Represents uploaded documents (NEW MODEL)
+model documents {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String    @db.Uuid // Foreign key referencing profiles.id
+  file_name       String
+  file_type       String    // e.g., "application/pdf", "text/plain"
+  file_size       Int       // Store size in bytes
+  storage_path    String    // Path to the file in Supabase Storage
+  extracted_text  String?   @db.Text // Store extracted text (optional initially, but needed for MVP)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
 
-// Example 'ai_usage' model (uncomment and adjust if needed)
-// model ai_usage {
-//   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-//   user_id     String    @db.Uuid // Foreign key referencing profiles.id
-//   usage_count Int       @default(0)
-//   usage_month DateTime  @db.Date // Use DateTime with @db.Date for DATE type
-//   updated_at  DateTime? @default(now()) @db.Timestamptz(6)
-//
-//   // Relation to the user profile
-//   profile     profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_usage_user_id_fkey")
-//
-//   @@unique([user_id, usage_month]) // Unique constraint
-//   @@map("ai_usage")
-//   @@schema("public")
-// }
+  // Relationship to the user profile
+  profile         profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
+
+  @@map("documents")
+  @@schema("public")
+}
 
 
-// --- Auth Schema Models (Copied from your input, represents Supabase Auth structure) ---
-
+// --- Auth Schema Models ---
+// (Keep all the existing 'auth' schema models like 'users', 'identities', etc. here)
 // Represents users in Supabase Authentication
 model users {
   instance_id                 String?           @db.Uuid
@@ -157,9 +159,9 @@ model users {
   is_super_admin              Boolean?
   created_at                  DateTime?         @db.Timestamptz(6)
   updated_at                  DateTime?         @db.Timestamptz(6)
-  phone                       String?           @unique @db.VarChar(15) // Defined max length
+  phone                       String?           @unique @db.VarChar(15)
   phone_confirmed_at          DateTime?         @db.Timestamptz(6)
-  phone_change                String?           @default("") @db.VarChar(15) // Defined max length
+  phone_change                String?           @default("") @db.VarChar(15)
   phone_change_token          String?           @default("") @db.VarChar(255)
   phone_change_sent_at        DateTime?         @db.Timestamptz(6)
   confirmed_at                DateTime?         @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
@@ -177,16 +179,15 @@ model users {
   mfa_factors     mfa_factors[]
   one_time_tokens one_time_tokens[]
   sessions        sessions[]
-  profile         profiles?         // Relation to the public profile
+  profile         profiles?
 
   @@index([instance_id])
   @@index([is_anonymous])
-  @@map("users") // Maps to the 'users' table in the 'auth' schema
+  @@map("users")
   @@schema("auth")
 }
 
-// --- Other Auth Schema Models (Keep as provided) ---
-
+// ... (Rest of auth models: audit_log_entries, flow_state, etc.) ...
 model audit_log_entries {
   instance_id String?   @db.Uuid
   id          String    @id @db.Uuid
@@ -438,7 +439,7 @@ model sso_providers {
   @@schema("auth")
 }
 
-// --- Enums (Keep as provided) ---
+// --- Enums ---
 
 enum aal_level {
   aal1

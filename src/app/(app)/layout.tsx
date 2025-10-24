@@ -13,10 +13,11 @@ import {
   StickyNote,
   Layers,
   FileSignature,
-  MessageSquare, // Import the chat icon
+  MessageSquare,
+  FileText, // Import FileText icon for Documents
 } from 'lucide-react';
-import { useState } from 'react'; // Import useState
-import { ChatbotDialog } from '@/components/ChatbotDialog'; // Import the new chatbot component
+import { useState } from 'react';
+import { ChatbotDialog } from '@/components/ChatbotDialog';
 
 // Reusable Header for the authenticated layout
 const AppHeader = () => {
@@ -48,6 +49,7 @@ const SidebarNav = () => {
     { href: '/dashboard', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
+    { href: '/documents', label: 'Documents', icon: FileText }, // Added Documents link
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
   ];
 
@@ -59,7 +61,8 @@ const SidebarNav = () => {
           href={item.href}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-            pathname === item.href && 'bg-muted text-primary'
+            // Handle highlighting for nested routes if needed in the future
+            (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
           )}
         >
           <item.icon className="h-4 w-4" />
