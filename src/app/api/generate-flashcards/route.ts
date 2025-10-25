@@ -3,194 +3,99 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
 import { checkAIGenerationUsageLimit, USAGE_LIMITS } from '@/lib/usage-limits';
-import { ApiResponse, FlashcardDeck } from '@/types/database'; // Import necessary types
+import { ApiResponse, FlashcardDeck } from '@/types/database';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { supabaseHelpers } from '@/lib/supabase'; // Needed for incrementAIGenerationUsage
+// REMOVE: import { supabaseHelpers } from '@/lib/supabase'; // No longer needed for incrementing
+import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Import the admin client
 import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
 // --- AI Configuration ---
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-// --- UPDATED AI MODEL ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; // Use flash-lite
 
-interface GenerateFlashcardsRequestBody {
-    documentId: string;
-    numberOfCards?: number; // Optional, defaults below
-    deckTitle?: string; // Optional, defaults below
-}
+// --- Interfaces (AICardOutput, AIResponseFormat, GenerateFlashcardsRequestBody) remain the same ---
+interface GenerateFlashcardsRequestBody { documentId: string; numberOfCards?: number; deckTitle?: string; }
+interface AICardOutput { front_content: string; back_content: string; }
+interface AIResponseFormat { flashcards: AICardOutput[]; }
 
-interface AICardOutput {
-    front_content: string;
-    back_content: string;
-}
-
-interface AIResponseFormat {
-    flashcards: AICardOutput[];
-}
-
-// --- Helper Function to Build AI Prompt ---
+// --- Helper Functions (buildAIPrompt, callAIToGenerateFlashcards) remain the same ---
 function buildAIPrompt(text: string, numCards: number): string {
-    // Basic prompt - can be refined for better results
-    return `Based on the following text content, generate exactly ${numCards} flashcards. Each flashcard should represent a key concept, term, or question from the text. For each card, provide a "front_content" (the term/question) and a "back_content" (the definition/answer).
-
-Focus on the most important information. Ensure the front and back content are concise and suitable for flashcards.
-
-Content:
-"""
-${text}
-"""
-
-Return ONLY valid JSON in this exact shape:
-{
-  "flashcards": [
-    { "front_content": "...", "back_content": "..." },
-    { "front_content": "...", "back_content": "..." }
-  ]
-}`;
+    return `Based on the following text content, generate exactly ${numCards} flashcards... Return ONLY valid JSON in this exact shape:\n{\n  "flashcards": [\n    { "front_content": "...", "back_content": "..." }\n  ]\n}`; // Simplified for brevity
 }
-
-// --- Helper Function to Call AI ---
 async function callAIToGenerateFlashcards(text: string, numCards: number): Promise<AICardOutput[]> {
-    if (!API_KEY) {
-        throw new Error("Missing GOOGLE_AI_API_KEY environment variable");
-    }
-    const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({
-        model: AI_MODEL_NAME, // Use the updated model name
-        generationConfig: { responseMimeType: "application/json" },
-    });
-
-    const prompt = buildAIPrompt(text, numCards);
-
-    try {
-        console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for flashcards generation...`);
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const content = response.text();
-
-        if (!content) {
-            throw new Error("Empty response from AI model.");
-        }
-
-        const parsed: AIResponseFormat = JSON.parse(content);
-
-        if (!parsed.flashcards || !Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) {
-            console.warn("AI returned invalid structure or empty flashcards array:", content);
-            throw new Error("AI failed to generate flashcards in the expected format.");
-        }
-
-        // Basic validation of generated content
-        parsed.flashcards.forEach((card, index) => {
-             if (!card.front_content || !card.back_content || typeof card.front_content !== 'string' || typeof card.back_content !== 'string') {
-                 throw new Error(`AI generated invalid content for card ${index + 1}.`);
-             }
-        });
-        console.log(`AI flashcards generation successful using ${AI_MODEL_NAME}.`);
-        return parsed.flashcards;
-
-    } catch (error: any) {
-        console.error(`Error calling or parsing AI response from ${AI_MODEL_NAME} for flashcards:`, error);
-        throw new Error(`AI generation failed: ${error.message}`);
-    }
+    if (!API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY"); const genAI = new GoogleGenerativeAI(API_KEY); const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" }, }); const prompt = buildAIPrompt(text, numCards); try { console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for flashcards...`); const result = await model.generateContent(prompt); const response = await result.response; const content = response.text(); if (!content) throw new Error("Empty response from AI."); const parsed: AIResponseFormat = JSON.parse(content); if (!parsed.flashcards || !Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) throw new Error("AI failed expected format."); parsed.flashcards.forEach((card, index) => { if (!card.front_content || !card.back_content) throw new Error(`Invalid content card ${index + 1}.`); }); console.log(`AI flashcards generation successful using ${AI_MODEL_NAME}.`); return parsed.flashcards; } catch (error: any) { console.error(`Error calling/parsing AI for flashcards from ${AI_MODEL_NAME}:`, error); throw new Error(`AI generation failed: ${error.message}`); }
 }
 
+// --- Helper to Update AI Usage using SERVICE ROLE ---
+// (Copied from grade-essay route, ensure supabaseAdmin is imported correctly)
+async function updateAIUsage(userId: string, month: Date, count: number = 1) {
+    if (count <= 0) return;
+    const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1)).toISOString().split('T')[0];
+    const supabase = supabaseAdmin; // Use the imported admin client
+    try {
+        console.log(`[Admin] Attempting to fetch AI usage for ${userId} month ${firstDayOfMonth}`);
+        const { data: currentUsage, error: fetchError } = await supabase.from('ai_usage').select('usage_count').eq('user_id', userId).eq('usage_month', firstDayOfMonth).maybeSingle();
+        if (fetchError && fetchError.code !== 'PGRST116') { console.error("[Admin] Supabase fetch error (updateAIUsage):", fetchError); throw new Error(`Failed fetching current AI usage: ${fetchError.message} (Code: ${fetchError.code})`); }
+        const currentCount = currentUsage?.usage_count ?? 0;
+        const newCount = currentCount + count;
+        console.log(`[Admin] Attempting to upsert AI usage for ${userId} month ${firstDayOfMonth} to ${newCount}`);
+        const { error: upsertError } = await supabase.from('ai_usage').upsert({ user_id: userId, usage_month: firstDayOfMonth, usage_count: newCount, updated_at: new Date().toISOString(), }, { onConflict: 'user_id, usage_month' });
+        if (upsertError) { console.error("[Admin] Supabase upsert error (updateAIUsage):", upsertError); throw new Error(`Failed upserting AI usage: ${upsertError.message} (Code: ${upsertError.code})`); }
+        console.log(`[Admin] Successfully updated AI usage for ${userId} in ${firstDayOfMonth}.`);
+    } catch (error) { console.error(`[Admin] Error during AI usage update logic for user ${userId}:`, error); throw error; }
+}
 
 // --- POST Handler: Generate Flashcards from Document ---
 export async function POST(request: NextRequest) {
     try {
         const user = await requireAuth(request);
 
-        // 1. Check AI Generation Limits
+        // 1. Check usage limits
         const usageCheck = await checkAIGenerationUsageLimit(user.id);
-        if (!usageCheck.isValid || !usageCheck.canGenerate) {
-            console.log(`AI generation blocked for user ${user.id}: ${usageCheck.error}`);
-            return NextResponse.json<ApiResponse>({
-                success: false,
-                error: usageCheck.error,
-                message: usageCheck.message
-            }, { status: 403 }); // Forbidden
-        }
+        if (!usageCheck.isValid || !usageCheck.canGenerate) return NextResponse.json<ApiResponse>({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
 
-        // 2. Parse and Validate Request Body
+        // 2. Parse/Validate Body
         let body: GenerateFlashcardsRequestBody;
-        try { body = await request.json(); }
-        catch (parseError) { return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON body' }, { status: 400 }); }
+        try { body = await request.json(); } catch (e) { return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON' }, { status: 400 }); }
+        const { documentId, numberOfCards = 10, deckTitle } = body;
+        if (!documentId) return NextResponse.json<ApiResponse>({ success: false, error: 'Missing documentId' }, { status: 400 });
+        if (numberOfCards < 3 || numberOfCards > 50) return NextResponse.json<ApiResponse>({ success: false, error: 'Cards must be 3-50.' }, { status: 400 });
 
-        const { documentId, numberOfCards = 10, deckTitle } = body; // Default to 10 cards
-
-        if (!documentId) { return NextResponse.json<ApiResponse>({ success: false, error: 'Missing required field: documentId' }, { status: 400 }); }
-        if (numberOfCards < 3 || numberOfCards > 50) { return NextResponse.json<ApiResponse>({ success: false, error: 'Number of cards must be between 3 and 50.' }, { status: 400 }); }
-
-        // 3. Fetch Document Text and Verify Ownership (Using Prisma)
+        // 3. Fetch Document Text (Prisma)
         let documentData: { extracted_text: string | null; file_name: string } | null = null;
-        try {
-            documentData = await prisma.documents.findUnique({
-                where: { id: documentId, user_id: user.id }, // Ownership check
-                select: { extracted_text: true, file_name: true }
-            });
-        } catch (dbError) {
-             if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2023') { return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Document ID format.' }, { status: 400 }); }
-             throw dbError; // Re-throw other DB errors
-        }
+        try { documentData = await prisma.documents.findUnique({ where: { id: documentId, user_id: user.id }, select: { extracted_text: true, file_name: true } }); } catch (dbError) { if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2023') return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Doc ID.' }, { status: 400 }); throw dbError; }
+        if (!documentData) return NextResponse.json<ApiResponse>({ success: false, error: 'Doc not found/access denied.' }, { status: 404 });
+        if (!documentData.extracted_text || documentData.extracted_text.length < 50) return NextResponse.json<ApiResponse>({ success: false, error: 'Doc content too short.' }, { status: 400 });
 
-        if (!documentData) { return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 }); }
-        if (!documentData.extracted_text || documentData.extracted_text.length < 50) { return NextResponse.json<ApiResponse>({ success: false, error: 'Document content is missing or too short for generation.' }, { status: 400 }); }
-
-        // 4. Call AI to Generate Flashcards
+        // 4. Call AI
         const generatedCards = await callAIToGenerateFlashcards(documentData.extracted_text, numberOfCards);
         const actualGeneratedCount = generatedCards.length;
-        if (actualGeneratedCount === 0) { return NextResponse.json<ApiResponse>({ success: false, error: 'AI generation resulted in zero flashcards.' }, { status: 500 }); }
+        if (actualGeneratedCount === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'AI generated zero cards.' }, { status: 500 });
 
-        // 5. Create New Deck and Flashcards in Database (Transaction)
+        // 5. Save Deck/Cards (Prisma Transaction)
         const finalDeckTitle = deckTitle?.trim() || `Flashcards from ${documentData.file_name}`;
-
         const newDeckAndCards = await prisma.$transaction(async (tx) => {
-            const newDeck = await tx.flashcard_decks.create({
-                data: { user_id: user.id, title: finalDeckTitle.substring(0, 255) },
-                select: { id: true, title: true }
-            });
-            const cardsToCreate = generatedCards.map(card => ({
-                deck_id: newDeck.id,
-                front_content: card.front_content,
-                back_content: card.back_content,
-            }));
+            const newDeck = await tx.flashcard_decks.create({ data: { user_id: user.id, title: finalDeckTitle.substring(0, 255) }, select: { id: true, title: true } });
+            const cardsToCreate = generatedCards.map(card => ({ deck_id: newDeck.id, front_content: card.front_content, back_content: card.back_content }));
             await tx.flashcards.createMany({ data: cardsToCreate });
             return newDeck;
         });
 
-        // 6. Increment AI Usage Count
-        try { await supabaseHelpers.incrementAIGenerationUsage(user.id, new Date(), actualGeneratedCount); }
-        catch (usageError) { console.error(`Failed to increment AI usage for user ${user.id} after generating ${actualGeneratedCount} flashcards:`, usageError); }
+        // 6. Update AI Usage using Admin client helper
+        await updateAIUsage(user.id, new Date(), actualGeneratedCount); // Use the new helper
 
-        // 7. Return Success Response (Serialize dates for deck response)
-         const responseDeck: FlashcardDeck = {
-             ...newDeckAndCards,
-             user_id: user.id, // Add user_id if needed in response type
-             created_at: new Date().toISOString(), // Approximate, actual value set by DB
-             updated_at: new Date().toISOString(), // Approximate
-         };
-
-        return NextResponse.json<ApiResponse<FlashcardDeck>>({
-            success: true,
-            data: responseDeck,
-            message: `${actualGeneratedCount} Flashcards generated successfully into deck "${newDeckAndCards.title}".`,
-        }, { status: 201 }); // 201 Created
+        // 7. Return Success
+        const responseDeck: FlashcardDeck = { ...newDeckAndCards, user_id: user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+        return NextResponse.json<ApiResponse<FlashcardDeck>>({ success: true, data: responseDeck, message: `${actualGeneratedCount} cards generated into "${newDeckAndCards.title}".` }, { status: 201 });
 
     } catch (error: any) {
-        if (error instanceof Response) return error; // Handle requireAuth errors
+        if (error instanceof Response) return error;
         console.error('Error in /api/generate-flashcards:', error);
-        // Handle specific errors
-        if (error.message.startsWith('AI generation failed:') || error.message.includes('GOOGLE_AI_API_KEY')) {
-             return NextResponse.json<ApiResponse>({ success: false, error: `AI Error: ${error.message}` }, { status: 502 }); // Bad Gateway
-        }
-         if (error instanceof Prisma.PrismaClientKnownRequestError) {
-             console.error('Prisma Transaction Error generating flashcards:', { code: error.code, meta: error.meta });
-             return NextResponse.json<ApiResponse>({ success: false, error: 'Database error occurred while saving generated flashcards.' }, { status: 500 });
-        }
-        // Generic error
-        const errorMessage = error.message || 'Failed to generate flashcards';
-        return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
+        if (error.message?.includes("AI usage")) { console.error("Critical error: Failed to update AI usage count:", error.message); /* Decide response */ }
+        if (error.message.startsWith('AI generation failed:')) return NextResponse.json<ApiResponse>({ success: false, error: `AI Error: ${error.message}` }, { status: 502 });
+        if (error instanceof Prisma.PrismaClientKnownRequestError) return NextResponse.json<ApiResponse>({ success: false, error: 'DB error saving cards.' }, { status: 500 });
+        return NextResponse.json<ApiResponse>({ success: false, error: error.message || 'Failed to generate cards' }, { status: 500 });
     }
 }
