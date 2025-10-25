@@ -1,36 +1,174 @@
 // src/lib/supabase.ts
-import { createClient, PostgrestError } from '@supabase/supabase-js';
+import { createClient, PostgRestError } from '@supabase/supabase-js';
 import { Database, Note, Quiz, Question, User } from '@/types/database';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/prisma'; // Import Prisma
 
 // --- Supabase Client Initialization (Keep global client) ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-if (!supabaseUrl || !supabaseAnonKey) { /* ... error handling ... */ }
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-// --- Error Handling Helper (Keep as is) ---
-function handleSupabaseError(error: PostgrestError | null, context: string): void {
-    if (error) {
-        // Log more details from PostgrestError
-        console.error(`Supabase error during ${context}:`, {
-        message: error.message,
-        details: error.details,
-        code: error.code,
-        hint: error.hint,
-        });
-        // Rethrow a formatted error
-        throw new Error(`Failed during ${context}: ${error.message} (Code: ${error.code})`);
-    }
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase URL or Anon Key is missing in environment variables.");
 }
 
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
+// --- Error Handling Helper ---
+function handleSupabaseError(error: PostgRestError | null, context: string): void {
+  if (error) {
+    console.error(`Supabase error during ${context}:`, {
+      message: error.message,
+      details: error.details,
+      code: error.code,
+      hint: error.hint,
+    });
+    throw new Error(`Failed during ${context}: ${error.message} (Code: ${error.code})`);
+  }
+}
+
+/**
+ * A collection of helper functions.
+ * Note: Functions using Prisma (like getQuizzesForDashboard) are now preferred
+ * for server-side logic, while functions using the Supabase client
+ * (like AI usage) are kept for their specific interactions.
+ */
 export const supabaseHelpers = {
-  // ... (getUserWithPlan, getQuizzesForDashboard, getQuiz, deleteQuiz, getNotes, etc. remain the same) ...
+  // --- User Operations ---
+  async getUserWithPlan(userId: string): Promise<(User & { subscription_plan: 'free' | 'pro' }) | null> {
+    // This function still uses the Supabase client, which is fine for profile lookups
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, created_at, subscription_plan')
+      .eq('id', userId)
+      .maybeSingle();
 
-  // --- AI Usage Operations ---
+    handleSupabaseError(error, `fetching user plan for user ${userId}`);
 
-  // ... (getAIGenerationCount, getAIGenerationUsageForMonth remain the same) ...
+    if (!data) {
+        console.warn(`No profile found for user ${userId}, assuming 'free' plan.`);
+        // Fallback logic to get auth user details if profile is missing
+         try {
+             const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
+             if (authError || !authUser?.user) throw authError || new Error('User not found');
+             return {
+                 id: userId,
+                 email: authUser.user.email || 'unknown',
+                 created_at: authUser.user.created_at || new Date().toISOString(),
+                 subscription_plan: 'free' as const
+             };
+         } catch (adminError) {
+              console.error(`Failed to get auth user details for ${userId} after profile lookup failed:`, adminError);
+              return null; // Return null if user truly can't be found
+         }
+    }
+    const plan = (data as any).subscription_plan === 'pro' ? 'pro' : 'free';
+    return { ...data, subscription_plan: plan } as (User & { subscription_plan: 'free' | 'pro' });
+  },
+
+  // --- Quiz Operations (Legacy - Dashboard uses Server Components) ---
+  // This function is still used by the /dashboard page (client component)
+  async getQuizzes(userId: string): Promise<(Quiz & { questions: Question[] })[]> {
+    // This uses the global Supabase client, RLS *must* be enabled for it to work
+    const { data, error } = await supabase
+      .from('quizzes')
+      .select('*, questions(*)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    handleSupabaseError(error, `fetching quizzes for user ${userId}`);
+    return data || [];
+  },
+
+  // This function is used by the /quiz/[quizId] page
+  async getQuiz(quizId: string): Promise<Quiz & { questions: Question[] }> {
+    // This uses the global Supabase client, RLS *must* be enabled
+    const { data, error } = await supabase
+      .from('quizzes')
+      .select('*, questions(*)')
+      .eq('id', quizId)
+      .single();
+
+    handleSupabaseError(error, `fetching quiz ${quizId}`);
+    if (!data) throw new Error(`Quiz with ID ${quizId} not found.`);
+    return data;
+  },
+
+  // This is used by the /dashboard page
+  async deleteQuiz(quizId: string): Promise<void> {
+    // This uses the global Supabase client, RLS *must* be enabled
+    const { error } = await supabase
+      .from('quizzes')
+      .delete()
+      .eq('id', quizId);
+
+    handleSupabaseError(error, `deleting quiz ${quizId}`);
+  },
+
+  // --- Notes Operations (Legacy - AI Tutor uses this) ---
+  async getNotes(userId: string): Promise<Note[]> {
+    // This uses the global Supabase client, RLS *must* be enabled
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    handleSupabaseError(error, `fetching notes for user ${userId}`);
+    return data || [];
+  },
+
+  // --- AI Usage Operations (Using Supabase Client) ---
+
+  /**
+   * Gets the total count of AI generations recorded for a user (across all time).
+   */
+  async getAIGenerationCount(userId: string): Promise<number> {
+    try {
+      // This uses the global Supabase client, RLS *must* be enabled
+      const { data, error } = await supabase
+        .from('ai_usage')
+        .select('usage_count')
+        .eq('user_id', userId);
+
+      if (error && error.code !== 'PGRST116') { // Don't throw if no rows found
+         handleSupabaseError(error, `fetching total AI generation count for user ${userId}`);
+      }
+      const totalCount = data?.reduce((sum, record) => sum + (record.usage_count ?? 0), 0) ?? 0;
+      return totalCount;
+
+    } catch (error) {
+      console.error('Error getting total AI generation count:', error);
+      return 0; // Return 0 on failure
+    }
+  },
+
+  /**
+   * Retrieves the AI generation usage count for a user within a specific calendar month.
+   */
+  async getAIGenerationUsageForMonth(userId: string, month: Date): Promise<number> {
+    const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1))
+        .toISOString().split('T')[0]; // Format 'YYYY-MM-DD'
+
+    try {
+        // This uses the global Supabase client, RLS *must* be enabled
+        const { data, error } = await supabase
+            .from('ai_usage')
+            .select('usage_count')
+            .eq('user_id', userId)
+            .eq('usage_month', firstDayOfMonth)
+            .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') { // Don't throw if no rows found
+            handleSupabaseError(error, `fetching AI generation usage for user ${userId} month ${firstDayOfMonth}`);
+        }
+        return data?.usage_count ?? 0; // Return count or 0 if no record
+
+    } catch (error) {
+        console.error(`Error getting AI generation usage for month ${firstDayOfMonth}:`, error);
+        return 0; // Return 0 on failure
+    }
+  },
+
 
   /**
    * Increments the AI generation usage count for a user for a specific month.
@@ -70,7 +208,10 @@ export const supabaseHelpers = {
             .eq('usage_month', firstDayOfMonth)
             .maybeSingle(); // Use maybeSingle to handle no existing row
 
-        handleSupabaseError(fetchError, `fetching current AI usage for user ${userId} month ${firstDayOfMonth}`);
+        // Pass error to handler (will throw if it's not a 'no rows' error)
+        if (fetchError && fetchError.code !== 'PGRST116') {
+             handleSupabaseError(fetchError, `fetching current AI usage for user ${userId} month ${firstDayOfMonth}`);
+        }
 
         const currentCount = currentUsage?.usage_count ?? 0;
         const newCount = currentCount + count;
@@ -80,14 +221,13 @@ export const supabaseHelpers = {
             .from('ai_usage')
             .upsert(
                 {
-                    user_id: userId, // Must provide user_id explicitly
+                    user_id: userId, // Must provide user_id explicitly for RLS
                     usage_month: firstDayOfMonth,
                     usage_count: newCount,
                     updated_at: new Date().toISOString(), // Manually set updated_at
                 },
                 {
                     onConflict: 'user_id, usage_month', // Specify conflict columns
-                    // ignoreDuplicates: false // Default is false, ensures update happens
                 }
             );
 
@@ -99,13 +239,8 @@ export const supabaseHelpers = {
     } catch (error) {
         // Errors from handleSupabaseError or client creation will be caught here
         console.error(`Error during AI usage increment logic for user ${userId}:`, error);
-        // Re-throw the original error after logging, or throw a new formatted one
-        throw error; // Re-throws the error caught by handleSupabaseError or others
+        // Re-throw the original error
+        throw error;
     }
-    // --- End UPSERT logic ---
-
-    // No need to call RPC anymore
-    // const { error } = await userSupabase.rpc('increment_ai_usage', { ... });
-    // handleSupabaseError(error, `incrementing AI usage...`);
   },
 };
