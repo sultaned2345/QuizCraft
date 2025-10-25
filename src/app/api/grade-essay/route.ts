@@ -14,7 +14,8 @@ export const runtime = 'nodejs';
 
 // --- AI Configuration ---
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-const AI_MODEL_NAME = "gemini-1.5-flash"; // Or gemini-1.5-pro
+// --- UPDATED AI MODEL ---
+const AI_MODEL_NAME = "gemini-2.5-flash-lite"; // Use flash-lite consistently
 
 const generationConfig = {
   temperature: 0.6,
@@ -69,11 +70,11 @@ async function callAIToGradeEssay(essayText: string, rubricText?: string): Promi
     if (!API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY");
 
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig, safetySettings });
+    const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig, safetySettings }); // Uses updated model name
     const prompt = buildAIPrompt(essayText, rubricText);
 
     try {
-        console.log("Sending prompt to AI for grading...");
+        console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for grading...`);
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const content = response.text();
@@ -84,15 +85,15 @@ async function callAIToGradeEssay(essayText: string, rubricText?: string): Promi
 
         // --- Basic Validation of AI Response ---
         if (!parsed.feedback || typeof parsed.feedback !== 'object') throw new Error("AI response missing 'feedback' object.");
-        if (!parsed.feedback.summary) parsed.feedback.summary = "No summary provided."; // Ensure summary exists
-        if (!Array.isArray(parsed.suggestions)) parsed.suggestions = []; // Ensure suggestions is an array
-        if (typeof parsed.score !== 'number' && parsed.score !== null) parsed.score = null; // Ensure score is number or null
+        if (!parsed.feedback.summary) parsed.feedback.summary = "No summary provided.";
+        if (!Array.isArray(parsed.suggestions)) parsed.suggestions = [];
+        if (typeof parsed.score !== 'number' && parsed.score !== null) parsed.score = null;
 
-        console.log("AI grading successful.");
+        console.log(`AI grading successful using ${AI_MODEL_NAME}.`);
         return parsed;
 
     } catch (error: any) {
-        console.error("Error calling or parsing AI response for grading:", error);
+        console.error(`Error calling or parsing AI response from ${AI_MODEL_NAME} for grading:`, error);
         throw new Error(`AI grading failed: ${error.message}`);
     }
 }
@@ -111,8 +112,8 @@ export async function POST(request: NextRequest) {
         let essayText: string = "";
         let rubricText: string | undefined = undefined;
         let essayTitle: string | undefined = undefined;
-        let inputSource: string = "text"; // For logging/tracking
-        const MAX_FILE_SIZE = 3 * 1024 * 1024; // Reuse constant
+        let inputSource: string = "text";
+        const MAX_FILE_SIZE = 3 * 1024 * 1024;
 
         // 2. Handle Input (JSON or File Upload)
         const contentType = request.headers.get("content-type") || "";
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
                      essayText = fileBuffer.toString('utf8');
                 }
                 essayText = cleanExtractedText(essayText);
-                 if (!essayTitle) essayTitle = file.name; // Use filename as title if none provided
+                 if (!essayTitle) essayTitle = file.name;
             } catch (extractError: any) {
                 throw new Error(`Failed to extract text from file: ${extractError.message}`);
             }
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate extracted/provided text
-        if (!essayText || essayText.trim().length < 50) { // Require minimum length
+        if (!essayText || essayText.trim().length < 50) {
             throw new Error("Essay text is too short (minimum 50 characters required).");
         }
 
@@ -168,18 +169,17 @@ export async function POST(request: NextRequest) {
         const savedGradedEssay = await prisma.graded_essays.create({
             data: {
                 user_id: user.id,
-                essay_title: essayTitle?.trim() || `Graded Essay - ${new Date().toLocaleDateString()}`, // Default title
-                essay_content: essayText, // Save the original essay
+                essay_title: essayTitle?.trim() || `Graded Essay - ${new Date().toLocaleDateString()}`,
+                essay_content: essayText,
                 rubric_or_criteria: rubricText,
-                feedback: aiResult.feedback as Prisma.JsonObject, // Cast feedback to Prisma.JsonObject
+                feedback: aiResult.feedback as Prisma.JsonObject,
                 score: aiResult.score,
-                // graded_at is set by default
             },
-            select: { id: true, graded_at: true } // Select only needed fields for response
+            select: { id: true, graded_at: true }
         });
 
-        // 5. Increment AI Usage Count (Important!)
-        await supabaseHelpers.incrementAIGenerationUsage(user.id, new Date(), 1); // Count as 1 usage
+        // 5. Increment AI Usage Count
+        await supabaseHelpers.incrementAIGenerationUsage(user.id, new Date(), 1);
 
         // 6. Prepare and Return Response Data
         const responseData: GradeEssayResponseData = {
@@ -200,9 +200,9 @@ export async function POST(request: NextRequest) {
         if (error instanceof Response) return error; // Handle requireAuth errors
 
         console.error('Error in /api/grade-essay:', error);
-        // Specific error handling (e.g., from AI, Prisma)
+        // Specific error handling
         if (error.message.startsWith('AI grading failed:') || error.message.includes('GOOGLE_AI_API_KEY')) {
-             return NextResponse.json<ApiResponse>({ success: false, error: `AI Error: ${error.message}` }, { status: 502 }); // Bad Gateway for AI issues
+             return NextResponse.json<ApiResponse>({ success: false, error: `AI Error: ${error.message}` }, { status: 502 });
         }
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
              console.error('Prisma Error grading essay:', { code: error.code, meta: error.meta });
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
 
         // Generic error
         const errorMessage = error.message || 'Failed to grade essay';
-        const status = (error.message.includes("limit") || error.message.includes("characters required") || error.message.includes("Invalid file type")) ? 400 : 500; // Adjust status for known input errors
+        const status = (error.message.includes("limit") || error.message.includes("characters required") || error.message.includes("Invalid file type")) ? 400 : 500;
         return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status });
     }
 }
