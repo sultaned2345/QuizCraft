@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 // Datasource and Generator
 generator client {
   provider        = "prisma-client-js"
@@ -16,15 +18,16 @@ datasource db {
 model profiles {
   id                String    @id @db.Uuid // Primary key, references auth.users.id
   email             String    @unique
-  subscription_plan String?   @default("free") // Added subscription plan field
+  subscription_plan String?   @default("free")
   created_at        DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationships
-  user            users            @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey")
+  user            users             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey")
   quizzes         Quiz[]
   notes           notes[]
   flashcard_decks flashcard_decks[]
-  documents       documents[] // Add relation to documents
+  documents       documents[]
+  graded_essays   graded_essays[] // Add relation to graded essays
 
   @@map("profiles")
   @@schema("public")
@@ -32,13 +35,13 @@ model profiles {
 
 // Represents a quiz created by a user
 model Quiz {
-  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId             String?    @map("user_id") @db.Uuid // Foreign key referencing profiles.id
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String?   @map("user_id") @db.Uuid // Foreign key referencing profiles.id
   title              String
-  share_link         String?    @unique
-  createdAt          DateTime?  @default(now()) @map("created_at") @db.Timestamptz(6)
-  is_public          Boolean?   @default(false)
-  immediate_feedback Boolean?   @default(true)
+  share_link         String?   @unique
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  is_public          Boolean?  @default(false)
+  immediate_feedback Boolean?  @default(true)
 
   // Relationships
   questions questions[]
@@ -61,7 +64,7 @@ model questions {
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relationship back to the quiz
-  quizzes        Quiz?     @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes Quiz? @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("questions")
   @@schema("public")
@@ -77,7 +80,7 @@ model notes {
   updated_at DateTime? @updatedAt @db.Timestamptz(6)
 
   // Relation to the user profile
-  profile    profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
 
   @@map("notes")
   @@schema("public")
@@ -85,14 +88,14 @@ model notes {
 
 // Represents a deck of flashcards created by a user
 model flashcard_decks {
-  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String      @db.Uuid // Foreign key referencing profiles.id
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid // Foreign key referencing profiles.id
   title      String
-  created_at DateTime?   @default(now()) @db.Timestamptz(6)
-  updated_at DateTime?   @updatedAt @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @updatedAt @db.Timestamptz(6)
 
   // Relationships
-  profile    profiles    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcard_decks_user_id_fkey")
+  profile    profiles     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcard_decks_user_id_fkey")
   flashcards flashcards[]
 
   @@map("flashcard_decks")
@@ -101,85 +104,101 @@ model flashcard_decks {
 
 // Represents a single flashcard within a deck
 model flashcards {
-  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  deck_id       String          @db.Uuid // Foreign key referencing flashcard_decks.id
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deck_id       String    @db.Uuid // Foreign key referencing flashcard_decks.id
   front_content String
   back_content  String
-  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime?       @updatedAt @db.Timestamptz(6)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @updatedAt @db.Timestamptz(6)
 
   // Relationship back to the deck
-  deck          flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
+  deck flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
 
   @@map("flashcards")
   @@schema("public")
 }
 
-// Represents uploaded documents (NEW MODEL)
+// Represents uploaded documents
 model documents {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id         String    @db.Uuid // Foreign key referencing profiles.id
-  file_name       String
-  file_type       String    // e.g., "application/pdf", "text/plain"
-  file_size       Int       // Store size in bytes
-  storage_path    String    // Path to the file in Supabase Storage
-  extracted_text  String?   @db.Text // Store extracted text (optional initially, but needed for MVP)
-  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String    @db.Uuid // Foreign key referencing profiles.id
+  file_name      String
+  file_type      String // e.g., "application/pdf", "text/plain"
+  file_size      Int // Store size in bytes
+  storage_path   String    @unique // Store the path in Supabase Storage, ensure uniqueness
+  extracted_text String?   @db.Text // Store extracted text
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationship to the user profile
-  profile         profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
 
   @@map("documents")
   @@schema("public")
 }
 
+// Represents graded essays and their feedback (NEW MODEL)
+model graded_essays {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String    @db.Uuid // Foreign key referencing profiles.id
+  essay_title        String?   @db.Text
+  essay_content      String    @db.Text
+  rubric_or_criteria String?   @db.Text
+  feedback           Json?     @db.JsonB // Stores the structured feedback from AI
+  score              Int? // Stores the overall numerical score
+  graded_at          DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relation to the user profile
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "graded_essays_user_id_fkey")
+
+  @@map("graded_essays")
+  @@schema("public")
+}
 
 // --- Auth Schema Models ---
-// (Keep all the existing 'auth' schema models like 'users', 'identities', etc. here)
 // Represents users in Supabase Authentication
 model users {
-  instance_id                 String?           @db.Uuid
-  id                          String            @id @db.Uuid // Primary key, used by public.profiles.id
-  aud                         String?           @db.VarChar(255)
-  role                        String?           @db.VarChar(255)
-  email                       String?           @db.VarChar(255)
-  encrypted_password          String?           @db.VarChar(255)
-  email_confirmed_at          DateTime?         @db.Timestamptz(6)
-  invited_at                  DateTime?         @db.Timestamptz(6)
-  confirmation_token          String?           @db.VarChar(255)
-  confirmation_sent_at        DateTime?         @db.Timestamptz(6)
-  recovery_token              String?           @db.VarChar(255)
-  recovery_sent_at            DateTime?         @db.Timestamptz(6)
-  email_change_token_new      String?           @db.VarChar(255)
-  email_change                String?           @db.VarChar(255)
-  email_change_sent_at        DateTime?         @db.Timestamptz(6)
-  last_sign_in_at             DateTime?         @db.Timestamptz(6)
+  instance_id                 String?   @db.Uuid
+  id                          String    @id @db.Uuid // Primary key, used by public.profiles.id
+  aud                         String?   @db.VarChar(255)
+  role                        String?   @db.VarChar(255)
+  email                       String?   @db.VarChar(255)
+  encrypted_password          String?   @db.VarChar(255)
+  email_confirmed_at          DateTime? @db.Timestamptz(6)
+  invited_at                  DateTime? @db.Timestamptz(6)
+  confirmation_token          String?   @db.VarChar(255)
+  confirmation_sent_at        DateTime? @db.Timestamptz(6)
+  recovery_token              String?   @db.VarChar(255)
+  recovery_sent_at            DateTime? @db.Timestamptz(6)
+  email_change_token_new      String?   @db.VarChar(255)
+  email_change                String?   @db.VarChar(255)
+  email_change_sent_at        DateTime? @db.Timestamptz(6)
+  last_sign_in_at             DateTime? @db.Timestamptz(6)
   raw_app_meta_data           Json?
   raw_user_meta_data          Json?
   is_super_admin              Boolean?
-  created_at                  DateTime?         @db.Timestamptz(6)
-  updated_at                  DateTime?         @db.Timestamptz(6)
-  phone                       String?           @unique @db.VarChar(15)
-  phone_confirmed_at          DateTime?         @db.Timestamptz(6)
-  phone_change                String?           @default("") @db.VarChar(15)
-  phone_change_token          String?           @default("") @db.VarChar(255)
-  phone_change_sent_at        DateTime?         @db.Timestamptz(6)
-  confirmed_at                DateTime?         @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
-  email_change_token_current  String?           @default("") @db.VarChar(255)
-  email_change_confirm_status Int?              @default(0) @db.SmallInt
-  banned_until                DateTime?         @db.Timestamptz(6)
-  reauthentication_token      String?           @default("") @db.VarChar(255)
-  reauthentication_sent_at    DateTime?         @db.Timestamptz(6)
-  is_sso_user                 Boolean           @default(false)
-  deleted_at                  DateTime?         @db.Timestamptz(6)
-  is_anonymous                Boolean           @default(false)
+  created_at                  DateTime? @db.Timestamptz(6)
+  updated_at                  DateTime? @db.Timestamptz(6)
+  phone                       String?   @unique @db.VarChar(15)
+  phone_confirmed_at          DateTime? @db.Timestamptz(6)
+  phone_change                String?   @default("") @db.VarChar(15)
+  phone_change_token          String?   @default("") @db.VarChar(255)
+  phone_change_sent_at        DateTime? @db.Timestamptz(6)
+  confirmed_at                DateTime? @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
+  email_change_token_current  String?   @default("") @db.VarChar(255)
+  email_change_confirm_status Int?      @default(0) @db.SmallInt
+  banned_until                DateTime? @db.Timestamptz(6)
+  reauthentication_token      String?   @default("") @db.VarChar(255)
+  reauthentication_sent_at    DateTime? @db.Timestamptz(6)
+  is_sso_user                 Boolean   @default(false)
+  deleted_at                  DateTime? @db.Timestamptz(6)
+  is_anonymous                Boolean   @default(false)
 
   // Relationships
   identities      identities[]
   mfa_factors     mfa_factors[]
   one_time_tokens one_time_tokens[]
   sessions        sessions[]
-  profile         profiles?
+  profile         profiles? // Link back to the public profile
 
   @@index([instance_id])
   @@index([is_anonymous])
@@ -187,7 +206,6 @@ model users {
   @@schema("auth")
 }
 
-// ... (Rest of auth models: audit_log_entries, flow_state, etc.) ...
 model audit_log_entries {
   instance_id String?   @db.Uuid
   id          String    @id @db.Uuid
@@ -203,7 +221,7 @@ model flow_state {
   id                     String                @id @db.Uuid
   user_id                String?               @db.Uuid
   auth_code              String
-  code_challenge_method  code_challenge_method
+  code_challenge_method  code_challenge_method // Refers to enum below
   code_challenge         String
   provider_type          String
   provider_access_token  String?
@@ -212,7 +230,7 @@ model flow_state {
   updated_at             DateTime?             @db.Timestamptz(6)
   authentication_method  String
   auth_code_issued_at    DateTime?             @db.Timestamptz(6)
-  saml_relay_states      saml_relay_states[]
+  saml_relay_states      saml_relay_states[] // Opposite relation
 
   @@index([created_at(sort: Desc)])
   @@index([auth_code], map: "idx_auth_code")
@@ -275,20 +293,20 @@ model mfa_challenges {
 }
 
 model mfa_factors {
-  id                   String         @id @db.Uuid
-  user_id              String         @db.Uuid
+  id                   String           @id @db.Uuid
+  user_id              String           @db.Uuid
   friendly_name        String?
-  factor_type          factor_type
-  status               factor_status
-  created_at           DateTime       @db.Timestamptz(6)
-  updated_at           DateTime       @db.Timestamptz(6)
+  factor_type          factor_type // Refers to enum below
+  status               factor_status // Refers to enum below
+  created_at           DateTime         @db.Timestamptz(6)
+  updated_at           DateTime         @db.Timestamptz(6)
   secret               String?
   phone                String?
-  last_challenged_at   DateTime?      @unique @db.Timestamptz(6)
+  last_challenged_at   DateTime?        @unique @db.Timestamptz(6)
   web_authn_credential Json?
-  web_authn_aaguid     String?        @db.Uuid
+  web_authn_aaguid     String?          @db.Uuid
   mfa_challenges       mfa_challenges[]
-  users                users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([user_id, phone], map: "unique_phone_factor_per_user")
   @@index([user_id, created_at], map: "factor_id_created_at_idx")
@@ -300,7 +318,7 @@ model oauth_clients {
   id                 String                  @id @db.Uuid
   client_id          String                  @unique
   client_secret_hash String
-  registration_type  oauth_registration_type
+  registration_type  oauth_registration_type // Refers to enum below
   redirect_uris      String
   grant_types        String
   client_name        String?
@@ -318,14 +336,14 @@ model oauth_clients {
 model one_time_tokens {
   id         String              @id @db.Uuid
   user_id    String              @db.Uuid
-  token_type one_time_token_type
+  token_type one_time_token_type // Refers to enum below
   token_hash String
   relates_to String
   created_at DateTime            @default(now()) @db.Timestamp(6)
   updated_at DateTime            @default(now()) @db.Timestamp(6)
   users      users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([user_id, token_type])
+  @@unique([user_id, token_type]) // This should now work as token_type refers to a valid enum
   @@index([relates_to], map: "one_time_tokens_relates_to_hash_idx", type: Hash)
   @@index([token_hash], map: "one_time_tokens_token_hash_hash_idx", type: Hash)
   @@schema("auth")
@@ -352,32 +370,33 @@ model refresh_tokens {
 }
 
 model saml_providers {
-  id                String        @id @db.Uuid
-  sso_provider_id   String        @db.Uuid
-  entity_id         String        @unique
+  id                String              @id @db.Uuid
+  sso_provider_id   String              @db.Uuid
+  entity_id         String              @unique
   metadata_xml      String
   metadata_url      String?
   attribute_mapping Json?
-  created_at        DateTime?     @db.Timestamptz(6)
-  updated_at        DateTime?     @db.Timestamptz(6)
+  created_at        DateTime?           @db.Timestamptz(6)
+  updated_at        DateTime?           @db.Timestamptz(6)
   name_id_format    String?
-  sso_providers     sso_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sso_providers     sso_providers       @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  saml_relay_states saml_relay_states[] // Opposite relation
 
   @@index([sso_provider_id])
   @@schema("auth")
 }
 
 model saml_relay_states {
-  id              String        @id @db.Uuid
-  sso_provider_id String        @db.Uuid
+  id              String         @id @db.Uuid
+  sso_provider_id String         @db.Uuid
   request_id      String
   for_email       String?
   redirect_to     String?
-  created_at      DateTime?     @db.Timestamptz(6)
-  updated_at      DateTime?     @db.Timestamptz(6)
-  flow_state_id   String?       @db.Uuid
-  flow_state      flow_state?   @relation(fields: [flow_state_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sso_providers   sso_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  created_at      DateTime?      @db.Timestamptz(6)
+  updated_at      DateTime?      @db.Timestamptz(6)
+  flow_state_id   String?        @db.Uuid
+  flow_state      flow_state?    @relation(fields: [flow_state_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sso_providers   saml_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction) // Correct single relation field
 
   @@index([created_at(sort: Desc)])
   @@index([for_email])
@@ -397,7 +416,7 @@ model sessions {
   created_at     DateTime?        @db.Timestamptz(6)
   updated_at     DateTime?        @db.Timestamptz(6)
   factor_id      String?          @db.Uuid
-  aal            aal_level?
+  aal            aal_level? // Refers to enum below
   not_after      DateTime?        @db.Timestamptz(6)
   refreshed_at   DateTime?        @db.Timestamp(6)
   user_agent     String?
@@ -426,21 +445,21 @@ model sso_domains {
 }
 
 model sso_providers {
-  id                String              @id @db.Uuid
-  resource_id       String?
-  created_at        DateTime?           @db.Timestamptz(6)
-  updated_at        DateTime?           @db.Timestamptz(6)
-  disabled          Boolean?
-  saml_providers    saml_providers[]
-  saml_relay_states saml_relay_states[]
-  sso_domains       sso_domains[]
+  id             String           @id @db.Uuid
+  resource_id    String?
+  created_at     DateTime?        @db.Timestamptz(6)
+  updated_at     DateTime?        @db.Timestamptz(6)
+  disabled       Boolean?         @default(false)
+  saml_providers saml_providers[]
+  sso_domains    sso_domains[]
+  // saml_relay_states saml_relay_states[] // Removed duplicate opposite relation
 
   @@index([resource_id], map: "sso_providers_resource_id_pattern_idx")
   @@schema("auth")
 }
 
 // --- Enums ---
-
+// ** CORRECTED FORMATTING **
 enum aal_level {
   aal1
   aal2

@@ -232,6 +232,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- -----------------------------------------------------------------------------
+-- Step 6: Add Graded Essays Table and Policies (Essay Grader Feature)
+-- -----------------------------------------------------------------------------
+
+-- Create graded_essays table
+CREATE TABLE IF NOT EXISTS public.graded_essays (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    essay_title TEXT, -- Optional title provided by user or generated
+    essay_content TEXT NOT NULL,
+    rubric_or_criteria TEXT, -- Store the rubric used, if any
+    feedback JSONB,          -- Store the AI's structured feedback (scores, comments)
+    score INTEGER,           -- Store the overall numerical score, if generated
+    graded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for faster user lookups
+CREATE INDEX IF NOT EXISTS idx_graded_essays_user_id ON public.graded_essays(user_id);
+
+-- Enable RLS
+ALTER TABLE public.graded_essays ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policy: Users can manage their own graded essays
+DROP POLICY IF EXISTS "Users can manage their own graded essays" ON public.graded_essays;
+CREATE POLICY "Users can manage their own graded essays" ON public.graded_essays
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
 -- Grant usage on functions to Supabase authenticated role
 GRANT EXECUTE ON FUNCTION public.handle_new_auth_user() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_updated_at_column() TO authenticated;
