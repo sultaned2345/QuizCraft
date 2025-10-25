@@ -214,4 +214,4 @@ export async function POST(request: NextRequest) {
         const status = (error.message.includes("limit") || error.message.includes("characters required") || error.message.includes("Invalid file type")) ? 400 : 500;
         return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status });
     }
-}
+} 

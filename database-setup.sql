@@ -1,5 +1,5 @@
 -- QuizCraft Complete Database Setup
--- Includes Notes, Flashcards, and Documents features.
+-- Includes Notes, Flashcards, Documents, and Graded Essays features.
 -- This script is safe to run even if tables/policies/functions/triggers already exist.
 
 -- -----------------------------------------------------------------------------
@@ -78,17 +78,28 @@ CREATE TABLE IF NOT EXISTS public.flashcards (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create documents table (NEW)
+-- Create documents table
 CREATE TABLE IF NOT EXISTS public.documents (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     file_name TEXT NOT NULL,
-    file_type VARCHAR(100), -- Increased length for MIME types
-    file_size BIGINT,       -- Use BIGINT for potentially larger sizes in bytes
-    storage_path TEXT NOT NULL UNIQUE, -- Store the path in Supabase Storage, ensure uniqueness
-    extracted_text TEXT,               -- Column to store extracted text
+    file_type VARCHAR(100),
+    file_size BIGINT,
+    storage_path TEXT NOT NULL UNIQUE,
+    extracted_text TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    -- No updated_at needed unless metadata is editable later
+);
+
+-- Create graded_essays table
+CREATE TABLE IF NOT EXISTS public.graded_essays (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    essay_title TEXT,
+    essay_content TEXT NOT NULL,
+    rubric_or_criteria TEXT,
+    feedback JSONB,
+    score INTEGER,
+    graded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 
@@ -102,7 +113,9 @@ CREATE INDEX IF NOT EXISTS idx_notes_user_id ON public.notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_user_month ON public.ai_usage(user_id, usage_month);
 CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user_id ON public.flashcard_decks(user_id);
 CREATE INDEX IF NOT EXISTS idx_flashcards_deck_id ON public.flashcards(deck_id);
-CREATE INDEX IF NOT EXISTS idx_documents_user_id ON public.documents(user_id); -- NEW INDEX
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON public.documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_graded_essays_user_id ON public.graded_essays(user_id);
+
 
 -- -----------------------------------------------------------------------------
 -- Step 3: Enable Row Level Security (RLS)
@@ -114,7 +127,9 @@ ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.flashcard_decks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.flashcards ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY; -- NEW RLS ENABLE
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.graded_essays ENABLE ROW LEVEL SECURITY;
+
 
 -- -----------------------------------------------------------------------------
 -- Step 4: Create RLS Policies
@@ -163,9 +178,15 @@ CREATE POLICY "Users can manage flashcards in their own decks" ON public.flashca
     FOR ALL USING (deck_id IN (SELECT id FROM public.flashcard_decks WHERE user_id = auth.uid()))
     WITH CHECK (deck_id IN (SELECT id FROM public.flashcard_decks WHERE user_id = auth.uid()));
 
--- Documents Policies (NEW)
+-- Documents Policies
 DROP POLICY IF EXISTS "Users can manage their own documents" ON public.documents;
 CREATE POLICY "Users can manage their own documents" ON public.documents
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Graded Essays Policies
+DROP POLICY IF EXISTS "Users can manage their own graded essays" ON public.graded_essays;
+CREATE POLICY "Users can manage their own graded essays" ON public.graded_essays
     FOR ALL USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
@@ -197,7 +218,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER; -- Can remain DEFINER as it just sets a timestamp
 
 -- Trigger for notes updated_at
 DROP TRIGGER IF EXISTS update_notes_updated_at ON public.notes;
@@ -217,9 +238,7 @@ CREATE TRIGGER update_flashcards_updated_at
   BEFORE UPDATE ON public.flashcards
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- (No updated_at trigger needed for documents unless made editable)
-
--- Function to increment AI usage count (upsert logic)
+-- Function to increment AI usage count (Corrected Definition)
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(p_user_id UUID, p_usage_month DATE, p_increment_by INT)
 RETURNS void AS $$
 BEGIN
@@ -230,37 +249,17 @@ BEGIN
         usage_count = ai_usage.usage_count + p_increment_by,
         updated_at = NOW();
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY INVOKER; -- Use SECURITY INVOKER
+
 
 -- -----------------------------------------------------------------------------
--- Step 6: Add Graded Essays Table and Policies (Essay Grader Feature)
+-- Step 6: Grant Function Permissions
 -- -----------------------------------------------------------------------------
-
--- Create graded_essays table
-CREATE TABLE IF NOT EXISTS public.graded_essays (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    essay_title TEXT, -- Optional title provided by user or generated
-    essay_content TEXT NOT NULL,
-    rubric_or_criteria TEXT, -- Store the rubric used, if any
-    feedback JSONB,          -- Store the AI's structured feedback (scores, comments)
-    score INTEGER,           -- Store the overall numerical score, if generated
-    graded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for faster user lookups
-CREATE INDEX IF NOT EXISTS idx_graded_essays_user_id ON public.graded_essays(user_id);
-
--- Enable RLS
-ALTER TABLE public.graded_essays ENABLE ROW LEVEL SECURITY;
-
--- RLS Policy: Users can manage their own graded essays
-DROP POLICY IF EXISTS "Users can manage their own graded essays" ON public.graded_essays;
-CREATE POLICY "Users can manage their own graded essays" ON public.graded_essays
-    FOR ALL USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
 
 -- Grant usage on functions to Supabase authenticated role
 GRANT EXECUTE ON FUNCTION public.handle_new_auth_user() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_updated_at_column() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.increment_ai_usage(UUID, DATE, INT) TO authenticated;
+
+-- Grant usage on sequences if not using default UUIDs (not needed for this schema)
+-- GRANT USAGE, SELECT ON SEQUENCE public.table_id_seq TO authenticated;
