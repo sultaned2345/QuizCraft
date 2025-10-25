@@ -1,205 +1,172 @@
 // src/app/api/notes/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-// Make sure createClient is imported
-import { createClient } from '@supabase/supabase-js';
-import { supabaseHelpers } from '@/lib/supabase'; // Keep original helpers for potential reuse elsewhere
-import { requireAuth, validateRequestBody } from '@/lib/auth';
-// Import USAGE_LIMITS directly if needed for validation logic here
+import { createClient } from '@supabase/supabase-js'; // Keep if used elsewhere or for validation client
+import { requireAuth } from '@/lib/auth';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
 import { ApiResponse, CreateNoteData, UpdateNoteData, Note } from '@/types/database';
+import { prisma } from '@/lib/prisma'; // Use Prisma for data operations
+import { Prisma } from '@prisma/client'; // Import Prisma for types if needed
 
-// --- Helper to get scoped Supabase client ---
-function getSupabaseClientForUser(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) {
-        throw new Error("Missing auth token for scoped client creation");
-    }
-    // Use the same URL/Key as your global client
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    return createClient(supabaseUrl, supabaseAnonKey, {
-        global: {
-            headers: { Authorization: `Bearer ${token}` }
-        }
-    });
+// Define a type for the paginated response data
+interface PaginatedNotesResponse {
+  notes: Note[];
+  count: number; // Total count of notes for the user
+  limit: number | typeof Infinity; // Usage limit for the plan
+  totalPages: number;
+  currentPage: number;
 }
-// --- Modified validateNoteCreation to accept a client ---
-async function validateNoteCreationWithClient(userId: string, supabaseClient: any): Promise<{ isValid: boolean; error?: string; message?: string; }> {
+
+// Helper can be removed if not using scoped Supabase client for validation anymore
+// function getSupabaseClientForUser(...) { ... }
+
+// Validation function updated to use Prisma
+async function validateNoteCreation(userId: string): Promise<{ isValid: boolean; error?: string; message?: string; }> {
   try {
-    console.log('[Scoped] Validating note creation for user:', userId);
-
-    // Fetch user profile using the scoped client
-    const { data: userProfile, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('subscription_plan')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (profileError && profileError.code !== 'PGRST116') {
-        console.error('[Scoped] Error fetching user profile:', profileError);
-        // Don't throw, proceed assuming free plan on error
-    } else if (!userProfile) {
-        console.warn(`[Scoped] No profile found for user ${userId}, assuming 'free' plan.`);
-    }
-
+    const userProfile = await prisma.profiles.findUnique({
+        where: { id: userId },
+        select: { subscription_plan: true }
+    });
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
-    console.log('[Scoped] User plan found:', plan);
 
     if (plan !== 'pro') {
-      // Get count using the scoped client
-      const { count, error: countError } = await supabaseClient
-        .from('notes')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-
-      if (countError) {
-         console.error('[Scoped] Error counting notes:', countError);
-         // Don't block on count error, proceed cautiously
-      } else {
-          const currentCount = count ?? 0;
-          console.log('[Scoped] Current note count:', currentCount, '/', USAGE_LIMITS.FREE_NOTES);
-          if (currentCount >= USAGE_LIMITS.FREE_NOTES) {
-            return {
-              isValid: false,
-              error: 'Note limit reached',
-              message: `You have reached the maximum number of notes (${USAGE_LIMITS.FREE_NOTES}) for free users. Upgrade to Pro for unlimited notes.`
-            };
-          }
+      const currentCount = await prisma.notes.count({ where: { user_id: userId } });
+      if (currentCount >= USAGE_LIMITS.FREE_NOTES) {
+        return {
+          isValid: false,
+          error: 'Note limit reached',
+          message: `You have reached the maximum number of notes (${USAGE_LIMITS.FREE_NOTES}) for free users. Upgrade to Pro for unlimited notes.`
+        };
       }
     }
     return { isValid: true };
   } catch (error: any) {
-    console.error('[Scoped] Validation error:', error);
-    // Be permissive on validation errors
-    return { isValid: true };
+    console.error('Note creation validation error:', error);
+    return { isValid: true }; // Be permissive on error
   }
 }
 
-// --- Modified POST function ---
-export async function POST(request: NextRequest) {
-  try {
-    let user;
-    try {
-      user = await requireAuth(request);
-      console.log('API Route - User ID from requireAuth:', user.id);
-    } catch (authError) {
-      console.error('Authentication failed:', authError);
-      if (authError instanceof Response) return authError;
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Authentication failed' }, { status: 401 });
-    }
 
-    // --- Create scoped client ---
-    const supabaseForUser = getSupabaseClientForUser(request);
-
-    let body: CreateNoteData;
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      console.error('Failed to parse body:', parseError);
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON in request body' }, { status: 400 });
-    }
-
-    const validation = validateRequestBody(body, ['title', 'content']);
-    if (!validation.isValid) {
-      console.error('Validation failed:', validation.error);
-      return NextResponse.json<ApiResponse>({ success: false, error: validation.error }, { status: 400 });
-    }
-
-    // --- Use scoped client for validation ---
-    let limitValidation = await validateNoteCreationWithClient(user.id, supabaseForUser);
-    if (!limitValidation.isValid) {
-      console.log('Usage limit exceeded');
-      return NextResponse.json<ApiResponse>({ success: false, error: limitValidation.error, message: limitValidation.message }, { status: 403 });
-    }
-
-    // --- Use scoped client for insertion ---
-    let note: Note;
-    try {
-       const { data, error } = await supabaseForUser
-          .from('notes')
-          .insert({ user_id: user.id, title: body.title.trim(), content: body.content.trim() })
-          .select()
-          .single();
-
-       if (error) throw error; // Let the outer catch handle Supabase errors
-       if (!data) throw new Error("Insert succeeded but no data returned.");
-       note = data;
-
-    } catch (dbError: any) {
-      // Log Supabase specific details if available
-      console.error('[Scoped] Database error creating note:', {
-        message: dbError.message, code: dbError.code, details: dbError.details, hint: dbError.hint
-      });
-      // Use a generic message for the client
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Database error: Failed to create note' }, { status: 500 });
-    }
-
-    return NextResponse.json<ApiResponse<Note>>({ success: true, data: note, message: 'Note created successfully' });
-
-  } catch (error: any) {
-    console.error('Unexpected error in POST /api/notes:', { message: error.message, stack: error.stack, name: error.name });
-    if (error instanceof Response) return error; // Handle requireAuth rejections
-    // Handle errors from getSupabaseClientForUser
-    if (error.message.includes("Missing auth token")) {
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Authentication token missing' }, { status: 401 });
-    }
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error: ' + (error.message || 'Unknown error') }, { status: 500 });
-  }
-}
-
-// Keep GET, PUT, DELETE functions as they were, but they might need similar scoping adjustments if they show similar issues.
-// ... (rest of the file with GET, PUT, DELETE - unchanged for now)
+// --- UPDATED GET function with Pagination ---
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request);
-    // For GET, we might need a scoped client too if RLS issues appear
-    const supabaseForUser = getSupabaseClientForUser(request);
 
-    const { data: userProfile, error: profileError } = await supabaseForUser
-      .from('profiles')
-      .select('subscription_plan')
-      .eq('id', user.id)
-      .maybeSingle();
+    // --- Pagination Parameters ---
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '9', 10); // Default to 9 per page (match grid)
+    const skip = (page - 1) * limit;
 
-    // Handle profile errors or missing profiles like before
-    if (profileError && profileError.code !== 'PGRST116') {
-        console.error('[Scoped GET] Error fetching user profile:', profileError);
-    }
+    // Fetch user's subscription plan using Prisma
+    const userProfile = await prisma.profiles.findUnique({
+        where: { id: user.id },
+        select: { subscription_plan: true },
+    });
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
-    const limit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_NOTES;
+    const usageLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_NOTES;
 
-    // Use scoped client for fetching notes and count
-    const [notesResult, countResult] = await Promise.all([
-        supabaseForUser.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabaseForUser.from('notes').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
+    // Use Prisma for fetching notes and total count in a transaction
+    const [notesData, totalCount] = await prisma.$transaction([
+        prisma.notes.findMany({
+            where: { user_id: user.id },
+            orderBy: { created_at: 'desc' },
+            take: limit,
+            skip: skip,
+            // Select only necessary fields for list view if needed later
+            // select: { id: true, title: true, content: true, created_at: true, updated_at: true }
+        }),
+        prisma.notes.count({
+            where: { user_id: user.id },
+        }),
     ]);
 
-    if (notesResult.error) throw notesResult.error;
-    if (countResult.error) throw countResult.error;
+    // Ensure dates are serialized correctly (Prisma usually handles this, but explicit conversion is safe)
+    const notes = notesData.map(note => ({
+        ...note,
+        created_at: note.created_at?.toISOString() || '',
+        updated_at: note.updated_at?.toISOString() || '',
+    }));
 
-    const notes = notesResult.data || [];
-    const currentCount = countResult.count ?? 0;
 
-    const responseData = { notes, count: currentCount, limit };
+    const totalPages = Math.ceil(totalCount / limit);
 
-    return NextResponse.json<ApiResponse<typeof responseData>>({
+    const responseData: PaginatedNotesResponse = {
+      notes,
+      count: totalCount,
+      limit: usageLimit,
+      totalPages,
+      currentPage: page,
+    };
+
+    return NextResponse.json<ApiResponse<PaginatedNotesResponse>>({
       success: true,
       data: responseData,
     });
 
   } catch (error) {
-     if (error instanceof Response) return error; // Handle requireAuth or scoped client creation errors
-     console.error('[Scoped GET] Error fetching notes:', error);
+     if (error instanceof Response) return error;
+     console.error('[GET /api/notes] Error fetching notes:', error);
      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch notes';
      return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 
-// ... (PUT and DELETE would need similar changes using supabaseForUser)
-// For PUT: Fetch existingNote and perform update using supabaseForUser
-// For DELETE: Fetch existingNote and perform delete using supabaseForUser
+// --- POST function (Uses Prisma) ---
+export async function POST(request: NextRequest) {
+  try {
+    const user = await requireAuth(request);
 
+    // Validate usage limits using Prisma-based function
+    let limitValidation = await validateNoteCreation(user.id);
+    if (!limitValidation.isValid) {
+      return NextResponse.json<ApiResponse>({ success: false, error: limitValidation.error, message: limitValidation.message }, { status: 403 });
+    }
+
+    let body: CreateNoteData;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON in request body' }, { status: 400 });
+    }
+    // Validation helper remains useful
+    const { validateRequestBody } = await import('@/lib/auth'); // Re-import locally if needed
+    const validation = validateRequestBody(body, ['title', 'content']);
+    if (!validation.isValid) {
+      return NextResponse.json<ApiResponse>({ success: false, error: validation.error }, { status: 400 });
+    }
+
+    // --- Use Prisma for insertion ---
+    const newNote = await prisma.notes.create({
+        data: {
+            user_id: user.id,
+            title: body.title.trim(),
+            content: body.content.trim(),
+        }
+    });
+
+    // Serialize dates
+    const responseNote = {
+        ...newNote,
+        created_at: newNote.created_at?.toISOString() || '',
+        updated_at: newNote.updated_at?.toISOString() || '',
+    };
+
+    return NextResponse.json<ApiResponse<Note>>({ success: true, data: responseNote, message: 'Note created successfully' }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Unexpected error in POST /api/notes:', error);
+     if (error instanceof Response) return error; // Handle requireAuth rejections
+     // Handle Prisma errors specifically
+     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        console.error('Prisma Error creating note:', { code: error.code, meta: error.meta });
+        return NextResponse.json<ApiResponse>({ success: false, error: 'Database error occurred while creating the note.' }, { status: 500 });
+    }
+    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error: ' + (error.message || 'Unknown error') }, { status: 500 });
+  }
+}
+
+
+// --- PUT function (Uses Prisma) ---
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -217,64 +184,67 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Title or content is required for update' }, { status: 400 });
     }
 
-    // --- Create scoped client ---
-    const supabaseForUser = getSupabaseClientForUser(request);
+    // --- Verify ownership using Prisma ---
+    const existingNote = await prisma.notes.findUnique({
+        where: { id: noteId },
+        select: { user_id: true }
+    });
 
-    // --- Fetch existing note using scoped client ---
-    const { data: existingNote, error: fetchError } = await supabaseForUser
-        .from('notes')
-        .select('user_id') // Only need user_id for ownership check
-        .eq('id', noteId)
-        .single();
-
-    if (fetchError) {
-        // Handle potential errors like note not found (PGRST116) or others
-        const status = fetchError.code === 'PGRST116' ? 404 : 500;
-        const message = fetchError.code === 'PGRST116' ? 'Note not found' : 'Failed to retrieve note for update check';
-        console.error(`[Scoped PUT] Error fetching note ${noteId}:`, fetchError);
-        return NextResponse.json<ApiResponse>({ success: false, error: message }, { status });
+    if (!existingNote) {
+        return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found' }, { status: 404 });
     }
-
     if (existingNote.user_id !== user.id) {
-      console.warn(`[Scoped PUT] Access denied for user ${user.id} trying to update note ${noteId} owned by ${existingNote.user_id}`);
       return NextResponse.json<ApiResponse>({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
-    const updates: Partial<Pick<Note, 'title' | 'content'>> = {};
-     if (title !== undefined) {
+    const updates: Prisma.notesUpdateInput = {}; // Use Prisma type for updates
+    if (title !== undefined) {
       if (title.trim().length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'Title cannot be empty' }, { status: 400 });
       updates.title = title.trim();
     }
-     if (content !== undefined) {
+    if (content !== undefined) {
        if (content.trim().length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'Content cannot be empty' }, { status: 400 });
        updates.content = content.trim();
      }
+    // Prisma's @updatedAt handles the timestamp automatically
+    // updates.updated_at = new Date(); // No longer needed if using @updatedAt
+
     if (Object.keys(updates).length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'No valid fields provided for update' }, { status: 400 });
 
 
-    // --- Perform update using scoped client ---
-    const { data: updatedNote, error: updateError } = await supabaseForUser
-      .from('notes')
-      .update(updates)
-      .eq('id', noteId)
-      .select()
-      .single();
+    // --- Perform update using Prisma ---
+    const updatedNoteData = await prisma.notes.update({
+        where: { id: noteId }, // Ownership already checked
+        data: updates
+    });
 
-    if (updateError) {
-        console.error(`[Scoped PUT] Error updating note ${noteId}:`, updateError);
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to update note' }, { status: 500 });
-    }
+     // Serialize dates
+    const updatedNote = {
+        ...updatedNoteData,
+        created_at: updatedNoteData.created_at?.toISOString() || '',
+        updated_at: updatedNoteData.updated_at?.toISOString() || '',
+    };
+
 
     return NextResponse.json<ApiResponse<Note>>({ success: true, data: updatedNote, message: 'Note updated successfully' });
   } catch (error) {
-    if (error instanceof Response) return error; // Handle requireAuth or scoped client creation errors
-    console.error('[Scoped PUT] Unexpected error updating note:', error);
+    if (error instanceof Response) return error;
+    console.error('[PUT /api/notes] Unexpected error updating note:', error);
+     // Handle Prisma errors (like P2025 not found, though checked above)
+     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+         if (error.code === 'P2025') {
+            return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found.' }, { status: 404 });
+         }
+         console.error('Prisma Error updating note:', { code: error.code, meta: error.meta });
+         return NextResponse.json<ApiResponse>({ success: false, error: 'Database error updating note.' }, { status: 500 });
+     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to update note';
     return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 
 
+// --- DELETE function (Uses Prisma) ---
 export async function DELETE(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -285,48 +255,37 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Note ID is required' }, { status: 400 });
     }
 
-    // --- Create scoped client ---
-    const supabaseForUser = getSupabaseClientForUser(request);
-
-    // --- Fetch existing note using scoped client ---
-     const { data: existingNote, error: fetchError } = await supabaseForUser
-        .from('notes')
-        .select('user_id') // Only need user_id for ownership check
-        .eq('id', noteId)
-        .maybeSingle(); // maybeSingle handles not found gracefully
-
-     if (fetchError && fetchError.code !== 'PGRST116') { // Ignore 'not found' error here
-        console.error(`[Scoped DELETE] Error fetching note ${noteId} for ownership check:`, fetchError);
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to check note ownership' }, { status: 500 });
-     }
+    // --- Verify ownership using Prisma ---
+     const existingNote = await prisma.notes.findUnique({
+        where: { id: noteId },
+        select: { user_id: true }
+    });
 
      if (!existingNote) {
-         // Note already deleted or never existed, arguably a success for DELETE
-         // Alternatively, return 404: return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found' }, { status: 404 });
-         console.log(`[Scoped DELETE] Note ${noteId} not found, deletion skipped.`);
+         // Note already deleted or never existed
+         // For DELETE, idempotency often means returning success even if not found
          return NextResponse.json<ApiResponse>({ success: true, message: 'Note not found or already deleted' });
+         // If 404 is preferred: return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found' }, { status: 404 });
      }
-
     if (existingNote.user_id !== user.id) {
-       console.warn(`[Scoped DELETE] Access denied for user ${user.id} trying to delete note ${noteId} owned by ${existingNote.user_id}`);
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Access denied' }, { status: 403 });
+       return NextResponse.json<ApiResponse>({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
-    // --- Perform delete using scoped client ---
-    const { error: deleteError } = await supabaseForUser
-      .from('notes')
-      .delete()
-      .eq('id', noteId);
-
-    if (deleteError) {
-         console.error(`[Scoped DELETE] Error deleting note ${noteId}:`, deleteError);
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to delete note' }, { status: 500 });
-    }
+    // --- Perform delete using Prisma ---
+    await prisma.notes.delete({
+        where: { id: noteId } // Ownership confirmed
+    });
 
     return NextResponse.json<ApiResponse>({ success: true, message: 'Note deleted successfully' });
   } catch (error) {
-    if (error instanceof Response) return error; // Handle requireAuth or scoped client creation errors
-    console.error('[Scoped DELETE] Unexpected error deleting note:', error);
+    if (error instanceof Response) return error;
+    console.error('[DELETE /api/notes] Unexpected error deleting note:', error);
+    // Handle Prisma errors (like P2025 not found, handled above)
+     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+         // P2025 (Record not found) is handled above, catch others
+         console.error('Prisma Error deleting note:', { code: error.code, meta: error.meta });
+         return NextResponse.json<ApiResponse>({ success: false, error: 'Database error deleting note.' }, { status: 500 });
+     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete note';
     return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
   }
