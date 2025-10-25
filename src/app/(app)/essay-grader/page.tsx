@@ -68,18 +68,115 @@ export default function EssayGraderPage() {
   }, [session]); // Refetch when session changes
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... (file change logic remains the same) ...
-     const file = e.target.files?.[0]; if (file) { setError(null); const maxSize = 3 * 1024 * 1024; const isValidMime = ['application/pdf', 'text/plain'].includes(file.type); const isValidExt = ['.pdf', '.txt'].some(ext => file.name.toLowerCase().endsWith(ext)); if (!isValidMime && !isValidExt) { setError("Invalid file type. PDF/TXT only."); setSelectedFile(null); if (e.target) e.target.value = ''; return; } if (file.size > maxSize) { setError(`File exceeds 3MB (${formatFileSize(file.size)}).`); setSelectedFile(null); if (e.target) e.target.value = ''; return; } setSelectedFile(file); setEssayText(''); } else { setSelectedFile(null); }
-  };
+     const file = e.target.files?.[0];
+     if (file) {
+       setError(null);
+       const maxSize = 3 * 1024 * 1024;
+       const isValidMime = ['application/pdf', 'text/plain'].includes(file.type);
+       const isValidExt = ['.pdf', '.txt'].some(ext => file.name.toLowerCase().endsWith(ext));
+       if (!isValidMime && !isValidExt) {
+         setError("Invalid file type. PDF/TXT only.");
+         setSelectedFile(null);
+         if (e.target) e.target.value = '';
+         return;
+       }
+       if (file.size > maxSize) {
+         setError(`File exceeds 3MB (${formatFileSize(file.size)}).`);
+         setSelectedFile(null);
+         if (e.target) e.target.value = '';
+         return;
+       }
+       setSelectedFile(file);
+       setEssayText('');
+     } else {
+       setSelectedFile(null);
+     }
+   };
 
+  // --- UNCOMMENTED handleSubmit LOGIC ---
   const handleSubmit = async () => {
-    // ... (submit logic remains the same) ...
-     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) { setError('Please provide an essay by pasting text or uploading a file.'); return; } if (essayText.trim().length > 0 && essayText.trim().length < 50) { setError('Pasted essay text is too short (minimum 50 characters required).'); return; } if (!session) { toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive" }); return; } setIsLoading(true); setError(null); setFeedback(null); try { let response: Response; const headers: HeadersInit = { 'Authorization': `Bearer ${session.access_token}` }; let requestBody: BodyInit; if (inputMode === 'file' && selectedFile) { const formData = new FormData(); formData.append('file', selectedFile); if (rubricText.trim()) formData.append('rubricText', rubricText.trim()); requestBody = formData; } else { headers['Content-Type'] = 'application/json'; const body: { essayText: string; rubricText?: string } = { essayText: essayText.trim() }; if (rubricText.trim()) body.rubricText = rubricText.trim(); requestBody = JSON.stringify(body); } response = await fetch('/api/grade-essay', { method: 'POST', headers: headers, body: requestBody }); const result: ApiResponse<GradeEssayResponseData> = await response.json(); if (!response.ok || !result.success || !result.data) { if (result.error?.includes("limit exceeded")) { throw new Error("You have reached your AI generation limit for this month."); } throw new Error(result.error || `Grading failed. Status: ${response.status}`); } setFeedback(result.data); toast({ title: "Feedback Generated", description: "Your essay feedback is ready." }); // --- Refresh usage count after successful grading --- if (aiUsage && aiUsage.currentCount !== undefined && aiUsage.limit !== Infinity) { setAiUsage(prev => ({ ...prev!, currentCount: prev!.currentCount! + 1, remaining: Math.max(0, prev!.remaining - 1) })); } // --- End Refresh --- } catch (err: any) { setError(err.message || 'An unexpected error occurred during grading.'); toast({ title: "Grading Failed", description: err.message, variant: "destructive" }); } finally { setIsLoading(false); }
+    if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
+      setError('Please provide an essay by pasting text or uploading a file.');
+      return;
+    }
+    if (essayText.trim().length > 0 && essayText.trim().length < 50) {
+       setError('Pasted essay text is too short (minimum 50 characters required).');
+       return;
+    }
+    if (!session) {
+      toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      let response: Response;
+      const headers: HeadersInit = { 'Authorization': `Bearer ${session.access_token}` };
+      let requestBody: BodyInit;
+      if (inputMode === 'file' && selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (rubricText.trim()) formData.append('rubricText', rubricText.trim());
+        requestBody = formData;
+      } else {
+        headers['Content-Type'] = 'application/json';
+        const body: { essayText: string; rubricText?: string } = { essayText: essayText.trim() };
+        if (rubricText.trim()) body.rubricText = rubricText.trim();
+        requestBody = JSON.stringify(body);
+      }
+      response = await fetch('/api/grade-essay', { method: 'POST', headers: headers, body: requestBody });
+      const result: ApiResponse<GradeEssayResponseData> = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        if (result.error?.includes("limit exceeded")) { throw new Error("You have reached your AI generation limit for this month."); }
+         if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
+        throw new Error(result.error || `Grading failed. Status: ${response.status}`);
+      }
+      setFeedback(result.data);
+      toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
+      // --- Refresh usage count after successful grading ---
+      if (aiUsage && aiUsage.currentCount !== undefined && aiUsage.limit !== Infinity) {
+        setAiUsage(prev => {
+             if (!prev) return null; // Should not happen but typescript check
+             const newCount = (prev.currentCount ?? 0) + 1;
+             const newRemaining = Math.max(0, prev.limit - newCount);
+             return { ...prev, currentCount: newCount, remaining: newRemaining };
+         });
+      }
+      // --- End Refresh ---
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred during grading.');
+      toast({ title: "Grading Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // --- UNCOMMENTED renderFeedback LOGIC ---
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
-    // ... (render feedback logic remains the same) ...
-     if (!fb) return null; const categories = ['clarity', 'argument', 'grammar', 'summary']; return ( <> {categories.map((key) => ( fb[key] && ( <div key={key} className="mb-4"> <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4> <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb[key]}</p> </div> ) ))} {Object.entries(fb).filter(([key]) => !categories.includes(key)).map(([key, value]) => ( value && ( <div key={key} className="mb-4"> <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4> <p className="text-sm text-muted-foreground whitespace-pre-wrap">{value}</p> </div> ) ))} </> );
+    if (!fb) return null;
+    const categories = ['clarity', 'argument', 'grammar', 'summary']; // Define desired order
+    return (
+      <>
+        {categories.map((key) => (
+          fb[key] && ( // Only render if feedback exists for this category
+            <div key={key} className="mb-4">
+              <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb[key]}</p>
+            </div>
+          )
+        ))}
+        {/* Render any extra categories AI might provide */}
+        {Object.entries(fb).filter(([key]) => !categories.includes(key)).map(([key, value]) => (
+           value && (
+             <div key={key} className="mb-4">
+               <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4>
+               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{value}</p>
+             </div>
+           )
+        ))}
+      </>
+    );
   };
 
   // Determine if submit button should be disabled based on usage
@@ -143,7 +240,7 @@ export default function EssayGraderPage() {
                              <Input
                                 id="file-upload"
                                 type="file"
-                                accept=".pdf,.txt,application/pdf,text/plain"
+                                accept=".pdf,.txt,application/pdf,text/plain" // Be more explicit with accept
                                 onChange={handleFileChange}
                                 disabled={isLoading}
                                 className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border rounded-md"
