@@ -1,5 +1,5 @@
 // src/lib/supabase.ts
-import { createClient, PostgRestError } from '@supabase/supabase-js';
+import { createClient, PostgrestError } from '@supabase/supabase-js';
 import { Database, Note, Quiz, Question, User } from '@/types/database';
 import { prisma } from '@/lib/prisma'; // Import Prisma
 
@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 // --- Error Handling Helper ---
-function handleSupabaseError(error: PostgRestError | null, context: string): void {
+function handleSupabaseError(error: PostgrestError | null, context: string): void {
   if (error) {
     console.error(`Supabase error during ${context}:`, {
       message: error.message,
@@ -28,14 +28,10 @@ function handleSupabaseError(error: PostgRestError | null, context: string): voi
 
 /**
  * A collection of helper functions.
- * Note: Functions using Prisma (like getQuizzesForDashboard) are now preferred
- * for server-side logic, while functions using the Supabase client
- * (like AI usage) are kept for their specific interactions.
  */
 export const supabaseHelpers = {
   // --- User Operations ---
   async getUserWithPlan(userId: string): Promise<(User & { subscription_plan: 'free' | 'pro' }) | null> {
-    // This function still uses the Supabase client, which is fine for profile lookups
     const { data, error } = await supabase
       .from('profiles')
       .select('id, email, created_at, subscription_plan')
@@ -46,7 +42,6 @@ export const supabaseHelpers = {
 
     if (!data) {
         console.warn(`No profile found for user ${userId}, assuming 'free' plan.`);
-        // Fallback logic to get auth user details if profile is missing
          try {
              const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
              if (authError || !authUser?.user) throw authError || new Error('User not found');
@@ -58,7 +53,7 @@ export const supabaseHelpers = {
              };
          } catch (adminError) {
               console.error(`Failed to get auth user details for ${userId} after profile lookup failed:`, adminError);
-              return null; // Return null if user truly can't be found
+              return null;
          }
     }
     const plan = (data as any).subscription_plan === 'pro' ? 'pro' : 'free';
@@ -68,7 +63,6 @@ export const supabaseHelpers = {
   // --- Quiz Operations (Legacy - Dashboard uses Server Components) ---
   // This function is still used by the /dashboard page (client component)
   async getQuizzes(userId: string): Promise<(Quiz & { questions: Question[] })[]> {
-    // This uses the global Supabase client, RLS *must* be enabled for it to work
     const { data, error } = await supabase
       .from('quizzes')
       .select('*, questions(*)')
@@ -81,7 +75,6 @@ export const supabaseHelpers = {
 
   // This function is used by the /quiz/[quizId] page
   async getQuiz(quizId: string): Promise<Quiz & { questions: Question[] }> {
-    // This uses the global Supabase client, RLS *must* be enabled
     const { data, error } = await supabase
       .from('quizzes')
       .select('*, questions(*)')
@@ -95,7 +88,6 @@ export const supabaseHelpers = {
 
   // This is used by the /dashboard page
   async deleteQuiz(quizId: string): Promise<void> {
-    // This uses the global Supabase client, RLS *must* be enabled
     const { error } = await supabase
       .from('quizzes')
       .delete()
@@ -106,7 +98,6 @@ export const supabaseHelpers = {
 
   // --- Notes Operations (Legacy - AI Tutor uses this) ---
   async getNotes(userId: string): Promise<Note[]> {
-    // This uses the global Supabase client, RLS *must* be enabled
     const { data, error } = await supabase
       .from('notes')
       .select('*')
@@ -124,13 +115,12 @@ export const supabaseHelpers = {
    */
   async getAIGenerationCount(userId: string): Promise<number> {
     try {
-      // This uses the global Supabase client, RLS *must* be enabled
       const { data, error } = await supabase
         .from('ai_usage')
         .select('usage_count')
         .eq('user_id', userId);
 
-      if (error && error.code !== 'PGRST116') { // Don't throw if no rows found
+      if (error && error.code !== 'PGRST116') {
          handleSupabaseError(error, `fetching total AI generation count for user ${userId}`);
       }
       const totalCount = data?.reduce((sum, record) => sum + (record.usage_count ?? 0), 0) ?? 0;
@@ -150,7 +140,6 @@ export const supabaseHelpers = {
         .toISOString().split('T')[0]; // Format 'YYYY-MM-DD'
 
     try {
-        // This uses the global Supabase client, RLS *must* be enabled
         const { data, error } = await supabase
             .from('ai_usage')
             .select('usage_count')
@@ -158,7 +147,7 @@ export const supabaseHelpers = {
             .eq('usage_month', firstDayOfMonth)
             .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // Don't throw if no rows found
+        if (error && error.code !== 'PGRST116') {
             handleSupabaseError(error, `fetching AI generation usage for user ${userId} month ${firstDayOfMonth}`);
         }
         return data?.usage_count ?? 0; // Return count or 0 if no record
