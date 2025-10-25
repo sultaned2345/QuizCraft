@@ -1,52 +1,35 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Removed Supabase client import as we are not using it here anymore
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  // You can still use middleware for other things like:
+  // - Setting request headers
+  // - Redirects based on path
+  // - Handling geolocation or A/B testing logic
 
-  // Protect API routes that require authentication (excluding parse-pdf for now)
-  if (pathname.startsWith('/api/generate-quiz') || 
-      pathname.startsWith('/api/upload') ||
-      pathname.startsWith('/api/notes')) {
-    
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' }, 
-        { status: 401 }
-      );
-    }
+  // For now, we'll just let the request pass through.
+  // Authentication will be handled by Server Components (getServerSession)
+  // and API Routes (requireAuth).
 
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-      if (error || !user) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid or expired token' }, 
-          { status: 401 }
-        );
-      }
-    } catch {
-      return NextResponse.json(
-        { success: false, error: 'Invalid or expired token' }, 
-        { status: 401 }
-      );
-    }
-  }
+  // console.log(`Middleware running for: ${request.nextUrl.pathname}`); // Optional: Add logging if needed
 
   return NextResponse.next();
 }
 
+// Update the matcher if you only want middleware to run on specific paths,
+// or remove it entirely if you want it to run on all requests (not recommended).
+// Keeping it limited to API routes might still be useful for future rate limiting, etc.
 export const config = {
   matcher: [
-    '/api/generate-quiz/:path*',
-    '/api/upload/:path*',
-    '/api/notes/:path*',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * Feel free to modify this pattern to include more paths.
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+    // '/api/:path*', // Or keep matching only API routes if preferred
   ],
 };
