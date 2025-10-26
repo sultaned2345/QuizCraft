@@ -5,6 +5,7 @@ import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 import { ApiResponse } from '@/types/database';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic'; // Ensures the route is always treated as dynamic
 
 interface AIUsageStatus {
     currentCount: number | undefined;
@@ -15,6 +16,7 @@ interface AIUsageStatus {
 
 export async function GET(request: NextRequest) {
     try {
+        // requireAuth reads headers, making this route dynamic
         const user = await requireAuth(request);
 
         // Use the existing check function to get current count and limit
