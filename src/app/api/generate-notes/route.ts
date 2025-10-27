@@ -11,16 +11,22 @@ import { Prisma } from '@prisma/client';
 export const runtime = "nodejs";
 
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
+const MIN_CONTENT_LENGTH = 50; // Define minimum length
 
 // --- Helper Functions ---
-function extractTextFromHtml(html: string): string { /* ... (keep existing function) ... */
-    let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, ''); cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, ''); cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " "); cleanHtml = cleanHtml.replace(/\s+/g, ' ').trim(); return cleanHtml;
+function extractTextFromHtml(html: string): string {
+    let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
+    cleanHtml = cleanHtml.replace(/\s+/g, ' ').trim();
+    return cleanHtml;
 }
 
-// Updated buildPrompt to always ask for 1 note
+// Updated buildPrompt to be more specific for flash-lite
 function buildPrompt({ text }: { text: string }): string {
-  const numberOfNotes = 1; // Hardcoded to 1
-  return `Based on the following content, generate exactly ${numberOfNotes} structured note. The note must have a "title" and "content". Focus on the main topic or summary.
+  const numberOfNotes = 1; // Still requesting one note
+  // Added emphasis on key takeaways and slightly more detail
+  return `Based on the following content, generate exactly ${numberOfNotes} structured note summarizing the **main topic and key takeaways**. The note must have a "title" (concise, reflecting the main topic) and "content" (a clear, paragraph-style summary of the essential information).
 
 Content:
 """
@@ -34,6 +40,7 @@ Return ONLY valid JSON in this exact shape:
   ]
 }`;
 }
+
 
 // Updated callAIToGenerateNotes to always request 1 note
 async function callAIToGenerateNotes(text: string): Promise<Array<{ title: string; content: string; }>> {
@@ -52,7 +59,7 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
     if (!parsed.notes || !Array.isArray(parsed.notes)) throw new Error("Invalid JSON structure returned.");
     if (parsed.notes.length === 0) throw new Error("AI failed to generate the note."); // Check if at least one was generated
     // Basic validation
-    parsed.notes.forEach((note: any) => { if (!note.title || !note.content) throw new Error(`AI generated invalid note content.`); });
+    parsed.notes.forEach((note: any) => { if (!note.title || !note.content) throw new Error(`AI generated invalid note content (missing title or content).`); });
     console.log(`AI note generation successful using ${AI_MODEL_NAME}.`);
     // Return only the first note if more than 1 were somehow generated, though prompt asks for 1
     return parsed.notes.slice(0, 1);
@@ -63,7 +70,7 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
 }
 
 // Helper to Update AI Usage using SERVICE ROLE
-async function updateAIUsage(userId: string, month: Date, count: number = 1) { /* ... (keep existing function from previous steps) ... */
+async function updateAIUsage(userId: string, month: Date, count: number = 1) {
     if(count<=0) return; const firstDayOfMonth=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth(),1)).toISOString().split('T')[0]; const supabase=supabaseAdmin; try { console.log(`[Admin] Fetch AI usage for ${userId} month ${firstDayOfMonth}`); const {data:currentUsage,error:fetchError}=await supabase.from('ai_usage').select('usage_count').eq('user_id',userId).eq('usage_month',firstDayOfMonth).maybeSingle(); if(fetchError&&fetchError.code!=='PGRST116'){console.error("[Admin] Supabase fetch error (updateAIUsage):",fetchError); throw new Error(`Failed fetch AI usage: ${fetchError.message} (Code: ${fetchError.code})`);} const currentCount=currentUsage?.usage_count??0; const newCount=currentCount+count; console.log(`[Admin] Upsert AI usage for ${userId} month ${firstDayOfMonth} to ${newCount}`); const {error:upsertError}=await supabase.from('ai_usage').upsert({user_id:userId,usage_month:firstDayOfMonth,usage_count:newCount,updated_at:new Date().toISOString(),},{onConflict:'user_id, usage_month'}); if(upsertError){console.error("[Admin] Supabase upsert error (updateAIUsage):",upsertError); throw new Error(`Failed upsert AI usage: ${upsertError.message} (Code: ${upsertError.code})`);} console.log(`[Admin] Updated AI usage for ${userId} in ${firstDayOfMonth}.`);} catch(error){console.error(`[Admin] Error during AI usage update for ${userId}:`,error); throw error;}
 }
 
@@ -83,11 +90,25 @@ export async function POST(request: NextRequest) {
     if (!url && !text) {
       return NextResponse.json<ApiResponse>({ success: false, error: "Either text or a URL is required." }, { status: 400 });
     }
-    // No longer need to validate number_of_notes
 
     let sourceContent = text;
-    if (url) { /* ... (keep URL fetching logic) ... */ try { const response = await fetch(url); if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`); const html = await response.text(); sourceContent = extractTextFromHtml(html); if (!sourceContent || sourceContent.length < 100) throw new Error("Not enough content from URL."); } catch (e: any) { return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 }); } }
-    if (!sourceContent || sourceContent.trim().length < 50) return NextResponse.json<ApiResponse>({ success: false, error: "Source content too short (min 50 chars)." }, { status: 400 });
+    if (url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
+            const html = await response.text();
+            sourceContent = extractTextFromHtml(html);
+        } catch (e: any) {
+            return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 });
+        }
+    }
+
+    // *** ADDED CHECK: Validate content length BEFORE calling AI ***
+    if (!sourceContent || sourceContent.trim().length < MIN_CONTENT_LENGTH) {
+        return NextResponse.json<ApiResponse>({ success: false, error: `Source content too short (minimum ${MIN_CONTENT_LENGTH} characters required).` }, { status: 400 });
+    }
+    // *** END ADDED CHECK ***
+
 
     // 2. Check usage limits (assume count = 1)
     const usage = await checkAIGenerationUsageLimit(user.id);
@@ -98,7 +119,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Call AI (no longer passes number_of_notes)
-    const generatedNotes = await callAIToGenerateNotes(sourceContent);
+    const generatedNotes = await callAIToGenerateNotes(sourceContent.trim()); // Trim content
     if (generatedNotes.length === 0) return NextResponse.json<ApiResponse>({ success: false, error: "AI failed to generate the note." }, { status: 500 });
     const actualGeneratedCount = generatedNotes.length; // Should be 1
 
@@ -121,7 +142,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof Response) return error;
     console.error("Error in /api/generate-notes:", error);
     if (error.message?.includes("AI usage")) { console.error("Critical error: Failed to update AI usage count:", error.message); }
-    if (error.message?.startsWith("Failed to generate notes")) return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 });
+    // Check if the error is from the AI or parsing step
+    if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid note content")) {
+        return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 }); // Bad Gateway for AI/parsing issues
+    }
     return NextResponse.json<ApiResponse>({ success: false, error: error.message || "Internal server error." }, { status: 500 });
   }
 }
