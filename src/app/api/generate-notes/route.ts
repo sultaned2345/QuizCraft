@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 
 export const runtime = "nodejs";
 
+// *** Keeping gemini-2.5-flash-lite as requested ***
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 const MIN_CONTENT_LENGTH = 50; // Define minimum length
 
@@ -22,11 +23,10 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
-// Updated buildPrompt to be more specific for flash-lite
+// *** UPDATED PROMPT FOR DETAILED NOTES ***
 function buildPrompt({ text }: { text: string }): string {
-  const numberOfNotes = 1; // Still requesting one note
-  // Added emphasis on key takeaways and slightly more detail
-  return `Based on the following content, generate exactly ${numberOfNotes} structured note summarizing the **main topic and key takeaways**. The note must have a "title" (concise, reflecting the main topic) and "content" (a clear, paragraph-style summary of the essential information).
+  // Removed the numberOfNotes constraint, asking for one detailed note object
+  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
 
 Content:
 """
@@ -36,40 +36,81 @@ ${text}
 Return ONLY valid JSON in this exact shape:
 {
   "notes": [
-    { "title": "...", "content": "..." }
+    {
+      "title": "Concise Title Reflecting Main Topic",
+      "content": "Detailed structured notes covering key points, definitions, examples etc. Use markdown for formatting like headings (# Heading 1, ## Heading 2) or bullet points (- Point)."
+    }
   ]
 }`;
 }
 
 
-// Updated callAIToGenerateNotes to always request 1 note
+// Updated callAIToGenerateNotes function
 async function callAIToGenerateNotes(text: string): Promise<Array<{ title: string; content: string; }>> {
-  const numberOfNotes = 1; // Hardcoded to 1
+  // Removed numberOfNotes
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
   if (!process.env.GOOGLE_AI_API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY");
+
+  // Use the AI_MODEL_NAME constant
   const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-  const prompt = buildPrompt({ text }); // Pass only text
+  const prompt = buildPrompt({ text });
+
   try {
-    console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for 1 note...`);
+    console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for detailed notes...`); // Updated log message
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const content = response.text();
-    if (!content) throw new Error("Empty response from AI model");
-    const parsed = JSON.parse(content);
-    if (!parsed.notes || !Array.isArray(parsed.notes)) throw new Error("Invalid JSON structure returned.");
-    if (parsed.notes.length === 0) throw new Error("AI failed to generate the note."); // Check if at least one was generated
-    // Basic validation
-    parsed.notes.forEach((note: any) => { if (!note.title || !note.content) throw new Error(`AI generated invalid note content (missing title or content).`); });
-    console.log(`AI note generation successful using ${AI_MODEL_NAME}.`);
-    // Return only the first note if more than 1 were somehow generated, though prompt asks for 1
-    return parsed.notes.slice(0, 1);
+
+    if (!content) {
+         console.error(`AI Error: Empty response received from ${AI_MODEL_NAME}.`);
+         throw new Error("Empty response from AI model");
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(content);
+    } catch (parseError) {
+        console.error(`AI Error: Failed to parse JSON response from ${AI_MODEL_NAME}. Raw response snippet:`, content.substring(0, 500));
+        throw new Error(`Invalid JSON structure returned by AI.`);
+    }
+
+    if (!parsed.notes || !Array.isArray(parsed.notes)) {
+        console.error(`AI Error: Invalid JSON structure from ${AI_MODEL_NAME}. Expected { "notes": [...] }. Received:`, parsed);
+        throw new Error("Invalid JSON structure returned.");
+    }
+    if (parsed.notes.length === 0) {
+        console.error(`AI Error: AI model ${AI_MODEL_NAME} returned zero notes.`);
+        throw new Error("AI failed to generate the notes."); // Adjusted error message
+    }
+
+    // Stricter Validation: Check for non-empty title and content
+    const validNotes = parsed.notes.filter((note: any) => {
+        // Content should now be potentially long and structured
+        const isValid = note && typeof note.title === 'string' && note.title.trim().length > 0 &&
+                        typeof note.content === 'string' && note.content.trim().length > 10; // Increased min length for content slightly
+        if (!isValid) {
+            console.warn(`AI Warning: Filtering out invalid note generated by ${AI_MODEL_NAME}. Note:`, note);
+        }
+        return isValid;
+    });
+
+    if (validNotes.length === 0) {
+        console.error(`AI Error: AI model ${AI_MODEL_NAME} generated notes, but none had both title and sufficient content.`);
+        throw new Error(`AI generated invalid note content (missing title or content).`);
+    }
+
+    console.log(`AI note generation successful using ${AI_MODEL_NAME}. Generated ${validNotes.length} valid note(s).`);
+    // Return only the first valid note (as the prompt structure still expects one main note object)
+    return validNotes.slice(0, 1);
+
   } catch (e: any) {
-    console.error(`Error calling/parsing AI for notes from ${AI_MODEL_NAME}:`, e);
-    throw new Error(`Failed to generate notes AI error: ${e.message}`);
+    console.error(`Error during AI call or parsing for notes generation using ${AI_MODEL_NAME}:`, e);
+    throw new Error(`Failed to generate notes: ${e.message}`);
   }
 }
 
-// Helper to Update AI Usage using SERVICE ROLE
+
+// Helper to Update AI Usage using SERVICE ROLE (remains the same)
 async function updateAIUsage(userId: string, month: Date, count: number = 1) {
     if(count<=0) return; const firstDayOfMonth=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth(),1)).toISOString().split('T')[0]; const supabase=supabaseAdmin; try { console.log(`[Admin] Fetch AI usage for ${userId} month ${firstDayOfMonth}`); const {data:currentUsage,error:fetchError}=await supabase.from('ai_usage').select('usage_count').eq('user_id',userId).eq('usage_month',firstDayOfMonth).maybeSingle(); if(fetchError&&fetchError.code!=='PGRST116'){console.error("[Admin] Supabase fetch error (updateAIUsage):",fetchError); throw new Error(`Failed fetch AI usage: ${fetchError.message} (Code: ${fetchError.code})`);} const currentCount=currentUsage?.usage_count??0; const newCount=currentCount+count; console.log(`[Admin] Upsert AI usage for ${userId} month ${firstDayOfMonth} to ${newCount}`); const {error:upsertError}=await supabase.from('ai_usage').upsert({user_id:userId,usage_month:firstDayOfMonth,usage_count:newCount,updated_at:new Date().toISOString(),},{onConflict:'user_id, usage_month'}); if(upsertError){console.error("[Admin] Supabase upsert error (updateAIUsage):",upsertError); throw new Error(`Failed upsert AI usage: ${upsertError.message} (Code: ${upsertError.code})`);} console.log(`[Admin] Updated AI usage for ${userId} in ${firstDayOfMonth}.`);} catch(error){console.error(`[Admin] Error during AI usage update for ${userId}:`,error); throw error;}
 }
@@ -82,15 +123,12 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
     const body = await request.json();
-
-    // Remove number_of_notes from expected body
     const { text, url } = body;
 
-    // 1. Validate request (only text or url needed)
+    // 1. Validate request and get source content
     if (!url && !text) {
       return NextResponse.json<ApiResponse>({ success: false, error: "Either text or a URL is required." }, { status: 400 });
     }
-
     let sourceContent = text;
     if (url) {
         try {
@@ -102,50 +140,50 @@ export async function POST(request: NextRequest) {
             return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 });
         }
     }
-
-    // *** ADDED CHECK: Validate content length BEFORE calling AI ***
     if (!sourceContent || sourceContent.trim().length < MIN_CONTENT_LENGTH) {
         return NextResponse.json<ApiResponse>({ success: false, error: `Source content too short (minimum ${MIN_CONTENT_LENGTH} characters required).` }, { status: 400 });
     }
-    // *** END ADDED CHECK ***
 
-
-    // 2. Check usage limits (assume count = 1)
+    // 2. Check usage limits
     const usage = await checkAIGenerationUsageLimit(user.id);
-    const incrementCount = 1; // Always incrementing by 1 now
+    const incrementCount = 1; // Still counts as one AI generation call
     if (!usage.canGenerate || (usage.currentCount !== undefined && usage.limit !== Infinity && (usage.currentCount + incrementCount) > usage.limit)) {
       const remaining = usage.limit !== Infinity && usage.currentCount !== undefined ? Math.max(0, usage.limit - usage.currentCount) : 0;
       return NextResponse.json<ApiResponse>({ success: false, error: `Usage limit exceeded. ${remaining} generations left.`, }, { status: 403 });
     }
 
-    // 3. Call AI (no longer passes number_of_notes)
-    const generatedNotes = await callAIToGenerateNotes(sourceContent.trim()); // Trim content
-    if (generatedNotes.length === 0) return NextResponse.json<ApiResponse>({ success: false, error: "AI failed to generate the note." }, { status: 500 });
-    const actualGeneratedCount = generatedNotes.length; // Should be 1
+    // 3. Call AI
+    const generatedNotes = await callAIToGenerateNotes(sourceContent.trim());
+    const actualGeneratedCount = generatedNotes.length; // Should still be 1 based on JSON structure
 
     // 4. Save note(s) using Prisma
     const notesToSave = generatedNotes.map(note => ({ user_id: user.id, title: note.title.trim(), content: note.content.trim() }));
-    // Using createMany might be slight overkill now, but harmless
     const savedNotesResult = await prisma.notes.createMany({ data: notesToSave });
 
-    // 5. Update usage count (always by 1, or actualGeneratedCount)
+    // 5. Update usage count
     await updateAIUsage(user.id, new Date(), actualGeneratedCount);
 
     // 6. Return success
     return NextResponse.json<ApiResponse<{ count: number }>>({
         success: true,
         data: { count: savedNotesResult.count },
-        message: `Note generated successfully.` // Simplified message
+        message: `Notes generated successfully.` // Updated message
     }, { status: 201 });
 
   } catch (error: any) {
-    if (error instanceof Response) return error;
-    console.error("Error in /api/generate-notes:", error);
-    if (error.message?.includes("AI usage")) { console.error("Critical error: Failed to update AI usage count:", error.message); }
-    // Check if the error is from the AI or parsing step
+    if (error instanceof Response) return error; // Handle requireAuth errors first
+    console.error("Error in /api/generate-notes POST handler:", error);
+
+    // Specific AI/Parsing errors from callAIToGenerateNotes
     if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid note content")) {
-        return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 }); // Bad Gateway for AI/parsing issues
+        return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 }); // Bad Gateway
     }
-    return NextResponse.json<ApiResponse>({ success: false, error: error.message || "Internal server error." }, { status: 500 });
+    // Usage update errors
+    if (error.message?.includes("AI usage")) {
+         console.error("Critical error: Failed to update AI usage count after successful generation:", error.message);
+         return NextResponse.json<ApiResponse>({ success: false, error: "Failed to update usage count after generation." }, { status: 500 });
+    }
+     // Default internal server error
+    return NextResponse.json<ApiResponse>({ success: false, error: error.message || "Internal server error during note generation." }, { status: 500 });
   }
 }
