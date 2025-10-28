@@ -43,6 +43,7 @@ export const supabaseHelpers = {
     if (!data) {
         console.warn(`No profile found for user ${userId}, assuming 'free' plan.`);
          try {
+             // This might require an admin client if RLS is strict
              const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
              if (authError || !authUser?.user) throw authError || new Error('User not found');
              return {
@@ -61,7 +62,7 @@ export const supabaseHelpers = {
   },
 
   // --- Quiz Operations (Legacy - Dashboard uses Server Components) ---
-  // This function is still used by the /dashboard page (client component)
+  // This function is still used by the /dashboard page (client component) for delete
   async getQuizzes(userId: string): Promise<(Quiz & { questions: Question[] })[]> {
     const { data, error } = await supabase
       .from('quizzes')
@@ -74,16 +75,21 @@ export const supabaseHelpers = {
   },
 
   // This function is used by the /quiz/[quizId] page
-  async getQuiz(quizId: string): Promise<Quiz & { questions: Question[] }> {
+  async getQuiz(quizId: string): Promise<(Quiz & { questions: Question[] }) | null> { // <-- Return type can now be null
     const { data, error } = await supabase
       .from('quizzes')
       .select('*, questions(*)')
       .eq('id', quizId)
-      .single();
+      // --- CHANGE HERE ---
+      .maybeSingle(); // Use maybeSingle() instead of single()
 
-    handleSupabaseError(error, `fetching quiz ${quizId}`);
-    if (!data) throw new Error(`Quiz with ID ${quizId} not found.`);
-    return data;
+    // Error handling needs adjustment for maybeSingle:
+    // PGRST116 (0 rows) is NOT an error for maybeSingle, it returns data: null
+    if (error && error.code !== 'PGRST116') {
+         handleSupabaseError(error, `fetching quiz ${quizId}`);
+    }
+    // No need to throw if data is null here, let the caller handle it.
+    return data; // Returns the quiz object or null
   },
 
   // This is used by the /dashboard page
