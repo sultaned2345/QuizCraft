@@ -3,10 +3,10 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation"; // Import useSearchParams
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-// Removed unused supabase import from here
+// Removed unused supabase import
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Upload, FileText, Loader2, Settings, AlertCircle, Sparkles, LogOut, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatFileSize, validateFileType, extractPdfText } from "@/lib/file-parser";
-import { QuestionType, ApiResponse, DocumentMetadata } from "@/types/database"; // Add ApiResponse, DocumentMetadata
+import { QuestionType, ApiResponse, DocumentMetadata } from "@/types/database";
 
 interface QuizSettings {
   questionCount: number;
@@ -27,7 +27,7 @@ interface QuizSettings {
   immediateFeedback: boolean;
 }
 
-// Header component (keep as is)
+// Header component
 const DashboardHeader = () => {
     const { user, signOut } = useAuth();
     const router = useRouter();
@@ -149,253 +149,146 @@ export default function CreatePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Use the session from useAuth context
-    if (!user || !session) {
-        setError("Authentication session not found. Please log in again.");
-        toast({ title: "Authentication Error", variant: "destructive" });
-        router.push("/login");
-        return;
-    }
-    if (!textContent.trim() && !selectedFile) {
-      setError("Please provide text content or upload a file.");
-      return;
-    }
+    // --- User ID Log ---
+    console.log("--- Create Page User ID (from useAuth):", user?.id);
+    console.log("--- Create Page Session Token Snippet:", session?.access_token?.substring(0, 10));
+    // --- End Log ---
+    if (!user || !session) { setError("Auth session missing."); toast({ title: "Auth Error", variant: "destructive" }); return; }
+    if (!textContent.trim() && !selectedFile) { setError("Provide text or upload file."); return; }
+    setIsLoading(true); setError("");
 
-    setIsLoading(true);
-    setError("");
-
+    let response; // Declare response outside try block
     try {
       let finalTextContent = textContent.trim();
+      if (selectedFile) { finalTextContent = selectedFile.type === "application/pdf" ? await extractPdfText(selectedFile) : await selectedFile.text(); }
+      if (finalTextContent.length < 100) throw new Error("Content too short (min 100 chars).");
 
-      if (selectedFile) {
-        finalTextContent = selectedFile.type === "application/pdf"
-            ? await extractPdfText(selectedFile) // Calls /api/parse-pdf
-            : await selectedFile.text();
-      }
+      const queryParams = new URLSearchParams({ numQuestions: quizSettings.questionCount.toString(), difficulty: quizSettings.difficulty, questionType: quizSettings.questionType, immediateFeedback: String(quizSettings.immediateFeedback) });
 
-      if (finalTextContent.length < 100) {
-          throw new Error("Content is too short. Please provide at least 100 characters.");
-      }
-
-      const queryParams = new URLSearchParams({
-        numQuestions: quizSettings.questionCount.toString(),
-        difficulty: quizSettings.difficulty,
-        questionType: quizSettings.questionType,
-        immediateFeedback: String(quizSettings.immediateFeedback),
-      });
-
-      const response = await fetch(`/api/generate-quiz?${queryParams}`, {
+      console.log("--- Sending request to /api/generate-quiz ---"); // Log before fetch
+      response = await fetch(`/api/generate-quiz?${queryParams}`, {
         method: "POST",
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'text/plain' },
         body: finalTextContent,
       });
+      console.log("--- Received response from /api/generate-quiz ---", { status: response.status, ok: response.ok }); // Log after fetch
 
-      // Type the result loosely for now, as backend structure differs from ApiResponse<T>
-      const result: { success?: boolean; error?: string; id?: string; title?: string } = await response.json();
-
-      // Check if response is NOT ok OR if the result object explicitly has success: false OR if the ID is missing on success
-      if (!response.ok || result.success === false || !result.id) {
-        throw new Error(result.error || "An unknown error occurred during quiz generation.");
+      // More robust response check
+      if (!response.ok) {
+          let errorBody: any = "Failed to parse error response."; // Use 'any' for flexibility
+          try {
+              errorBody = await response.json(); // Try to get JSON error details
+          } catch {
+              try { // Add another try-catch for text()
+                  errorBody = await response.text(); // Fallback to text
+              } catch (textError){
+                  console.error("Failed to even get text from error response:", textError);
+                  errorBody = response.statusText; // Ultimate fallback
+              }
+          }
+          console.error("API Error Response Body:", errorBody);
+          // Try to access errorBody.error if it's an object, otherwise use the string/statusText
+          const specificError = (typeof errorBody === 'object' && errorBody !== null && errorBody.error) ? errorBody.error : errorBody;
+          throw new Error(`API Error (${response.status}): ${specificError}`);
       }
 
-      toast({
-        title: "Quiz Generated!",
-        description: `Your new quiz "${result.title}" has been created.`, // Access title directly
-      });
+      // If response.ok, *then* parse JSON
+      const result: { success?: boolean; error?: string; id?: string; title?: string } = await response.json();
 
-      // --- CHANGE HERE: Use window.location.href for full reload ---
-      window.location.href = '/dashboard';
+      // Check for success flag specifically if present, otherwise rely on response.ok and ID presence
+      if (result.success === false || !result.id) {
+        console.error("API Success=false or missing ID:", result);
+        throw new Error(result.error || "API indicated failure but provided no error message.");
+      }
+
+      // If we reach here, it means success
+      toast({ title: "Quiz Generated!", description: `"${result.title}" created.` }); // Access title directly
+      window.location.href = '/dashboard'; // Force full reload
 
     } catch (err) {
+      // Catch errors from fetch itself, parsing, or thrown checks
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
-      toast({
-        title: "Generation Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      setError(errorMessage);
+      console.error("--- Error in handleSubmit ---", err); // Log the full error caught
+      setError(errorMessage); // Show error in UI
+      toast({ title: "Generation Failed", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateSetting = <K extends keyof QuizSettings>(key: K, value: QuizSettings[K]) => {
-    setQuizSettings((prev) => ({ ...prev, [key]: value }));
-  };
 
-  // Combine loading states
+  const updateSetting = <K extends keyof QuizSettings>(key: K, value: QuizSettings[K]) => { setQuizSettings((prev) => ({ ...prev, [key]: value })); };
   const isProcessing = isLoading || isFetchingDoc;
-
-  if (loading) { // Only show full page loader for initial auth check
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
+  if (loading) { return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>; }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
         <DashboardHeader />
         <main className="container mx-auto px-4 py-8 md:py-12">
-            {/* Back Button */}
-            <Button variant="ghost" className="mb-6" onClick={() => router.back()} disabled={isProcessing}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                 Back
-            </Button>
-            {/* Main Card */}
+            <Button variant="ghost" className="mb-6" onClick={() => router.back()} disabled={isProcessing}><ArrowLeft className="w-4 h-4 mr-2" /> Back</Button>
             <Card className="max-w-3xl mx-auto">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold">Create a New Quiz</CardTitle>
-                    <CardDescription>Provide content and configure settings for your quiz.</CardDescription>
+                    <CardDescription>Provide content and configure settings.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Text Input */}
-                        <div className="space-y-2 relative"> {/* Added relative positioning */}
-                            <Label htmlFor="content" className="text-base font-semibold">
-                                Option 1: Paste Your Content
-                            </Label>
-                            <Textarea
-                                id="content"
-                                placeholder="Paste your article, notes, or any text here..."
-                                value={textContent}
-                                onChange={handleTextChange}
-                                className="min-h-48 text-base"
-                                disabled={isProcessing} // Use combined state
-                            />
-                             {isFetchingDoc && ( // Show loader inside textarea when fetching doc
-                                <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-md"> {/* Added rounded-md */}
-                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                </div>
-                             )}
+                        <div className="space-y-2 relative">
+                            <Label htmlFor="content" className="text-base font-semibold">Option 1: Paste Content</Label>
+                            <Textarea id="content" placeholder="Paste text here..." value={textContent} onChange={handleTextChange} className="min-h-48 text-base" disabled={isProcessing} />
+                            {isFetchingDoc && ( <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-md"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div> )}
                         </div>
-
                         {/* OR Separator */}
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-                            <div className="relative flex justify-center text-sm"><span className="bg-card px-2 text-muted-foreground">OR</span></div>
-                        </div>
-
+                        <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div><div className="relative flex justify-center text-sm"><span className="bg-card px-2 text-muted-foreground">OR</span></div></div>
                         {/* File Input */}
                         <div className="space-y-3">
-                            <Label htmlFor="file-upload" className="text-base font-semibold">
-                                Option 2: Upload a File
-                            </Label>
-                             <div className={`relative border-2 border-dashed ${error && !selectedFile ? 'border-destructive' : 'border-slate-300 dark:border-slate-700'} rounded-lg p-6 text-center`}>
+                            <Label htmlFor="file-upload" className="text-base font-semibold">Option 2: Upload File</Label>
+                            <div className={`relative border-2 border-dashed ${error && !selectedFile ? 'border-destructive' : 'border-slate-300 dark:border-slate-700'} rounded-lg p-6 text-center`}>
                                 <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
-                                <p className="mt-2 font-semibold">
-                                  {selectedFile ? selectedFile.name : 'Drag & drop or click to upload'}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  PDF or TXT only, max 3MB.
-                                  {selectedFile && ` (${formatFileSize(selectedFile.size)})`}
-                                </p>
-                                <Input
-                                    id="file-upload"
-                                    type="file"
-                                    accept=".pdf,.txt,application/pdf,text/plain"
-                                    onChange={handleFileChange}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                    disabled={isProcessing} // Use combined state
-                                    // Reset value onClick to allow re-uploading the same file
-                                    onClick={(event) => (event.currentTarget.value = '')}
-                                />
+                                <p className="mt-2 font-semibold">{selectedFile ? selectedFile.name : 'Drag & drop or click'}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">PDF/TXT, max 3MB.{selectedFile && ` (${formatFileSize(selectedFile.size)})`}</p>
+                                <Input id="file-upload" type="file" accept=".pdf,.txt,application/pdf,text/plain" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={isProcessing} onClick={(e)=>(e.currentTarget.value = '')}/>
                             </div>
                         </div>
-
-                        {/* Settings Collapsible */}
+                        {/* Settings */}
                         <Collapsible>
-                            <CollapsibleTrigger asChild>
-                                <Button type="button" variant="outline" className="w-full" disabled={isProcessing}>
-                                    <Settings className="w-4 h-4 mr-2" />
-                                    Quiz Settings
-                                </Button>
-                            </CollapsibleTrigger>
+                            <CollapsibleTrigger asChild><Button type="button" variant="outline" className="w-full" disabled={isProcessing}><Settings className="w-4 h-4 mr-2" />Quiz Settings</Button></CollapsibleTrigger>
                             <CollapsibleContent className="mt-4 space-y-4">
-                                {/* Settings fields remain the same */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {/* Number of Questions */}
                                     <div className="space-y-2">
-                                        <Label htmlFor="question-count">Number of Questions</Label>
+                                        <Label htmlFor="question-count">Questions</Label>
                                         <Select value={String(quizSettings.questionCount)} onValueChange={(v) => updateSetting("questionCount", Number(v))} disabled={isProcessing}>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="5">5</SelectItem>
-                                                <SelectItem value="10">10</SelectItem>
-                                                <SelectItem value="15">15</SelectItem>
-                                            </SelectContent>
+                                            <SelectContent><SelectItem value="5">5</SelectItem><SelectItem value="10">10</SelectItem><SelectItem value="15">15</SelectItem></SelectContent>
                                         </Select>
                                     </div>
-                                    {/* Difficulty */}
                                     <div className="space-y-2">
                                         <Label htmlFor="difficulty">Difficulty</Label>
                                         <Select value={quizSettings.difficulty} onValueChange={(v: "easy" | "medium" | "hard") => updateSetting("difficulty", v)} disabled={isProcessing}>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="easy">Easy</SelectItem>
-                                                <SelectItem value="medium">Medium</SelectItem>
-                                                <SelectItem value="hard">Hard</SelectItem>
-                                            </SelectContent>
+                                            <SelectContent><SelectItem value="easy">Easy</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="hard">Hard</SelectItem></SelectContent>
                                         </Select>
                                     </div>
                                 </div>
-                                {/* Question Type */}
                                 <div className="space-y-2">
                                     <Label htmlFor="question-type">Question Type</Label>
-                                     <Select value={quizSettings.questionType} onValueChange={(v: QuestionType | 'MIXED') => updateSetting("questionType", v)} disabled={isProcessing}>
+                                    <Select value={quizSettings.questionType} onValueChange={(v: QuestionType | 'MIXED') => updateSetting("questionType", v)} disabled={isProcessing}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="MIXED">Mixed</SelectItem>
-                                            <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
-                                            <SelectItem value="TRUE_FALSE">True/False</SelectItem>
-                                            <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
-                                            {/* <SelectItem value="MATCHING">Matching</SelectItem> */} {/* Re-enable if API supports it reliably */}
-                                        </SelectContent>
+                                        <SelectContent><SelectItem value="MIXED">Mixed</SelectItem><SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem><SelectItem value="TRUE_FALSE">True/False</SelectItem><SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem></SelectContent>
                                     </Select>
                                 </div>
-                                {/* Immediate Feedback */}
                                 <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                                    <div className="space-y-0.5">
-                                        <Label htmlFor="immediate-feedback" className={`${isProcessing ? 'opacity-50' : ''}`}>Immediate Feedback</Label>
-                                        <CardDescription className={`${isProcessing ? 'opacity-50' : ''}`}>
-                                            Show correct answer after each question.
-                                        </CardDescription>
-                                    </div>
-                                    <Switch
-                                        id="immediate-feedback"
-                                        checked={quizSettings.immediateFeedback}
-                                        onCheckedChange={(checked) => updateSetting("immediateFeedback", checked)}
-                                        disabled={isProcessing}
-                                    />
+                                    <div className="space-y-0.5"><Label htmlFor="immediate-feedback" className={`${isProcessing ? 'opacity-50' : ''}`}>Immediate Feedback</Label><CardDescription className={`${isProcessing ? 'opacity-50' : ''}`}>Show answer after each question.</CardDescription></div>
+                                    <Switch id="immediate-feedback" checked={quizSettings.immediateFeedback} onCheckedChange={(checked) => updateSetting("immediateFeedback", checked)} disabled={isProcessing}/>
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>
-
                         {/* Error Display */}
-                        {error && (
-                            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                                <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                                <div>{error}</div>
-                            </div>
-                        )}
-
+                        {error && ( <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"><AlertCircle className="h-5 w-5 flex-shrink-0" /><div>{error}</div></div> )}
                         {/* Submit Button */}
-                        <Button
-                            type="submit"
-                            size="lg"
-                            className="w-full text-base"
-                            disabled={isProcessing || (!textContent.trim() && !selectedFile)}
-                        >
-                            {isProcessing ? ( // Use combined loading state
-                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {isFetchingDoc ? 'Loading Content...' : 'Generating Quiz...'}</>
-                            ) : (
-                                <><Sparkles className="w-5 h-5 mr-2" /> Generate Quiz</>
-                            )}
+                        <Button type="submit" size="lg" className="w-full text-base" disabled={isProcessing || (!textContent.trim() && !selectedFile)}>
+                            {isProcessing ? (<><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {isFetchingDoc ? 'Loading...' : 'Generating...'}</>) : (<><Sparkles className="w-5 h-5 mr-2" /> Generate Quiz</>)}
                         </Button>
                     </form>
                 </CardContent>
