@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation"; // Import useSearchParams
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase"; // Keep this if needed elsewhere, though not for getSession here
+// Removed unused supabase import from here
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -167,9 +167,6 @@ export default function CreatePage() {
     try {
       let finalTextContent = textContent.trim();
 
-      // IMPORTANT: extractPdfText is CLIENT-SIDE, prefer server-side extraction
-      // If generate-quiz handles files, send the file. If not, extract here.
-      // Assuming /api/generate-quiz expects TEXT:
       if (selectedFile) {
         finalTextContent = selectedFile.type === "application/pdf"
             ? await extractPdfText(selectedFile) // Calls /api/parse-pdf
@@ -187,31 +184,28 @@ export default function CreatePage() {
         immediateFeedback: String(quizSettings.immediateFeedback),
       });
 
-      // No need to call getSession again here
-
       const response = await fetch(`/api/generate-quiz?${queryParams}`, {
         method: "POST",
         headers: {
-          // Use the access token from the context's session object
           'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'text/plain', // Send as plain text
+          'Content-Type': 'text/plain',
         },
-        body: finalTextContent, // Send the extracted text
+        body: finalTextContent,
       });
 
-      const result = await response.json();
+      const result: ApiResponse<{ id: string; title: string }> = await response.json(); // Added success flag check
 
-      if (!response.ok || !result.success) { // Check success flag from API response
+      if (!response.ok || !result.success || !result.data?.id) { // Check success flag and data presence
         throw new Error(result.error || "An unknown error occurred during quiz generation.");
       }
 
       toast({
         title: "Quiz Generated!",
-        description: `Your new quiz "${result.title}" has been created.`,
+        description: `Your new quiz "${result.data.title}" has been created.`,
       });
 
-      router.push(`/dashboard`); // Redirect to dashboard on success
-      router.refresh(); // <-- ADDED THIS LINE TO REFRESH DASHBOARD DATA
+      // --- CHANGE HERE: Use window.location.href for full reload ---
+      window.location.href = '/dashboard';
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
@@ -220,7 +214,6 @@ export default function CreatePage() {
         description: errorMessage,
         variant: "destructive",
       });
-      // Set error state *after* toast
       setError(errorMessage);
     } finally {
       setIsLoading(false);
