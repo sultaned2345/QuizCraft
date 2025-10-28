@@ -1,11 +1,12 @@
+// src/app/create/page.tsx
 'use client';
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation"; // Import useSearchParams
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // Keep this if needed elsewhere, though not for getSession here
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Upload, FileText, Loader2, Settings, AlertCircle, Sparkles, LogOut, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatFileSize, validateFileType, extractPdfText } from "@/lib/file-parser";
-import { QuestionType } from "@/types/database";
+import { QuestionType, ApiResponse, DocumentMetadata } from "@/types/database"; // Add ApiResponse, DocumentMetadata
 
 interface QuizSettings {
   questionCount: number;
@@ -26,7 +27,7 @@ interface QuizSettings {
   immediateFeedback: boolean;
 }
 
-// Header component for a consistent authenticated layout
+// Header component (keep as is)
 const DashboardHeader = () => {
     const { user, signOut } = useAuth();
     const router = useRouter();
@@ -60,6 +61,7 @@ export default function CreatePage() {
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingDoc, setIsFetchingDoc] = useState(false); // State for fetching doc content
   const [error, setError] = useState("");
   const [quizSettings, setQuizSettings] = useState<QuizSettings>({
     questionCount: 10,
@@ -68,15 +70,47 @@ export default function CreatePage() {
     immediateFeedback: true,
   });
 
-  const { user, loading } = useAuth();
+  // Use the session directly from the context
+  const { user, session, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook to read query params
   const { toast } = useToast();
 
+  // Effect to handle initial login state
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
   }, [user, loading, router]);
+
+  // Effect to fetch document content if docId is present
+  useEffect(() => {
+    const docId = searchParams.get('docId');
+    if (docId && session && !textContent && !selectedFile) { // Only fetch if fields are empty
+      const fetchDocumentContent = async () => {
+        setIsFetchingDoc(true);
+        setError('');
+        try {
+          const response = await fetch(`/api/documents/${docId}/content`, {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          const result: ApiResponse<{ extracted_text: string | null; file_name: string }> = await response.json();
+          if (!result.success || !result.data?.extracted_text) {
+            throw new Error(result.error || 'Failed to fetch document content.');
+          }
+          setTextContent(result.data.extracted_text);
+          toast({ title: "Document Loaded", description: `Content from "${result.data.file_name}" loaded.` });
+        } catch (err: any) {
+          setError(`Error loading document: ${err.message}`);
+          toast({ title: "Error Loading Document", description: err.message, variant: "destructive" });
+        } finally {
+          setIsFetchingDoc(false);
+        }
+      };
+      fetchDocumentContent();
+    }
+  }, [searchParams, session, toast, textContent, selectedFile]); // Add dependencies
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -87,18 +121,21 @@ export default function CreatePage() {
       if (!isValidType) {
         setError("Unsupported file type. Please upload a PDF or TXT file.");
         setSelectedFile(null);
+        if (e.target) e.target.value = ''; // Clear file input
         return;
       }
 
       if (file.size > maxSize) {
         setError(`File size exceeds 3MB. Max size is ${formatFileSize(maxSize)}.`);
         setSelectedFile(null);
+        if (e.target) e.target.value = ''; // Clear file input
         return;
       }
 
       setTextContent(""); // Clear text content when a file is selected
       setSelectedFile(file);
       setError("");
+      if (e.target) e.target.value = ''; // Clear file input AFTER setting state
     }
   };
 
@@ -107,11 +144,18 @@ export default function CreatePage() {
       if(selectedFile) {
           setSelectedFile(null); // Clear file when text is entered
       }
+      setError(""); // Clear error on text change
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) { router.push("/login"); return; }
+    // Use the session from useAuth context
+    if (!user || !session) {
+        setError("Authentication session not found. Please log in again.");
+        toast({ title: "Authentication Error", variant: "destructive" });
+        router.push("/login");
+        return;
+    }
     if (!textContent.trim() && !selectedFile) {
       setError("Please provide text content or upload a file.");
       return;
@@ -123,9 +167,12 @@ export default function CreatePage() {
     try {
       let finalTextContent = textContent.trim();
 
+      // IMPORTANT: extractPdfText is CLIENT-SIDE, prefer server-side extraction
+      // If generate-quiz handles files, send the file. If not, extract here.
+      // Assuming /api/generate-quiz expects TEXT:
       if (selectedFile) {
         finalTextContent = selectedFile.type === "application/pdf"
-            ? await extractPdfText(selectedFile)
+            ? await extractPdfText(selectedFile) // Calls /api/parse-pdf
             : await selectedFile.text();
       }
 
@@ -140,22 +187,22 @@ export default function CreatePage() {
         immediateFeedback: String(quizSettings.immediateFeedback),
       });
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Authentication failed.");
+      // No need to call getSession again here
 
       const response = await fetch(`/api/generate-quiz?${queryParams}`, {
         method: "POST",
         headers: {
+          // Use the access token from the context's session object
           'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'text/plain',
+          'Content-Type': 'text/plain', // Send as plain text
         },
-        body: finalTextContent,
+        body: finalTextContent, // Send the extracted text
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "An unknown error occurred.");
+        throw new Error(result.error || "An unknown error occurred during quiz generation.");
       }
 
       toast({
@@ -163,15 +210,16 @@ export default function CreatePage() {
         description: `Your new quiz "${result.title}" has been created.`,
       });
 
-      router.push(`/dashboard`);
+      router.push(`/dashboard`); // Redirect to dashboard on success
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
-      setError(errorMessage);
       toast({
         title: "Generation Failed",
         description: errorMessage,
         variant: "destructive",
       });
+      // Set error state *after* toast
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +229,10 @@ export default function CreatePage() {
     setQuizSettings((prev) => ({ ...prev, [key]: value }));
   };
 
-  if (loading || !user) {
+  // Combine loading states
+  const isProcessing = isLoading || isFetchingDoc;
+
+  if (loading) { // Only show full page loader for initial auth check
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -189,21 +240,25 @@ export default function CreatePage() {
     );
   }
 
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
         <DashboardHeader />
         <main className="container mx-auto px-4 py-8 md:py-12">
-            <Button variant="ghost" className="mb-6" onClick={() => router.back()}>
+            {/* Back Button */}
+            <Button variant="ghost" className="mb-6" onClick={() => router.back()} disabled={isProcessing}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Dashboard
+                 Back
             </Button>
+            {/* Main Card */}
             <Card className="max-w-3xl mx-auto">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold">Create a New Quiz</CardTitle>
-                    <CardDescription>Provide your content and configure the settings for your new quiz.</CardDescription>
+                    <CardDescription>Provide content and configure settings for your quiz.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Text Input */}
                         <div className="space-y-2">
                             <Label htmlFor="content" className="text-base font-semibold">
                                 Option 1: Paste Your Content
@@ -214,54 +269,61 @@ export default function CreatePage() {
                                 value={textContent}
                                 onChange={handleTextChange}
                                 className="min-h-48 text-base"
-                                disabled={isLoading}
+                                disabled={isProcessing} // Use combined state
                             />
+                             {isFetchingDoc && ( // Show loader inside textarea when fetching doc
+                                <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                                </div>
+                             )}
                         </div>
 
+                        {/* OR Separator */}
                         <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <span className="w-full border-t" />
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="bg-card px-2 text-muted-foreground">OR</span>
-                            </div>
+                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                            <div className="relative flex justify-center text-sm"><span className="bg-card px-2 text-muted-foreground">OR</span></div>
                         </div>
 
+                        {/* File Input */}
                         <div className="space-y-3">
                             <Label htmlFor="file-upload" className="text-base font-semibold">
                                 Option 2: Upload a File
                             </Label>
-                            <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-6 text-center">
+                             <div className={`relative border-2 border-dashed ${error && !selectedFile ? 'border-destructive' : 'border-slate-300 dark:border-slate-700'} rounded-lg p-6 text-center`}>
                                 <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
                                 <p className="mt-2 font-semibold">
                                   {selectedFile ? selectedFile.name : 'Drag & drop or click to upload'}
                                 </p>
                                 <p className="mt-1 text-xs text-muted-foreground">
                                   PDF or TXT only, max 3MB.
+                                  {selectedFile && ` (${formatFileSize(selectedFile.size)})`}
                                 </p>
                                 <Input
                                     id="file-upload"
                                     type="file"
-                                    accept=".pdf,.txt"
+                                    accept=".pdf,.txt,application/pdf,text/plain"
                                     onChange={handleFileChange}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                    disabled={isLoading}
+                                    disabled={isProcessing} // Use combined state
                                 />
                             </div>
                         </div>
 
+                        {/* Settings Collapsible */}
                         <Collapsible>
                             <CollapsibleTrigger asChild>
-                                <Button type="button" variant="outline" className="w-full">
+                                <Button type="button" variant="outline" className="w-full" disabled={isProcessing}>
                                     <Settings className="w-4 h-4 mr-2" />
                                     Quiz Settings
                                 </Button>
                             </CollapsibleTrigger>
                             <CollapsibleContent className="mt-4 space-y-4">
+                                {/* Settings fields remain the same */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Number of Questions */}
                                     <div className="space-y-2">
                                         <Label htmlFor="question-count">Number of Questions</Label>
-                                        <Select value={String(quizSettings.questionCount)} onValueChange={(v) => updateSetting("questionCount", Number(v))}>
+                                        <Select value={String(quizSettings.questionCount)} onValueChange={(v) => updateSetting("questionCount", Number(v))} disabled={isProcessing}>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="5">5</SelectItem>
@@ -270,9 +332,10 @@ export default function CreatePage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    {/* Difficulty */}
                                     <div className="space-y-2">
                                         <Label htmlFor="difficulty">Difficulty</Label>
-                                        <Select value={quizSettings.difficulty} onValueChange={(v: "easy" | "medium" | "hard") => updateSetting("difficulty", v)}>
+                                        <Select value={quizSettings.difficulty} onValueChange={(v: "easy" | "medium" | "hard") => updateSetting("difficulty", v)} disabled={isProcessing}>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="easy">Easy</SelectItem>
@@ -282,23 +345,25 @@ export default function CreatePage() {
                                         </Select>
                                     </div>
                                 </div>
+                                {/* Question Type */}
                                 <div className="space-y-2">
                                     <Label htmlFor="question-type">Question Type</Label>
-                                    <Select value={quizSettings.questionType} onValueChange={(v: QuestionType | 'MIXED') => updateSetting("questionType", v)}>
+                                     <Select value={quizSettings.questionType} onValueChange={(v: QuestionType | 'MIXED') => updateSetting("questionType", v)} disabled={isProcessing}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="MIXED">Mixed</SelectItem>
                                             <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
                                             <SelectItem value="TRUE_FALSE">True/False</SelectItem>
                                             <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
-                                            <SelectItem value="MATCHING">Matching</SelectItem>
+                                            {/* <SelectItem value="MATCHING">Matching</SelectItem> */} {/* Re-enable if API supports it reliably */}
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                {/* Immediate Feedback */}
                                 <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
                                     <div className="space-y-0.5">
-                                        <Label htmlFor="immediate-feedback">Immediate Feedback</Label>
-                                        <CardDescription>
+                                        <Label htmlFor="immediate-feedback" className={`${isProcessing ? 'opacity-50' : ''}`}>Immediate Feedback</Label>
+                                        <CardDescription className={`${isProcessing ? 'opacity-50' : ''}`}>
                                             Show correct answer after each question.
                                         </CardDescription>
                                     </div>
@@ -306,11 +371,13 @@ export default function CreatePage() {
                                         id="immediate-feedback"
                                         checked={quizSettings.immediateFeedback}
                                         onCheckedChange={(checked) => updateSetting("immediateFeedback", checked)}
+                                        disabled={isProcessing}
                                     />
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>
 
+                        {/* Error Display */}
                         {error && (
                             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -318,14 +385,15 @@ export default function CreatePage() {
                             </div>
                         )}
 
+                        {/* Submit Button */}
                         <Button
                             type="submit"
                             size="lg"
                             className="w-full text-base"
-                            disabled={isLoading || (!textContent.trim() && !selectedFile)}
+                            disabled={isProcessing || (!textContent.trim() && !selectedFile)}
                         >
-                            {isLoading ? (
-                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Generating Your Quiz...</>
+                            {isProcessing ? ( // Use combined loading state
+                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {isFetchingDoc ? 'Loading Content...' : 'Generating Quiz...'}</>
                             ) : (
                                 <><Sparkles className="w-5 h-5 mr-2" /> Generate Quiz</>
                             )}
