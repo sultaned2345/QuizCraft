@@ -1,87 +1,53 @@
 // src/app/(app)/dashboard/page.tsx
 
-import { Suspense } from 'react';
-import { Loader2 } from 'lucide-react';
-import { DashboardClientComponent } from './DashboardClientComponent'; // Import client component
-import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/getServerSession'; // Ensure helper exists
-import { Quiz } from '@/types/database'; // Base type
-
-export const dynamic = 'force-dynamic'; // Ensures the page is always dynamically rendered
-
-// Type for dashboard quiz list item
-interface DashboardQuiz extends Omit<Quiz, 'questions' | 'user_id' | 'immediate_feedback'> {
-  questionsCount: number;
-}
-// Type for paginated data structure
-interface PaginatedQuizzesData {
-    quizzes: DashboardQuiz[];
-    totalCount: number;
-    totalPages: number;
-    currentPage: number;
-}
-
-
-// --- Server-Side Data Fetching Function ---
+// --- Server-Side Data Fetching Function (SIMPLIFIED) ---
 async function getInitialQuizzes(userId: string, page: number = 1, limit: number = 9): Promise<PaginatedQuizzesData> {
-    console.log("--- Dashboard Fetching for User ID:", userId); // Keep log
-    const skip = (page - 1) * limit;
+    console.log("--- Dashboard Fetching for User ID (SIMPLIFIED):", userId); // Keep log
+    // const skip = (page - 1) * limit; // Not using pagination for now
     try {
-        const [quizzesData, totalCount] = await prisma.$transaction([
-            prisma.quiz.findMany({
-                where: { userId: userId }, // Prisma schema uses userId
-                select: {
-                    id: true, title: true, createdAt: true, is_public: true, share_link: true, // Use schema field names
-                    _count: { select: { questions: true } }
-                },
-                // --- FIX HERE: Use correct casing for 'createdAt' ---
-                orderBy: { createdAt: 'desc' }, // Use schema field name 'createdAt'
-                take: limit,
-                skip: skip,
-            }),
-            prisma.quiz.count({
-                where: { userId: userId }, // Prisma schema uses userId
-            }),
-        ]);
+        // --- SIMPLIFIED QUERY ---
+        // Fetch ALL quizzes for the user with minimal data first
+        const allQuizzesForUser = await prisma.quiz.findMany({
+            where: { userId: userId }, // Prisma schema uses userId
+            // No select, no orderBy, no take, no skip for now
+            include: { // Include questions temporarily to get count
+                _count: {
+                    select: { questions: true }
+                }
+            }
+        });
 
-        // Map data, ensuring correct field names from the query result
-        const quizzes = quizzesData.map(q => ({
+        // Log the raw result count
+        console.log(`--- Found ${allQuizzesForUser.length} raw quizzes for user ${userId} in DB`);
+
+        // Manually handle pagination after fetching all (less efficient, but for debugging)
+        const totalCount = allQuizzesForUser.length;
+        const totalPages = Math.ceil(totalCount / limit);
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedQuizzesData = allQuizzesForUser.slice(startIndex, endIndex);
+
+        // Map the paginated data
+        const quizzes = paginatedQuizzesData.map(q => ({
             id: q.id,
             title: q.title,
             share_link: q.share_link ?? null,
-            created_at: q.createdAt?.toISOString() || '', // Use 'createdAt' from query result
+            created_at: q.createdAt?.toISOString() || '', // Use 'createdAt' from schema
             is_public: q.is_public ?? false,
-            questionsCount: q._count.questions,
+            questionsCount: q._count?.questions ?? 0, // Safely access count
         }));
 
-        const totalPages = Math.ceil(totalCount / limit);
+        console.log(`--- Returning ${quizzes.length} quizzes for page ${page}`);
 
         return { quizzes, totalCount, totalPages, currentPage: page };
 
     } catch (error: any) {
-        console.error(`Error fetching initial dashboard quizzes for user ${userId}:`, error);
+        console.error(`Error fetching initial dashboard quizzes (SIMPLIFIED) for user ${userId}:`, error);
         // Return default/empty state on error
         return { quizzes: [], totalCount: 0, totalPages: 0, currentPage: 1 };
     }
 }
 
-
 // --- The Page Component (Server Component) ---
-export default async function DashboardPage() {
-    const session = await getServerSession();
-
-    if (!session?.user) {
-         return <div>Please log in.</div>; // Placeholder
-    }
-
-    console.log("--- Dashboard Page Got Session User ID:", session.user.id); // Keep log
-    // Fetch initial data on the server
-    const initialQuizzesData = await getInitialQuizzes(session.user.id, 1, 9);
-
-    return (
-        <Suspense fallback={<div className="flex h-[calc(100vh-8rem)] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div>}>
-            {/* Render the Client Component */}
-            <DashboardClientComponent initialData={initialQuizzesData} />
-        </Suspense>
-    );
-}
+// (No changes needed below this line in this file)
+// ... rest of the file ...
