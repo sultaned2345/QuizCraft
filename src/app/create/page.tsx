@@ -193,15 +193,17 @@ export default function CreatePage() {
         body: finalTextContent,
       });
 
-      const result: ApiResponse<{ id: string; title: string }> = await response.json(); // Added success flag check
+      // Type the result loosely for now, as backend structure differs from ApiResponse<T>
+      const result: { success?: boolean; error?: string; id?: string; title?: string } = await response.json();
 
-      if (!response.ok || !result.success || !result.data?.id) { // Check success flag and data presence
+      // Check if response is NOT ok OR if the result object explicitly has success: false OR if the ID is missing on success
+      if (!response.ok || result.success === false || !result.id) {
         throw new Error(result.error || "An unknown error occurred during quiz generation.");
       }
 
       toast({
         title: "Quiz Generated!",
-        description: `Your new quiz "${result.data.title}" has been created.`,
+        description: `Your new quiz "${result.title}" has been created.`, // Access title directly
       });
 
       // --- CHANGE HERE: Use window.location.href for full reload ---
