@@ -135,7 +135,7 @@ export default function CreatePage() {
       setTextContent(""); // Clear text content when a file is selected
       setSelectedFile(file);
       setError("");
-      if (e.target) e.target.value = ''; // Clear file input AFTER setting state
+      // Don't clear e.target.value here immediately, let browser handle display
     }
   };
 
@@ -201,7 +201,7 @@ export default function CreatePage() {
 
       const result = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !result.success) { // Check success flag from API response
         throw new Error(result.error || "An unknown error occurred during quiz generation.");
       }
 
@@ -211,6 +211,8 @@ export default function CreatePage() {
       });
 
       router.push(`/dashboard`); // Redirect to dashboard on success
+      router.refresh(); // <-- ADDED THIS LINE TO REFRESH DASHBOARD DATA
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
       toast({
@@ -259,7 +261,7 @@ export default function CreatePage() {
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Text Input */}
-                        <div className="space-y-2">
+                        <div className="space-y-2 relative"> {/* Added relative positioning */}
                             <Label htmlFor="content" className="text-base font-semibold">
                                 Option 1: Paste Your Content
                             </Label>
@@ -272,7 +274,7 @@ export default function CreatePage() {
                                 disabled={isProcessing} // Use combined state
                             />
                              {isFetchingDoc && ( // Show loader inside textarea when fetching doc
-                                <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                                <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-md"> {/* Added rounded-md */}
                                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                                 </div>
                              )}
@@ -305,6 +307,8 @@ export default function CreatePage() {
                                     onChange={handleFileChange}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                     disabled={isProcessing} // Use combined state
+                                    // Reset value onClick to allow re-uploading the same file
+                                    onClick={(event) => (event.currentTarget.value = '')}
                                 />
                             </div>
                         </div>
