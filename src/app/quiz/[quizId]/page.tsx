@@ -10,10 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Share2, CheckCircle, XCircle, Loader2, RefreshCw, Eye, Sparkles, LogOut } from 'lucide-react'; // Added Sparkles, LogOut
+import { ArrowLeft, Share2, CheckCircle, XCircle, Loader2, RefreshCw, Eye, Sparkles, LogOut } from 'lucide-react';
 import { Quiz, Question } from '@/types/database';
 import { cn } from '@/lib/utils';
-import { ThemeToggle } from '@/components/theme-toggle'; // Added ThemeToggle import
+import { ThemeToggle } from '@/components/theme-toggle';
 
 // Define a type for storing user answers
 type UserAnswer = {
@@ -54,13 +54,13 @@ export default function QuizPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [fillInBlankAnswer, setFillInBlankAnswer] = useState('');
   const [isAnswered, setIsAnswered] = useState(false);
   const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-  
+
   // New state to manage the view: 'quiz', 'results', 'review'
   const [viewMode, setViewMode] = useState<'quiz' | 'results' | 'review'>('quiz');
 
@@ -77,26 +77,32 @@ export default function QuizPage() {
       return;
     }
     if (user && quizId) {
-      // Renamed inner function to avoid conflict
       const loadQuizData = async () => {
         setIsLoading(true);
-        setError('');
+        setError(''); // Clear previous errors
         try {
-          // Call the updated helper function
-          const quizData = await supabaseHelpers.getQuiz(quizId); // quizData can now be null
-    
-          // --- CHANGE HERE: Check if quizData is null ---
-          if (quizData && quizData.questions && quizData.questions.length > 0) {
+          const quizData = await supabaseHelpers.getQuiz(quizId); // Fetches quiz or null
+
+          // --- MODIFIED ERROR HANDLING ---
+          if (!quizData) {
+            // Case 1: Quiz not found OR user doesn't have permission (RLS returned no rows)
+            setError('Quiz not found or you may not have permission to view it.');
+            setQuiz(null);
+            setQuestions([]);
+          } else if (!quizData.questions || quizData.questions.length === 0) {
+            // Case 2: Quiz found, but has no questions
+            setError('This quiz exists but has no questions yet.');
+            setQuiz(quizData); // Keep quiz data (like title) if needed
+            setQuestions([]);
+          } else {
+            // Case 3: Success - Quiz found with questions
             setQuiz(quizData);
             setQuestions(quizData.questions);
-          } else {
-            // If quizData is null OR has no questions, set an error
-            setError('Quiz not found, has no questions, or you may not have permission to view it.');
-            setQuiz(null); // Ensure quiz state is null
-            setQuestions([]); // Ensure questions state is empty
           }
-        } catch (err: any) { // Catch errors thrown by handleSupabaseError
-          console.error("Error fetching quiz data:", err); // Log the actual error
+          // --- END MODIFIED ERROR HANDLING ---
+
+        } catch (err: any) { // Catch errors thrown by handleSupabaseError within getQuiz
+          console.error("Error fetching quiz data:", err);
           setError(err.message || 'An unexpected error occurred while fetching the quiz.');
           setQuiz(null);
           setQuestions([]);
@@ -105,10 +111,10 @@ export default function QuizPage() {
         }
       };
 
-      loadQuizData(); // Call the fetch function
+      loadQuizData();
     }
-  }, [user, authLoading, quizId, router]); // Dependencies
-  
+  }, [user, authLoading, quizId, router]); // Keep dependencies
+
   const handleAnswerSelect = (answer: string) => {
     if (isAnswered) return;
     const currentQuestion = questions[currentQuestionIndex];
@@ -201,16 +207,19 @@ export default function QuizPage() {
         return <p>Unsupported question type: {question.question_type}</p>;
     }
   };
-  
-  // --- ADJUSTED RENDER LOGIC ---
-  if (isLoading || authLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
-  // Explicitly render error state if an error occurred during fetch
+  // --- ADJUSTED RENDER LOGIC ---
+  if (isLoading || authLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
+
+  // Render error message if 'error' state is set
   if (error) {
        return (
            <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
                <DashboardHeader />
                <main className="container mx-auto px-4 py-8 md:py-12 text-center">
+                    {/* Display the specific error message */}
                     <p className="text-destructive font-semibold">{error}</p>
                     <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard')}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -220,12 +229,14 @@ export default function QuizPage() {
            </div>
        );
    }
-   
-   // If no error, but quiz is still null (e.g., initial state before fetch completes, though loading check should catch this)
+
+   // If no error, but quiz is still null (shouldn't happen often with the new logic, but good failsafe)
    if (!quiz) {
        return (
             <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" /> {/* Show loader as fallback */}
+                {/* Fallback error or loader if quiz is unexpectedly null without an error state */}
+                 <p>Could not load quiz data.</p>
+                {/* <Loader2 className="h-8 w-8 animate-spin" /> Show loader as fallback */}
             </div>
        );
    }
@@ -249,18 +260,20 @@ export default function QuizPage() {
             {viewMode === 'quiz' && (
                 <>
                     <CardDescription>
-                        Question {currentQuestionIndex + 1} of {questions.length}
+                        {/* Ensure questions.length is checked before division */}
+                        Question {currentQuestionIndex + 1} of {questions.length > 0 ? questions.length : 0}
                     </CardDescription>
-                    <Progress value={((currentQuestionIndex + 1) / questions.length) * 100} className="mt-2" />
+                    {/* Prevent division by zero if questions.length is 0 */}
+                    <Progress value={questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0} className="mt-2" />
                 </>
             )}
           </CardHeader>
           <CardContent>
-            {viewMode === 'quiz' && questions.length > 0 && currentQuestion && ( // Check currentQuestion
+             {/* Handle quiz view */}
+            {viewMode === 'quiz' && questions.length > 0 && currentQuestion && (
               <div>
-                <div className="text-lg font-semibold mb-4" 
-                     // Handle FILL_IN_THE_BLANK question text rendering here if not in renderQuestion
-                     dangerouslySetInnerHTML={ currentQuestion.question_type === 'FILL_IN_THE_BLANK' 
+                <div className="text-lg font-semibold mb-4"
+                     dangerouslySetInnerHTML={ currentQuestion.question_type === 'FILL_IN_THE_BLANK'
                         ? { __html: currentQuestion.question_text.replace(/____/g, '<strong>[BLANK]</strong>') }
                         : undefined
                      }
@@ -292,32 +305,37 @@ export default function QuizPage() {
                 )}
               </div>
             )}
-             {viewMode === 'quiz' && questions.length === 0 && ( // Handle empty quiz
+
+            {/* Handle empty quiz (when quiz loaded but questions are empty) */}
+             {viewMode === 'quiz' && questions.length === 0 && (
                 <div className="text-center text-muted-foreground">
-                    <p>This quiz has no questions.</p>
+                    <p>This quiz currently has no questions.</p>
+                    {/* Optional: Add button to go back or edit */}
+                     {/* <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard')}>Back to Dashboard</Button> */}
                 </div>
              )}
 
-
+            {/* Handle results view */}
             {viewMode === 'results' && (
               <div className="text-center">
                 <h2 className="text-xl font-semibold">Quiz Complete!</h2>
                 <p className="text-6xl font-bold my-4">
-                  {score} / {questions.length}
+                  {score} / {questions.length > 0 ? questions.length : 0} {/* Avoid division by zero */}
                 </p>
                 <div className="flex justify-center gap-2">
                     <Button onClick={handleRestartQuiz}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Try Again
                     </Button>
-                    <Button variant="outline" onClick={() => setViewMode('review')}>
+                    <Button variant="outline" onClick={() => setViewMode('review')} disabled={questions.length === 0}> {/* Disable review if no questions */}
                         <Eye className="w-4 h-4 mr-2" />
                         Review Answers
                     </Button>
                 </div>
               </div>
             )}
-            
+
+            {/* Handle review view */}
             {viewMode === 'review' && (
                 <div className="space-y-6">
                     <h2 className="text-xl font-semibold text-center">Review Your Answers</h2>
@@ -326,11 +344,11 @@ export default function QuizPage() {
                         const isCorrect = userAnswer?.isCorrect;
                         return (
                             <div key={q.id} className={cn("p-4 rounded-lg border", isCorrect ? "border-green-500/50 bg-green-500/5" : "border-destructive/50 bg-destructive/5")}>
-                                <p className="font-semibold">{index + 1}. {q.question_text.replace(/____/g, `[${q.correct_answer}]`)}</p> {/* Show answer in fill-in-blank */}
+                                <p className="font-semibold">{index + 1}. {q.question_text.replace(/____/g, `[${q.correct_answer}]`)}</p>
                                 <p className={cn("mt-2 text-sm", isCorrect ? "text-green-700 dark:text-green-400" : "text-destructive")}>
                                     Your answer: {userAnswer?.selectedAnswer || "Not answered"}
                                 </p>
-                                {!isCorrect && q.question_type !== 'FILL_IN_THE_BLANK' && ( // Don't repeat correct answer if already shown
+                                {!isCorrect && q.question_type !== 'FILL_IN_THE_BLANK' && (
                                     <p className="mt-1 text-sm text-green-700 dark:text-green-400">
                                         Correct answer: {q.correct_answer}
                                     </p>
