@@ -2,10 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session, SupabaseClient } from '@supabase/supabase-js';
-// Import the browser client creator from the SSR package
-import { createBrowserClient } from '@supabase/ssr';
-// We no longer need the old client from @/lib/supabase
-// import { supabase } from '@/lib/supabase';
+// Import the shared browser client
+import { supabase } from '@/lib/supabaseClient';
 import { Database } from '@/types/database'; // Make sure this path is correct
 
 interface AuthContextType {
@@ -22,13 +20,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// --- Create the SSR-compatible browser client ---
-// We create it once here at the module level.
-// This is safe because this file is marked 'use client'.
-const supabase = createBrowserClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// --- We no longer create a client here, we import it ---
+// const supabase = createBrowserClient<Database>(...) // <-- REMOVED
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -36,14 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session *using the new client*
+    // Get initial session *using the shared client*
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes *using the new client*
+    // Listen for auth changes *using the shared client*
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -55,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []); // No dependency on 'supabase' as it's defined outside
 
-  // All auth methods below now use the SSR-compatible 'supabase' client
+  // All auth methods below now use the imported, shared 'supabase' client
 
   const signUp = async (email: string, password: string) => {
     try {

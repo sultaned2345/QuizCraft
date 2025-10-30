@@ -2,18 +2,18 @@
 import { createClient, PostgrestError } from '@supabase/supabase-js';
 import { Database, Note, Quiz, Question, User } from '@/types/database';
 import { prisma } from '@/lib/prisma'; // Import Prisma
+// --- IMPORT THE SHARED CLIENT ---
+import { supabase } from '@/lib/supabaseClient'; 
 
-// --- Supabase Client Initialization (Keep global client) ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// --- REMOVE THE OLD CLIENT CREATION ---
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!; // <-- REMOVED
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // <-- REMOVED
+// if (!supabaseUrl || !supabaseAnonKey) { // <-- REMOVED
+//   throw new Error("Supabase URL or Anon Key is missing in environment variables.");
+// }
+// export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey); // <-- REMOVED
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase URL or Anon Key is missing in environment variables.");
-}
-
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
-
-// --- Error Handling Helper ---
+// --- Error Handling Helper (Keep) ---
 function handleSupabaseError(error: PostgrestError | null, context: string): void {
   if (error) {
     console.error(`Supabase error during ${context}:`, {
@@ -28,11 +28,12 @@ function handleSupabaseError(error: PostgrestError | null, context: string): voi
 
 /**
  * A collection of helper functions.
+ * All functions here will now use the shared, imported 'supabase' client.
  */
 export const supabaseHelpers = {
   // --- User Operations ---
   async getUserWithPlan(userId: string): Promise<(User & { subscription_plan: 'free' | 'pro' }) | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabase // <-- Uses shared client
       .from('profiles')
       .select('id, email, created_at, subscription_plan')
       .eq('id', userId)
@@ -43,7 +44,6 @@ export const supabaseHelpers = {
     if (!data) {
         console.warn(`No profile found for user ${userId}, assuming 'free' plan.`);
          try {
-             // This might require an admin client if RLS is strict
              const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
              if (authError || !authUser?.user) throw authError || new Error('User not found');
              return {
@@ -61,10 +61,9 @@ export const supabaseHelpers = {
     return { ...data, subscription_plan: plan } as (User & { subscription_plan: 'free' | 'pro' });
   },
 
-  // --- Quiz Operations (Legacy - Dashboard uses Server Components) ---
-  // This function is still used by the /dashboard page (client component) for delete
+  // --- Quiz Operations ---
   async getQuizzes(userId: string): Promise<(Quiz & { questions: Question[] })[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabase // <-- Uses shared client
       .from('quizzes')
       .select('*, questions(*)')
       .eq('user_id', userId)
@@ -76,53 +75,47 @@ export const supabaseHelpers = {
 
   // UPDATED getQuiz function with debugging
   async getQuiz(quizId: string): Promise<(Quiz & { questions: Question[] }) | null> {
-    console.log(`[supabaseHelpers.getQuiz] Attempting to fetch quiz with ID: ${quizId}`); // Log the ID being used
+    console.log(`[supabaseHelpers.getQuiz] Attempting to fetch quiz with ID: ${quizId}`);
 
-    // Log session state from the global client instance just before the query
+    // Log session state from the shared client instance just before the query
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     if(sessionError){
         console.error('[supabaseHelpers.getQuiz] Error getting session before query:', sessionError);
     }
     console.log('[supabaseHelpers.getQuiz] Session state before query:', {
         hasSession: !!sessionData.session,
-        userId: sessionData.session?.user?.id // Log the user ID from the session perspective
+        userId: sessionData.session?.user?.id
     });
 
-    // Ensure quizId is potentially valid before querying
-    if (!quizId || typeof quizId !== 'string' || quizId.length < 10) { // Basic sanity check
+    if (!quizId || typeof quizId !== 'string' || quizId.length < 10) {
         console.warn(`[supabaseHelpers.getQuiz] Invalid quizId provided: ${quizId}`);
         return null;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase // <-- Uses shared client
       .from('quizzes')
       .select('*, questions(*)')
       .eq('id', quizId)
-      .maybeSingle(); // Use maybeSingle()
+      .maybeSingle(); 
 
-    // Log the raw Supabase response (cleaner output)
     console.log(`[supabaseHelpers.getQuiz] Supabase response for ID ${quizId}:`, { data: data ? `Quiz found (Title: ${data.title})` : null , error: error });
 
-    // Handle potential errors (but not the '0 rows' case for maybeSingle)
     if (error && error.code !== 'PGRST116') {
          console.error(`[supabaseHelpers.getQuiz] Supabase error (excluding 'not found'):`, error);
-         // Optionally, re-throw or handle specific errors differently
-         handleSupabaseError(error, `fetching quiz ${quizId}`); // This will throw
+         handleSupabaseError(error, `fetching quiz ${quizId}`);
     }
 
-    // Log whether data was found before returning
     if (data) {
         console.log(`[supabaseHelpers.getQuiz] Found quiz data for ID ${quizId}.`);
     } else {
         console.log(`[supabaseHelpers.getQuiz] No quiz data found for ID ${quizId} (or RLS prevented access).`);
     }
 
-    return data; // Returns the quiz object or null
+    return data;
   },
 
-  // This is used by the /dashboard page
   async deleteQuiz(quizId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabase // <-- Uses shared client
       .from('quizzes')
       .delete()
       .eq('id', quizId);
@@ -130,9 +123,9 @@ export const supabaseHelpers = {
     handleSupabaseError(error, `deleting quiz ${quizId}`);
   },
 
-  // --- Notes Operations (Legacy - AI Tutor uses this) ---
+  // --- Notes Operations ---
   async getNotes(userId: string): Promise<Note[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabase // <-- Uses shared client
       .from('notes')
       .select('*')
       .eq('user_id', userId)
@@ -142,14 +135,10 @@ export const supabaseHelpers = {
     return data || [];
   },
 
-  // --- AI Usage Operations (Using Supabase Client) ---
-
-  /**
-   * Gets the total count of AI generations recorded for a user (across all time).
-   */
+  // --- AI Usage Operations ---
   async getAIGenerationCount(userId: string): Promise<number> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase // <-- Uses shared client
         .from('ai_usage')
         .select('usage_count')
         .eq('user_id', userId);
@@ -162,19 +151,16 @@ export const supabaseHelpers = {
 
     } catch (error) {
       console.error('Error getting total AI generation count:', error);
-      return 0; // Return 0 on failure
+      return 0;
     }
   },
 
-  /**
-   * Retrieves the AI generation usage count for a user within a specific calendar month.
-   */
   async getAIGenerationUsageForMonth(userId: string, month: Date): Promise<number> {
     const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1))
-        .toISOString().split('T')[0]; // Format 'YYYY-MM-DD'
+        .toISOString().split('T')[0];
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabase // <-- Uses shared client
             .from('ai_usage')
             .select('usage_count')
             .eq('user_id', userId)
@@ -184,25 +170,14 @@ export const supabaseHelpers = {
         if (error && error.code !== 'PGRST116') {
             handleSupabaseError(error, `fetching AI generation usage for user ${userId} month ${firstDayOfMonth}`);
         }
-        return data?.usage_count ?? 0; // Return count or 0 if no record
+        return data?.usage_count ?? 0;
 
     } catch (error) {
         console.error(`Error getting AI generation usage for month ${firstDayOfMonth}:`, error);
-        return 0; // Return 0 on failure
+        return 0;
     }
   },
 
-
-  /**
-   * Increments the AI generation usage count for a user for a specific month.
-   * Performs an UPSERT operation directly using the Supabase JS client.
-   * Requires the user's accessToken to ensure RLS policies are met.
-   * @param userId The UUID of the user.
-   * @param month A Date object representing any day within the target month.
-   * @param accessToken The user's Supabase JWT access token.
-   * @param count The positive integer value to increment the usage by (defaults to 1).
-   * @throws {Error} If the upsert operation fails or accessToken is missing.
-   */
   async incrementAIGenerationUsage(userId: string, month: Date, accessToken: string | undefined | null, count: number = 1): Promise<void> {
     if (!accessToken) {
         console.error("incrementAIGenerationUsage called without an accessToken.");
@@ -214,24 +189,24 @@ export const supabaseHelpers = {
     }
 
     const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1))
-        .toISOString().split('T')[0]; // Format 'YYYY-MM-DD'
+        .toISOString().split('T')[0];
 
-    // Create a temporary client authenticated as the specific user
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    // --- Re-fetching the original supabaseUrl and supabaseAnonKey for this specific function ---
+    const supabaseUrl_for_increment = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey_for_increment = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const userSupabase = createClient<Database>(supabaseUrl_for_increment, supabaseAnonKey_for_increment, {
         global: { headers: { Authorization: `Bearer ${accessToken}` } }
     });
 
-    // --- Perform UPSERT directly ---
     try {
-        // Fetch the current count for the specific user and month first
         const { data: currentUsage, error: fetchError } = await userSupabase
             .from('ai_usage')
             .select('usage_count')
             .eq('user_id', userId)
             .eq('usage_month', firstDayOfMonth)
-            .maybeSingle(); // Use maybeSingle to handle no existing row
+            .maybeSingle();
 
-        // Pass error to handler (will throw if it's not a 'no rows' error)
         if (fetchError && fetchError.code !== 'PGRST116') {
              handleSupabaseError(fetchError, `fetching current AI usage for user ${userId} month ${firstDayOfMonth}`);
         }
@@ -239,30 +214,25 @@ export const supabaseHelpers = {
         const currentCount = currentUsage?.usage_count ?? 0;
         const newCount = currentCount + count;
 
-        // Perform the upsert operation
         const { error: upsertError } = await userSupabase
             .from('ai_usage')
             .upsert(
                 {
-                    user_id: userId, // Must provide user_id explicitly for RLS
+                    user_id: userId,
                     usage_month: firstDayOfMonth,
                     usage_count: newCount,
-                    updated_at: new Date().toISOString(), // Manually set updated_at
+                    updated_at: new Date().toISOString(),
                 },
                 {
-                    onConflict: 'user_id, usage_month', // Specify conflict columns
+                    onConflict: 'user_id, usage_month',
                 }
             );
 
-        // Explicitly check for upsert error and pass to handler
         handleSupabaseError(upsertError, `upserting AI usage for user ${userId} month ${firstDayOfMonth}`);
-
         console.log(`Successfully updated AI usage for ${userId} in ${firstDayOfMonth} to ${newCount}.`);
 
     } catch (error) {
-        // Errors from handleSupabaseError or client creation will be caught here
         console.error(`Error during AI usage increment logic for user ${userId}:`, error);
-        // Re-throw the original error
         throw error;
     }
   },

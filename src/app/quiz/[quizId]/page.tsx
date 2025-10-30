@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // <-- FIX: Added useCallback here
+import { useState, useEffect, useCallback } from 'react'; // <-- FIX: useCallback is now imported
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
