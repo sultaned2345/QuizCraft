@@ -9,7 +9,7 @@ echo Committing changes...
 git commit -m "Auto-commit: %date% %time%"
 
 echo Pushing to repository...
-git push origin Quizcraft
+git push 
 
 if %errorlevel% equ 0 (
     echo ✅ Successfully pushed to repository!

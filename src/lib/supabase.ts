@@ -74,21 +74,49 @@ export const supabaseHelpers = {
     return data || [];
   },
 
-  // This function is used by the /quiz/[quizId] page
-  async getQuiz(quizId: string): Promise<(Quiz & { questions: Question[] }) | null> { // <-- Return type can now be null
+  // UPDATED getQuiz function with debugging
+  async getQuiz(quizId: string): Promise<(Quiz & { questions: Question[] }) | null> {
+    console.log(`[supabaseHelpers.getQuiz] Attempting to fetch quiz with ID: ${quizId}`); // Log the ID being used
+
+    // Log session state from the global client instance just before the query
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if(sessionError){
+        console.error('[supabaseHelpers.getQuiz] Error getting session before query:', sessionError);
+    }
+    console.log('[supabaseHelpers.getQuiz] Session state before query:', {
+        hasSession: !!sessionData.session,
+        userId: sessionData.session?.user?.id // Log the user ID from the session perspective
+    });
+
+    // Ensure quizId is potentially valid before querying
+    if (!quizId || typeof quizId !== 'string' || quizId.length < 10) { // Basic sanity check
+        console.warn(`[supabaseHelpers.getQuiz] Invalid quizId provided: ${quizId}`);
+        return null;
+    }
+
     const { data, error } = await supabase
       .from('quizzes')
       .select('*, questions(*)')
       .eq('id', quizId)
-      // --- CHANGE HERE ---
-      .maybeSingle(); // Use maybeSingle() instead of single()
+      .maybeSingle(); // Use maybeSingle()
 
-    // Error handling needs adjustment for maybeSingle:
-    // PGRST116 (0 rows) is NOT an error for maybeSingle, it returns data: null
+    // Log the raw Supabase response (cleaner output)
+    console.log(`[supabaseHelpers.getQuiz] Supabase response for ID ${quizId}:`, { data: data ? `Quiz found (Title: ${data.title})` : null , error: error });
+
+    // Handle potential errors (but not the '0 rows' case for maybeSingle)
     if (error && error.code !== 'PGRST116') {
-         handleSupabaseError(error, `fetching quiz ${quizId}`);
+         console.error(`[supabaseHelpers.getQuiz] Supabase error (excluding 'not found'):`, error);
+         // Optionally, re-throw or handle specific errors differently
+         handleSupabaseError(error, `fetching quiz ${quizId}`); // This will throw
     }
-    // No need to throw if data is null here, let the caller handle it.
+
+    // Log whether data was found before returning
+    if (data) {
+        console.log(`[supabaseHelpers.getQuiz] Found quiz data for ID ${quizId}.`);
+    } else {
+        console.log(`[supabaseHelpers.getQuiz] No quiz data found for ID ${quizId} (or RLS prevented access).`);
+    }
+
     return data; // Returns the quiz object or null
   },
 
