@@ -1,5 +1,5 @@
 // components/ui/input.tsx
-'use client' // <-- ADD THIS LINE
+'use client'; // <-- ADD THIS LINE
 
 import * as React from 'react'
 
