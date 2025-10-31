@@ -102,6 +102,28 @@ CREATE TABLE IF NOT EXISTS public.graded_essays (
     graded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Creates the table to store quiz attempts
+CREATE TABLE IF NOT EXISTS public.quiz_attempts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  quiz_id UUID NOT NULL REFERENCES public.quizzes(id) ON DELETE CASCADE,
+  score INTEGER NOT NULL,
+  total INTEGER NOT NULL, -- Total questions in the quiz at time of attempt
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Adds indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_id ON public.quiz_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_id ON public.quiz_attempts(quiz_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.quiz_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS Policies
+DROP POLICY IF EXISTS "Users can manage their own quiz attempts" ON public.quiz_attempts;
+CREATE POLICY "Users can manage their own quiz attempts" ON public.quiz_attempts
+    FOR ALL USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
 -- -----------------------------------------------------------------------------
 -- Step 2: Create Indexes for Performance

@@ -74,7 +74,11 @@ export default function EditQuizPage() {
           // but an extra client-side check is good practice.
           // This assumes `getQuiz` returns null if RLS fails.
           // Let's add an explicit ownership check based on your old code:
-          if (quiz.userId !== user.id) { 
+          
+          // --- THIS IS THE FIX ---
+          // Changed quiz.userId to quiz.user_id
+          if (quiz.user_id !== user.id) { 
+          // --- END OF FIX ---
             toast({ title: "Access Denied", description: "You don't have permission to edit this quiz.", variant: "destructive" });
             router.push('/dashboard');
             return;
@@ -124,7 +128,7 @@ export default function EditQuizPage() {
       options: ["Option 1", "Option 2", "Option 3", "Option 4"],
       correct_answer: "Option 1",
       explanation: "",
-      createdAt: new Date().toISOString(), // This won't be saved, but good for consistency
+      created_at: new Date().toISOString(), // This won't be saved, but good for consistency
       prompts: null
     };
     setQuestions([...questions, newQuestion]);
