@@ -1,3 +1,6 @@
+// components/ui/textarea.tsx
+'use client' // <-- THIS IS THE FIX
+
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
