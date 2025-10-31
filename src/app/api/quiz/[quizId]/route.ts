@@ -99,4 +99,71 @@ export async function PUT(
 
     return NextResponse.json({ success: false, error: 'An internal server error occurred.' }, { status: 500 });
   }
-}
+} // <-- The PUT function ends here
+
+// --- The DELETE function starts here, *after* the PUT function ---
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { quizId: string } }
+) {
+  try {
+    const user = await requireAuth(request);
+    const { quizId } = params;
+
+    if (!quizId) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Quiz ID is required." },
+        { status: 400 }
+      );
+    }
+
+    // --- Secure Deletion using Prisma ---
+    // We use deleteMany which allows a compound `where` clause.
+    // This ensures we only delete the quiz if the ID matches AND
+    // the quiz is owned by the currently authenticated user.
+    // The `onDelete: Cascade` in your schema.prisma will handle
+    // deleting all associated questions and quiz_attempts.
+    const deleteResult = await prisma.quiz.deleteMany({
+      where: {
+        id: quizId,
+        userId: user.id, // Ensures user can only delete their own quizzes
+      },
+    });
+
+    // Check if any quiz was actually deleted
+    if (deleteResult.count === 0) {
+      // This means no quiz matched both the ID and the user ID
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Quiz not found or access denied." },
+        { status: 404 }
+      );
+    }
+
+    // --- Success ---
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message: "Quiz deleted successfully.",
+    });
+  } catch (error) {
+    if (error instanceof Response) {
+      return error; // Handle requireAuth 401
+    }
+    
+    console.error("Error deleting quiz:", error);
+
+    // Handle specific Prisma errors, like an invalid UUID format
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2023') { // Invalid UUID
+          return NextResponse.json<ApiResponse>(
+            { success: false, error: "Invalid Quiz ID format." },
+            { status: 400 }
+          );
+      }
+    }
+
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: "An internal server error occurred." },
+      { status: 500 }
+    );
+  }
+} // <-- The DELETE function ends here
