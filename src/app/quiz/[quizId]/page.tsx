@@ -1,6 +1,7 @@
+// src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // <-- FIX: useCallback is now imported
+import { useState, useEffect, useCallback } from 'react'; // <-- MODIFICATION: Added useCallback
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,7 +64,8 @@ export default function QuizPage() {
 
   const [viewMode, setViewMode] = useState<'quiz' | 'results' | 'review'>('quiz');
 
-  const { user, loading: authLoading } = useAuth();
+  // --- MODIFICATION: Get 'session' from useAuth ---
+  const { user, loading: authLoading, session } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -132,6 +134,40 @@ export default function QuizPage() {
     }
   }, [user, authLoading, quizId, router, loadQuizData]); // Added loadQuizData to dependencies
 
+  // --- NEW FUNCTION: saveAttempt ---
+  const saveAttempt = async (score: number, total: number) => {
+    if (!session || !quizId) {
+      console.warn('No session or quizId, cannot save attempt.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/quiz/attempt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          quizId: quizId,
+          score: score,
+          total: total,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || 'Failed to save attempt');
+      }
+      
+      console.log('Quiz attempt saved successfully.');
+      
+    } catch (error) {
+      console.error('Error saving quiz attempt:', error);
+      // We won't show a toast for this, as it's a background task.
+    }
+  };
+
 
   const handleAnswerSelect = (answer: string) => {
     if (isAnswered) return;
@@ -151,6 +187,12 @@ export default function QuizPage() {
         setFillInBlankAnswer('');
         setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {
+        // --- MODIFICATION: Call saveAttempt here ---
+        const finalScore = userAnswers.filter(a => a.isCorrect).length;
+        if (questions.length > 0) {
+          saveAttempt(finalScore, questions.length);
+        }
+        // --- End Modification ---
         setViewMode('results');
     }
   };
@@ -318,7 +360,10 @@ export default function QuizPage() {
                         <p className="text-sm mt-1">Correct answer: {currentQuestion.correct_answer}</p>
                       </div>
                     )}
-                    <p className="mt-2 text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                    {/* Only show explanation if it's not empty */}
+                    {currentQuestion.explanation && (
+                      <p className="mt-2 text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                    )}
                     <Button className="mt-4 w-full" onClick={handleNextQuestion}>
                       {currentQuestionIndex < questions.length - 1 ? 'Next Question' : 'Finish Quiz'}
                     </Button>

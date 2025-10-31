@@ -16,7 +16,7 @@ datasource db {
 
 // Represents public user profile data, linked 1-to-1 with auth.users
 model profiles {
-  id                String    @id @db.Uuid // Primary key, references auth.users.id
+  id                String    @id @db.Uuid // 
   email             String    @unique
   subscription_plan String?   @default("free")
   created_at        DateTime? @default(now()) @db.Timestamptz(6)
@@ -28,7 +28,7 @@ model profiles {
   flashcard_decks flashcard_decks[]
   documents       documents[]
   graded_essays   graded_essays[] // Add relation to graded essays
-  // Removed ai_usage relation as it's not defined in the original schema provided
+  quiz_attempts   quiz_attempts[] // <-- ADD THIS LINE
 
   @@map("profiles")
   @@schema("public")
@@ -47,6 +47,7 @@ model Quiz {
   // Relationships
   questions questions[]
   profile   profiles? @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
+  attempts  quiz_attempts[] // <-- ADD THIS LINE
 
   @@map("quizzes")
   @@schema("public")
@@ -124,8 +125,8 @@ model documents {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id        String    @db.Uuid // Foreign key referencing profiles.id
   file_name      String
-  file_type      String    @db.VarChar(100) // Corrected from original file
-  file_size      BigInt?   // Corrected from Int in original file
+  file_type      String    @db.VarChar(100) // 
+  file_size      BigInt?
   storage_path   String    @unique // Store the path in Supabase Storage, ensure uniqueness
   extracted_text String?   @db.Text // Store extracted text
   created_at     DateTime? @default(now()) @db.Timestamptz(6)
@@ -145,7 +146,7 @@ model graded_essays {
   essay_content      String    @db.Text
   rubric_or_criteria String?   @db.Text
   feedback           Json?     @db.JsonB // Stores the structured feedback from AI
-  score              Int?      // Stores the overall numerical score
+  score              Int? // Stores the overall numerical score
   graded_at          DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relation to the user profile
@@ -154,6 +155,28 @@ model graded_essays {
   @@map("graded_essays")
   @@schema("public")
 }
+
+// --- ADD THIS NEW MODEL ---
+// Represents a user's attempt at a quiz
+model quiz_attempts {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  quiz_id    String    @db.Uuid
+  score      Int
+  total      Int // Total questions in the quiz at time of attempt
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  quiz    Quiz     @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([quiz_id])
+  @@map("quiz_attempts")
+  @@schema("public")
+}
+// --- END OF NEW MODEL ---
+
 
 // --- Auth Schema Models ---
 // Represents users in Supabase Authentication
@@ -280,34 +303,34 @@ model mfa_amr_claims {
 }
 
 model mfa_challenges {
-  id                   String      @id @db.Uuid
-  factor_id            String      @db.Uuid
-  created_at           DateTime    @db.Timestamptz(6)
-  verified_at          DateTime?   @db.Timestamptz(6)
-  ip_address           String      @db.Inet
-  otp_code             String?     // Added based on original schema
-  web_authn_session_data Json?     // Added based on original schema
-  mfa_factors          mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "mfa_challenges_auth_factor_id_fkey") // Map added
+  id                     String      @id @db.Uuid
+  factor_id              String      @db.Uuid
+  created_at             DateTime    @db.Timestamptz(6)
+  verified_at            DateTime?   @db.Timestamptz(6)
+  ip_address             String      @db.Inet
+  otp_code               String? // Added based on original schema
+  web_authn_session_data Json? // Added based on original schema
+  mfa_factors            mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "mfa_challenges_auth_factor_id_fkey") // Map added
 
   @@index([created_at(sort: Desc)], map: "mfa_challenge_created_at_idx")
   @@schema("auth")
 }
 
 model mfa_factors {
-  id                   String           @id @db.Uuid
-  user_id              String           @db.Uuid
-  friendly_name        String?
-  factor_type          factor_type      // Refers to enum below
-  status               factor_status    // Refers to enum below
-  created_at           DateTime         @db.Timestamptz(6)
-  updated_at           DateTime         @db.Timestamptz(6)
-  secret               String?
-  phone                String?          // Added based on original schema
-  last_challenged_at   DateTime?        @db.Timestamptz(6) // Removed @unique based on original
-  web_authn_credential Json?          // Added based on original schema
-  web_authn_aaguid     String?          @db.Uuid // Added based on original schema
-  mfa_challenges       mfa_challenges[]
-  users                users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                     String           @id @db.Uuid
+  user_id                String           @db.Uuid
+  friendly_name          String?
+  factor_type            factor_type      // Refers to enum below
+  status                 factor_status    // Refers to enum below
+  created_at             DateTime         @db.Timestamptz(6)
+  updated_at             DateTime         @db.Timestamptz(6)
+  secret                 String?
+  phone                  String? // Added based on original schema
+  last_challenged_at     DateTime?        @db.Timestamptz(6) // Removed @unique based on original
+  web_authn_credential   Json? // Added based on original schema
+  web_authn_aaguid       String?          @db.Uuid // Added based on original schema
+  mfa_challenges         mfa_challenges[]
+  users                  users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([friendly_name, user_id], map: "mfa_factors_user_id_friendly_name_unique") // Added based on original
   @@unique([user_id, phone], map: "unique_phone_factor_per_user") // Added based on original
@@ -421,7 +444,7 @@ model sessions {
   created_at     DateTime?        @db.Timestamptz(6)
   updated_at     DateTime?        @db.Timestamptz(6)
   factor_id      String?          @db.Uuid
-  aal            aal_level?       // Refers to enum below
+  aal            aal_level? // Refers to enum below
   not_after      DateTime?        @db.Timestamptz(6)
   refreshed_at   DateTime?        @db.Timestamp(6)
   user_agent     String?
@@ -452,7 +475,7 @@ model sso_domains {
 model sso_providers {
   id             String           @id @db.Uuid
   resource_id    String?
-  created_at     DateTime?        @db.Timestamptz(6)
+  created_at     DateTime?        @db.Timestamtzt(6)
   updated_at     DateTime?        @db.Timestamptz(6)
   disabled       Boolean?         @default(false)
   saml_providers saml_providers[]
