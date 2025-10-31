@@ -6,14 +6,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabaseHelpers } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // <-- MODIFIED: Added buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine } from 'lucide-react';
 import { Quiz, ApiResponse } from '@/types/database';
-import { Checkbox } from '@/components/ui/checkbox'; // <-- NEW IMPORT
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -22,9 +22,22 @@ import {
   DialogFooter,
   DialogDescription,
   DialogClose,
-} from '@/components/ui/dialog'; // <-- NEW IMPORT
-import { Input } from '@/components/ui/input'; // <-- NEW IMPORT
-import { Label } from '@/components/ui/label'; // <-- NEW IMPORT
+} from '@/components/ui/dialog';
+// --- NEW IMPORTS ---
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+// --- END NEW IMPORTS ---
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 
@@ -53,11 +66,14 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const quizzesPerPage = 9;
 
-  // --- NEW STATE for Combine Feature ---
+  // --- STATE for Combine Feature ---
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([]);
   const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
   const [newCombineTitle, setNewCombineTitle] = useState("");
   const [isCombining, setIsCombining] = useState(false);
+
+  // --- NEW STATE for Delete Feature ---
+  const [isDeleting, setIsDeleting] = useState(false);
   // ---
 
   const { user, session } = useAuth();
@@ -74,12 +90,9 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
     setNewCombineTitle("");
     setIsCombining(false);
     setIsCombineDialogOpen(false);
+    setIsDeleting(false); // Reset delete state
   };
   
-  // Note: We no longer need fetchMoreQuizzes or refreshFirstPage
-  // because router.refresh() handles updates.
-  // We'll keep fetchMoreQuizzes for the "Load More" button.
-
   // --- Fetch More Quizzes (Client-Side for Load More) ---
   const fetchMoreQuizzes = useCallback(async (page: number) => {
     if (!user || !session || isLoadingMore || page > totalPages) return;
@@ -124,22 +137,29 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
     toast({ title: "Link copied!", description: "Share link copied." });
   };
 
+  // --- MODIFIED: This function now *only* performs the deletion ---
+  // The 'confirm()' is removed and handled by the AlertDialog
   const handleDeleteQuiz = async (quizId: string) => {
-    if (!session) { toast({ title: "Error", description: "Not authenticated.", variant: "destructive" }); return; }
-    if (confirm("Delete this quiz permanently?")) {
-      try {
-         const response = await fetch(`/api/quiz/${quizId}`, {
-             method: 'DELETE',
-             headers: { 'Authorization': `Bearer ${session.access_token}` },
-         });
-         const result: ApiResponse = await response.json();
-         if (!result.success) throw new Error(result.error || "Failed to delete via API");
+    if (!session) { 
+      toast({ title: "Error", description: "Not authenticated.", variant: "destructive" }); 
+      return; 
+    }
+    
+    setIsDeleting(true); // Start loading
+    try {
+        const response = await fetch(`/api/quiz/${quizId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+        });
+        const result: ApiResponse = await response.json();
+        if (!result.success) throw new Error(result.error || "Failed to delete via API");
 
-        toast({ title: "Quiz deleted" });
-        refreshDashboard(); // <-- Use router.refresh()
-      } catch (error: any) {
-        toast({ title: "Error", description: error.message || "Failed to delete quiz.", variant: "destructive" });
-      }
+      toast({ title: "Quiz deleted" });
+      refreshDashboard(); // <-- Use router.refresh()
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete quiz.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false); // Stop loading
     }
   };
 
@@ -147,7 +167,7 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
     return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
-  // --- NEW HANDLER for Combine Feature ---
+  // --- HANDLER for Combine Feature ---
   const handleToggleSelectQuiz = (quizId: string) => {
     setSelectedQuizIds((prev) =>
       prev.includes(quizId)
@@ -216,7 +236,7 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
 
       {/* Grid or Empty State */}
       {quizzes.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed rounded-lg"> <FileQuestion className="mx-auto h-12 w-12 text-muted-foreground" /> <h3 className="mt-4 text-lg font-semibold">No Quizzes Found</h3> <p className="mt-1 text-sm text-muted-foreground">Get started by creating your first quiz.</p> <Button className="mt-6" asChild><Link href="/create"><Plus className="w-4 h-4 mr-2" />Create a Quiz</Link></Button> </div>
+        <div className="text-center py-16 border-2 border-dashed rounded-lg"> <FileQuestion className="mx-auto h-12 w-12 text-muted-foreground" /> <h3 className="mt-4 text-lg font-semibold">No Quizzes Found</h3> <p className="mt-1 text-sm text-muted-foreground">Get started by creating your first quiz.</p> <Button className="mt-6" asChild><Link href="/create"><Plus className="w-4 h-4 mr-2" />Create a Quiz</Link></Button> CodeBox</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {quizzes.map((quiz) => (
@@ -235,16 +255,56 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
                       <CardTitle className="text-lg">{quiz.title}</CardTitle>
                     </label>
                   </div>
-                  {/* Dropdown Menu */}
-                  <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}><FileQuestion className="w-4 h-4 mr-2" />View Quiz</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}><Edit className="w-4 h-4 mr-2" />Edit Quiz</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}><Copy className="w-4 h-4 mr-2" />Copy Link</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteQuiz(quiz.id)} className="text-destructive"><Trash2 className="w-4 h-4 mr-2" />Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                  </DropdownMenu>
+                  
+                  {/* --- MODIFICATION: Wrap Dropdown in AlertDialog --- */}
+                  <AlertDialog>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}><FileQuestion className="w-4 h-4 mr-2" />View Quiz</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}><Edit className="w-4 h-4 mr-2" />Edit Quiz</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}><Copy className="w-4 h-4 mr-2" />Copy Link</DropdownMenuItem>
+                            
+                            {/* This is the trigger for the delete dialog */}
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={(e) => e.preventDefault()} // Prevents dropdown from closing
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* This is the content for the delete dialog, linked to the trigger above */}
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete the quiz titled:
+                          <br />
+                          <strong className="py-2 inline-block">{quiz.title}</strong>
+                          <br />
+                          This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className={cn(buttonVariants({ variant: "destructive" }))}
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteQuiz(quiz.id)}
+                        >
+                          {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {/* --- END MODIFICATION --- */}
+
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">
@@ -272,7 +332,7 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
           </div>
       )}
 
-      {/* --- NEW DIALOG for Combine Feature --- */}
+      {/* --- DIALOG for Combine Feature (Unchanged) --- */}
       <Dialog open={isCombineDialogOpen} onOpenChange={setIsCombineDialogOpen}>
         <DialogContent>
           <DialogHeader>
