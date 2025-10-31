@@ -1,3 +1,6 @@
+// components/ui/card.tsx
+'use client' // <-- ADD THIS LINE
+
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
