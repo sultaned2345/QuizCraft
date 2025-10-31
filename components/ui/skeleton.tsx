@@ -1,4 +1,6 @@
 // src/components/ui/skeleton.tsx
+'use client';
+
 import { cn } from "@/lib/utils"
 
 function Skeleton({

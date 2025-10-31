@@ -1,4 +1,5 @@
 // src/components/SkeletonCard.tsx
+'use client';
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton"; // Assuming you have a Skeleton component (install if needed)
 
