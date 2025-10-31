@@ -1,3 +1,4 @@
+// components/theme-provider.tsx
 "use client"
 
 import * as React from "react"
@@ -28,9 +29,18 @@ export function ThemeProvider({
   storageKey = "quizcraft-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = React.useState<Theme>(
-    () => (typeof window !== "undefined" && (localStorage.getItem(storageKey) as Theme)) || defaultTheme,
-  )
+  // 1. CHANGE THIS LINE:
+  // Always start with the defaultTheme to match the server.
+  const [theme, setTheme] = React.useState<Theme>(defaultTheme)
+
+  // 2. ADD THIS useEffect:
+  // This hook runs *only on the client* after the page is hydrated.
+  React.useEffect(() => {
+    const storedTheme = localStorage.getItem(storageKey) as Theme | null
+    if (storedTheme) {
+      setTheme(storedTheme)
+    }
+  }, [storageKey]) // Run only once
 
   React.useEffect(() => {
     const root = window.document.documentElement
@@ -62,6 +72,7 @@ export function ThemeProvider({
 }
 
 export const useTheme = () => {
+  // ... (rest of the file is unchanged)
   const context = React.useContext(ThemeProviderContext)
 
   if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
