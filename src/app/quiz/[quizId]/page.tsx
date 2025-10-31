@@ -334,15 +334,26 @@ export default function QuizPage() {
              {/* Handle quiz view */}
             {viewMode === 'quiz' && questions.length > 0 && currentQuestion && (
               <div>
-                {/* Moved FITB question text rendering here for clarity */}
-                <div className="text-lg font-semibold mb-4"
-                     dangerouslySetInnerHTML={ currentQuestion.question_type === 'FILL_IN_THE_BLANK'
-                        ? { __html: currentQuestion.question_text.replace(/____/g, '<strong>[BLANK]</strong>') }
-                        : undefined
-                     }
-                >
-                   {currentQuestion.question_type !== 'FILL_IN_THE_BLANK' && currentQuestion.question_text}
-                </div>
+                {/* *******************
+                  --- FIX IS HERE ---
+                  *******************
+                  This block now uses a ternary operator to render one of two
+                  different <div>s, avoiding the children + dangerouslySetInnerHTML conflict.
+                */}
+                {currentQuestion.question_type === 'FILL_IN_THE_BLANK' ? (
+                  <div
+                    className="text-lg font-semibold mb-4"
+                    dangerouslySetInnerHTML={{
+                      __html: currentQuestion.question_text.replace(/____/g, '<strong>[BLANK]</strong>'),
+                    }}
+                  />
+                ) : (
+                  <div className="text-lg font-semibold mb-4">
+                    {currentQuestion.question_text}
+                  </div>
+                )}
+                {/* --- END OF FIX --- */}
+
                 {renderQuestion()}
                 {isAnswered && currentQuestion && ( // Ensure currentQuestion exists for feedback
                   <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
