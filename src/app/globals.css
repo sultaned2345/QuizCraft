@@ -1,7 +1,7 @@
 /* src/app/globals.css */
 
 @import "tailwindcss";
-/* @import "@tailwindcss/typography"; */ /* <-- This plugin was removed */
+/* @import "@tailwindcss/typography"; */ /* <-- This was the *previous* fix */
 /* @import "tw-animate-css"; */ /* <-- This plugin was removed */
 
 @custom-variant dark (&:is(.dark *));
@@ -58,13 +58,12 @@
     --ring: oklch(65.91% 0.17 270.38);
   }
 
-  /* --- FIX IS HERE --- */
+  /* --- THIS IS THE FINAL FIX --- */
   * {
     /* Use the CSS variable directly */
     border-color: var(--border);
     /* Replicate outline-ring/50 */
-    /* This assumes 'ring' is in oklch(L C H) format */
-    outline-color: oklch(from var(--ring) l c h / 0.5); 
+    outline-color: oklch(from var(--ring) l c h / 0.5);
   }
   body {
     /* Use the CSS variables directly */
