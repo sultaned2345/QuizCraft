@@ -1,14 +1,11 @@
 /* src/app/globals.css */
 
 @import "tailwindcss";
-@import "@tailwindcss/typography";
-/*@import "tw-animate-css";
+/* @import "@tailwindcss/typography"; */ /* <-- DISABLED FOR TESTING */
+/* @import "tw-animate-css"; */       /* <-- DISABLED FOR TESTING */
 
 @custom-variant dark (&:is(.dark *));
 
-/* All your variables from :root, .dark, and @theme inline
-  must be combined into this single @theme block.
-*/
 @theme {
   --background: oklch(100% 0 0); /* Pure White */
   --foreground: oklch(29.23% 0.02 263.88); /* Dark Gray for Text */
@@ -36,7 +33,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  
+
   /* Dark Mode Theme */
   .dark {
     --background: oklch(15% 0 0); /* Dark Gray */
