@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS public.quiz_attempts (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+
 -- Adds indexes for faster lookups
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_id ON public.quiz_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_id ON public.quiz_attempts(quiz_id);
