@@ -1,3 +1,4 @@
+/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/lib/file-parser.ts */
 // Client-side file parser utilities
 // PDF parsing is now handled server-side via API route
 
@@ -74,14 +75,21 @@ export function validateFileType(fileName: string, mimeType?: string): boolean {
   return hasValidExtension && hasValidMimeType;
 }
 
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+export function formatFileSize(bytes: number | bigint): string {
+  // --- FIX IS HERE ---
+  // Convert bigint or number to a number for Math operations
+  const bytesAsNumber = Number(bytes);
+  
+  if (bytesAsNumber === 0) return '0 Bytes';
+  // --- END OF FIX ---
   
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  // Use the converted number
+  const i = Math.floor(Math.log(bytesAsNumber) / Math.log(k)); 
   
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  // Use the converted number
+  return parseFloat((bytesAsNumber / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 export function estimateProcessingTime(fileSize: number, fileType: string): number {
@@ -90,18 +98,3 @@ export function estimateProcessingTime(fileSize: number, fileType: string): numb
   const sizeFactor = Math.log(fileSize / 1024) / Math.log(1024); // Logarithmic scaling
   return Math.max(baseTime, baseTime + sizeFactor);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
