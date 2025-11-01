@@ -70,7 +70,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
-    "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -80,4 +79,3 @@
     "typescript": "^5"
   }
 }
-
