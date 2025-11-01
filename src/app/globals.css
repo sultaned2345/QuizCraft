@@ -1,7 +1,7 @@
 /* src/app/globals.css */
 
 @import "tailwindcss";
-@import "tailwindcss/typography"; /* <-- THIS IS THE FIX */
+/* @import "tailwindcss/typography"; */ /* <-- REMOVED: This is now loaded in tailwind.config.mjs */
 
 @custom-variant dark (&:is(.dark *));
 
