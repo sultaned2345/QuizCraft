@@ -6,9 +6,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* --- THIS IS THE FIX ---
-  All your variables from :root, .dark, and @theme inline
-  have been combined into a single, correct @theme block.
+/* All your variables from :root, .dark, and @theme inline
+  must be combined into this single @theme block.
 */
 @theme {
   --background: oklch(100% 0 0); /* Pure White */
