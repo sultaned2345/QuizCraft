@@ -1,3 +1,4 @@
+// src/app/(app)/flashcards/FlashcardsClientComponent.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,11 +18,12 @@ import {
   DialogFooter,
   DialogDescription,
   DialogTrigger,
+  DialogClose, // --- IMPORT DialogClose ---
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Layers, Edit, Trash2, BookCopy } from 'lucide-react';
 
-// Define expected response structure for pagination API calls
+// ... (PaginatedDecksData interface remains the same) ...
 interface PaginatedDecksData {
   decks: FlashcardDeck[];
   count: number;
@@ -29,14 +31,11 @@ interface PaginatedDecksData {
   totalPages: number;
   currentPage: number;
 }
-
-// Define props for the client component, including initial data
 interface FlashcardsClientComponentProps {
   initialData: PaginatedDecksData;
 }
 
 export function FlashcardsClientComponent({ initialData }: FlashcardsClientComponentProps) {
-  // Initialize state with data passed from the Server Component
   const [decks, setDecks] = useState<FlashcardDeck[]>(initialData.decks);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number; limit: number | typeof Infinity }>({ count: initialData.count, limit: initialData.limit });
@@ -45,33 +44,34 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [isSaving, setIsSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
-  const decksPerPage = 9; // Should match API limit
+  const decksPerPage = 9; 
 
-  const { session } = useAuth(); // Keep session for actions
+  // --- NEW STATE FOR EDIT DIALOG ---
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingDeck, setEditingDeck] = useState<FlashcardDeck | null>(null);
+  const [editDeckTitle, setEditDeckTitle] = useState('');
+  // --- END NEW STATE ---
+
+  const { session } = useAuth(); 
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- Fetch More Decks (Client-Side) ---
+  // --- (fetchMoreDecks remains the same) ---
   const fetchMoreDecks = useCallback(async (page: number) => {
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
-
     try {
       const response = await fetch(`/api/decks?page=${page}&limit=${decksPerPage}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const data: ApiResponse<PaginatedDecksData> = await response.json();
-
       if (!data.success || !data.data) {
         throw new Error(data.error || 'Failed to load more decks.');
       }
-
-      setDecks(prev => [...prev, ...data.data!.decks]); // Append new decks
+      setDecks(prev => [...prev, ...data.data!.decks]); 
       setCurrentPage(data.data.currentPage);
-      // Update total pages/count if needed
       setTotalPages(data.data.totalPages);
       setUsage({ count: data.data.count, limit: data.data.limit });
-
     } catch (error: any) {
       toast({ title: 'Error Loading More Decks', description: error.message, variant: 'destructive' });
     } finally {
@@ -83,10 +83,9 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     fetchMoreDecks(currentPage + 1);
   }
 
-  // --- Refresh Function (Refetch Page 1 Client-Side) ---
+  // --- (refreshFirstPage remains the same) ---
    const refreshFirstPage = useCallback(async () => {
         if (!session) return;
-        // Indicate loading if desired
         try {
             const response = await fetch(`/api/decks?page=1&limit=${decksPerPage}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
@@ -94,21 +93,18 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
             const data: ApiResponse<PaginatedDecksData> = await response.json();
             if (!data.success || !data.data) throw new Error(data.error || 'Failed refresh.');
 
-            setDecks(data.data.decks); // Replace decks with first page
+            setDecks(data.data.decks); 
             setCurrentPage(data.data.currentPage);
             setTotalPages(data.data.totalPages);
             setUsage({ count: data.data.count, limit: data.data.limit });
         } catch (error: any) {
             toast({ title: "Error Refreshing Decks", description: error.message, variant: "destructive" });
-        } finally {
-            // Stop loading indicator
-        }
+        } 
     }, [session, toast, decksPerPage]);
 
-  // --- Create/Delete Handlers (Now call refreshFirstPage) ---
+  // --- (handleCreateDeck remains the same) ---
   const handleCreateDeck = async (e: React.FormEvent) => {
-      e.preventDefault();
-      // ... (API call logic remains the same) ...
+       e.preventDefault();
        if (!newDeckTitle.trim() || !session) return;
        setIsSaving(true);
        try {
@@ -118,25 +114,55 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
            toast({ title: 'Deck Created!', description: `"${result.data.title}" added.` });
            setNewDeckTitle('');
            setIsCreateDialogOpen(false);
-           refreshFirstPage(); // Refresh the list
+           refreshFirstPage(); 
        } catch (error: any) { toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' }); }
        finally { setIsSaving(false); }
   };
 
+  // --- NEW: Handle opening the edit dialog ---
+  const handleOpenEditDialog = (deck: FlashcardDeck) => {
+    setEditingDeck(deck);
+    setEditDeckTitle(deck.title);
+    setIsEditDialogOpen(true);
+  };
+
+  // --- NEW: Handle submitting the edit form ---
+  const handleEditDeck = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editDeckTitle.trim() || !session || !editingDeck) return;
+      setIsSaving(true);
+      try {
+          const response = await fetch(`/api/decks/${editingDeck.id}`, { 
+              method: 'PUT', 
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, 
+              body: JSON.stringify({ title: editDeckTitle.trim() }) 
+          });
+          const result: ApiResponse<FlashcardDeck> = await response.json();
+          if (!result.success || !result.data) throw new Error(result.error || 'Failed to update deck.');
+          toast({ title: 'Deck Updated!', description: `Renamed to "${result.data.title}".` });
+          setIsEditDialogOpen(false);
+          setEditingDeck(null);
+          refreshFirstPage(); // Refresh the list
+      } catch (error: any) { 
+          toast({ title: 'Update Failed', description: error.message, variant: 'destructive' }); 
+      }
+      finally { 
+          setIsSaving(false); 
+      }
+  };
+
+  // --- (handleDeleteDeck remains the same) ---
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
-    // ... (API call logic remains the same) ...
      if (!session || !confirm(`Delete "${deckTitle}"? All cards within will be deleted.`)) return;
      try {
          const response = await fetch(`/api/decks/${deckId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } });
          const result: ApiResponse = await response.json();
          if (!result.success) throw new Error(result.error || 'Failed delete.');
          toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
-         refreshFirstPage(); // Refresh list
+         refreshFirstPage(); 
      } catch (error: any) { toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' }); }
   };
 
-   // --- Render Logic ---
-   // (No top-level loading state needed here)
 
   return (
     <>
@@ -147,7 +173,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           {usage.limit !== Infinity && (
               <p className="text-sm text-muted-foreground mt-1">
                   Total Decks: {usage.count} / {usage.limit}.
-                  {/* <Link href="/pricing" className="ml-2 text-primary font-medium hover:underline">Upgrade</Link> */}
               </p>
           )}
         </div>
@@ -157,12 +182,17 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                     <Plus className="w-4 h-4 mr-2" /> New Deck
                 </Button>
             </DialogTrigger>
-            {/* Create Dialog Content remains the same */}
+            {/* Create Dialog Content */}
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader><DialogTitle>Create New Deck</DialogTitle><DialogDescription>Enter a title.</DialogDescription></DialogHeader>
                 <form onSubmit={handleCreateDeck} className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="deck-title" className="text-right">Title</Label><Input id="deck-title" value={newDeckTitle} onChange={(e) => setNewDeckTitle(e.target.value)} className="col-span-3" disabled={isSaving} required/></div>
-                    <DialogFooter><Button type="button" variant="ghost" onClick={() => setIsCreateDialogOpen(false)} disabled={isSaving}>Cancel</Button><Button type="submit" disabled={isSaving || !newDeckTitle.trim()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create</Button></DialogFooter>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="ghost" disabled={isSaving}>Cancel</Button>
+                      </DialogClose>
+                      <Button type="submit" disabled={isSaving || !newDeckTitle.trim()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create</Button>
+                    </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
@@ -185,8 +215,13 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
               </CardHeader>
               <CardContent className="flex-grow"><p className="text-sm text-muted-foreground">Contains flashcards...</p></CardContent>
               <CardFooter className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}><BookCopy className="w-4 h-4 mr-2" /> View</Button>
-                   <Button variant="ghost" size="icon" className="h-8 w-8" disabled><Edit className="w-4 h-4" /><span className="sr-only">Edit</span></Button>
+                  <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}><BookCopy className="w-4 h-4 mr-2" /> Study</Button>
+                   {/* --- MODIFIED: Enable Edit Button --- */}
+                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(deck)}>
+                       <Edit className="w-4 h-4" />
+                       <span className="sr-only">Edit</span>
+                    </Button>
+                   {/* --- END MODIFICATION --- */}
                    <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteDeck(deck.id, deck.title)}><Trash2 className="w-4 h-4" /><span className="sr-only">Delete</span></Button>
               </CardFooter>
             </Card>
@@ -203,6 +238,30 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                <p className="text-xs text-muted-foreground mt-2">Showing {decks.length} of {usage.count} decks</p>
           </div>
       )}
+
+      {/* --- NEW: Edit Deck Dialog --- */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Edit Deck Title</DialogTitle>
+                  <DialogDescription>Rename your flashcard deck.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleEditDeck} className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="edit-deck-title" className="text-right">Title</Label>
+                      <Input id="edit-deck-title" value={editDeckTitle} onChange={(e) => setEditDeckTitle(e.target.value)} className="col-span-3" disabled={isSaving} required/>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="ghost" disabled={isSaving}>Cancel</Button>
+                      </DialogClose>
+                      <Button type="submit" disabled={isSaving || !editDeckTitle.trim() || editDeckTitle.trim() === editingDeck?.title}>
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes
+                      </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     </>
   );
 }

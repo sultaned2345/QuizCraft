@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS public.flashcard_decks (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+// database-setup.sql
+
+[...other table creations...]
+
 -- Create flashcards table
 CREATE TABLE IF NOT EXISTS public.flashcards (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -77,6 +81,14 @@ CREATE TABLE IF NOT EXISTS public.flashcards (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- --- ADDITIONS FOR SPACED REPETITION ---
+-- Add columns if they don't exist (safe for rerunning)
+ALTER TABLE public.flashcards ADD COLUMN IF NOT EXISTS review_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.flashcards ADD COLUMN IF NOT EXISTS ease_factor FLOAT DEFAULT 2.5;
+-- --- END ADDITIONS ---
+
+[...other table creations...]
 
 -- Create documents table
 CREATE TABLE IF NOT EXISTS public.documents (

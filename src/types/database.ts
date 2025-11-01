@@ -45,15 +45,7 @@ export interface Note {
   updated_at: string;
 }
 
-// --- Flashcard Types ---
-export interface FlashcardDeck {
-    id: string;
-    user_id: string;
-    title: string;
-    created_at: string;
-    updated_at: string;
-    flashcards?: Flashcard[]; // Optional relation field
-}
+// src/types/database.ts
 
 export interface Flashcard {
     id: string;
@@ -62,6 +54,8 @@ export interface Flashcard {
     back_content: string;
     created_at: string;
     updated_at: string;
+    review_at?: string | null;
+    ease_factor?: number | null;
 }
 
 // --- Document Types ---

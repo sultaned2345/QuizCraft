@@ -27,8 +27,9 @@ model profiles {
   notes           notes[]
   flashcard_decks flashcard_decks[]
   documents       documents[]
-  graded_essays   graded_essays[] // Add relation to graded essays
-  quiz_attempts   quiz_attempts[] // Relation to quiz attempts
+  graded_essays   graded_essays[]
+  quiz_attempts   quiz_attempts[]
+  ai_usage        ai_usage[]
 
   @@map("profiles")
   @@schema("public")
@@ -46,7 +47,7 @@ model Quiz {
 
   // Relationships
   questions questions[]
-  profile   profiles? @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
+  profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
   attempts  quiz_attempts[] // Relation to quiz attempts
 
   @@map("quizzes")
@@ -60,9 +61,9 @@ model questions {
   question_text  String
   question_type  String
   correct_answer String
-  options        Json?
+  options        Json?     
   prompts        Json?
-  explanation    String?
+  explanation    String?   
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relationship back to the quiz
@@ -113,6 +114,11 @@ model flashcards {
   back_content  String
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
   updated_at    DateTime? @updatedAt @db.Timestamptz(6)
+  
+  // --- ADDITIONS FOR SPACED REPETITION ---
+  review_at     DateTime? @default(now()) @db.Timestamptz(6) // When the card is next due for review
+  ease_factor   Float?    @default(2.5) // Multiplier for review interval
+  // --- END ADDITIONS ---
 
   // Relationship back to the deck
   deck flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
@@ -147,7 +153,7 @@ model graded_essays {
   essay_content      String    @db.Text
   rubric_or_criteria String?   @db.Text
   feedback           Json?     @db.JsonB // Stores the structured feedback from AI
-  score              Int? // Stores the overall numerical score
+  score              Int?      // Stores the overall numerical score
   graded_at          DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relation to the user profile
@@ -164,7 +170,7 @@ model quiz_attempts {
   quiz_id    String    @db.Uuid
   score      Int
   total      Int // Total questions in the quiz at time of attempt
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6) // --- FIX IS HERE ---
 
   // Relationships
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -175,6 +181,22 @@ model quiz_attempts {
   @@map("quiz_attempts")
   @@schema("public")
 }
+
+// --- NEW MODEL FOR AI USAGE ---
+model ai_usage {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String    @db.Uuid
+  usage_count Int       @default(0)
+  usage_month DateTime  @db.Date // Use DateTime with @db.Date to map to SQL DATE
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_usage_user_id_fkey")
+
+  @@unique([user_id, usage_month])
+  @@map("ai_usage")
+  @@schema("public")
+}
+// --- END NEW MODEL ---
 
 
 // --- Auth Schema Models ---
@@ -196,9 +218,9 @@ model users {
   email_change                String?   @db.VarChar(255)
   email_change_sent_at        DateTime? @db.Timestamptz(6)
   last_sign_in_at             DateTime? @db.Timestamptz(6)
-  raw_app_meta_data           Json?
-  raw_user_meta_data          Json?
-  is_super_admin              Boolean?
+  raw_app_meta_data           Json?     
+  raw_user_meta_data          Json?     
+  is_super_admin              Boolean?  
   created_at                  DateTime? @db.Timestamptz(6)
   updated_at                  DateTime? @db.Timestamptz(6)
   phone                       String?   @unique @db.VarChar(15)
@@ -247,7 +269,7 @@ model flow_state {
   code_challenge_method  code_challenge_method // Refers to enum below
   code_challenge         String
   provider_type          String
-  provider_access_token  String?
+  provider_access_token  String?               
   provider_refresh_token String?
   created_at             DateTime?             @db.Timestamptz(6)
   updated_at             DateTime?             @db.Timestamptz(6)
@@ -307,7 +329,7 @@ model mfa_challenges {
   created_at             DateTime    @db.Timestamptz(6)
   verified_at            DateTime?   @db.Timestamptz(6)
   ip_address             String      @db.Inet
-  otp_code               String?
+  otp_code               String?     
   web_authn_session_data Json?
   mfa_factors            mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "mfa_challenges_auth_factor_id_fkey")
 
@@ -318,13 +340,13 @@ model mfa_challenges {
 model mfa_factors {
   id                     String           @id @db.Uuid
   user_id                String           @db.Uuid
-  friendly_name          String?
+  friendly_name          String?          
   factor_type            factor_type      // Refers to enum below
   status                 factor_status    // Refers to enum below
   created_at             DateTime         @db.Timestamptz(6)
   updated_at             DateTime         @db.Timestamptz(6)
-  secret                 String?
-  phone                  String?
+  secret                 String?          
+  phone                  String?          
   last_challenged_at     DateTime?        @db.Timestamptz(6)
   web_authn_credential   Json?
   web_authn_aaguid       String?          @db.Uuid
@@ -344,9 +366,9 @@ model oauth_clients {
   registration_type  oauth_registration_type // Refers to enum below
   redirect_uris      String
   grant_types        String
-  client_name        String?
-  client_uri         String?
-  logo_uri           String?
+  client_name        String?                 
+  client_uri         String?                 
+  logo_uri           String?                 
   created_at         DateTime                @default(now()) @db.Timestamptz(6)
   updated_at         DateTime                @default(now()) @db.Timestamptz(6)
   deleted_at         DateTime?               @db.Timestamptz(6)
@@ -378,7 +400,7 @@ model refresh_tokens {
   id          BigInt    @id @default(autoincrement())
   token       String?   @unique(map: "refresh_tokens_token_unique") @db.VarChar(255)
   user_id     String?   @db.VarChar(255)
-  revoked     Boolean?
+  revoked     Boolean?  
   created_at  DateTime? @db.Timestamptz(6)
   updated_at  DateTime? @db.Timestamptz(6)
   parent      String?   @db.VarChar(255)
@@ -399,11 +421,11 @@ model saml_providers {
   sso_provider_id   String              @db.Uuid
   entity_id         String              @unique
   metadata_xml      String
-  metadata_url      String?
+  metadata_url      String?             
   attribute_mapping Json?
   created_at        DateTime?           @db.Timestamptz(6)
   updated_at        DateTime?           @db.Timestamptz(6)
-  name_id_format    String?
+  name_id_format    String?             
   sso_providers     sso_providers       @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   saml_relay_states saml_relay_states[] // Opposite relation
 
@@ -415,7 +437,7 @@ model saml_relay_states {
   id              String         @id @db.Uuid
   sso_provider_id String         @db.Uuid
   request_id      String
-  for_email       String?
+  for_email       String?        
   redirect_to     String?
   created_at      DateTime?      @db.Timestamptz(6)
   updated_at      DateTime?      @db.Timestamptz(6)
@@ -442,12 +464,12 @@ model sessions {
   created_at     DateTime?        @db.Timestamptz(6)
   updated_at     DateTime?        @db.Timestamptz(6)
   factor_id      String?          @db.Uuid
-  aal            aal_level? // Refers to enum below
+  aal            aal_level?       // Refers to enum below
   not_after      DateTime?        @db.Timestamptz(6)
   refreshed_at   DateTime?        @db.Timestamp(6)
   user_agent     String?
   ip             String?          @db.Inet
-  tag            String?
+  tag            String?          
   mfa_amr_claims mfa_amr_claims[]
   refresh_tokens refresh_tokens[]
   users          users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -472,11 +494,9 @@ model sso_domains {
 
 model sso_providers {
   id             String           @id @db.Uuid
-  resource_id    String?
-  // --- FIX IS HERE ---
-  created_at     DateTime?        @db.Timestamptz(6) // Changed from Timestamtzt
-  updated_at     DateTime?        @db.Timestamptz(6) // Changed from Timestamtzt
-  // --- END FIX ---
+  resource_id    String?          
+  created_at     DateTime?        @db.Timestamptz(6) // --- FIX IS HERE ---
+  updated_at     DateTime?        @db.Timestamptz(6) 
   disabled       Boolean?         @default(false)
   saml_providers saml_providers[]
   sso_domains    sso_domains[]

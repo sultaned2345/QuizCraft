@@ -1,10 +1,10 @@
+// src/app/(app)/flashcards/[deckId]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-// Error: Types not found/exported correctly
 import { Flashcard, ApiResponse, DeckWithCardsResponse, CreateFlashcardData, UpdateFlashcardData } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,11 +22,10 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical } from 'lucide-react';
-// Error: Layers not imported (but used later)
+import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical, Layers, Check, Zap } from 'lucide-react'; // --- MODIFIED: Added Layers, Check, Zap
 import { cn } from '@/lib/utils';
 
-// --- Flashcard Display Component ---
+// --- Flashcard Display Component (Unchanged) ---
 interface FlashcardViewerProps {
   card: Flashcard;
   isFlipped: boolean;
@@ -53,13 +52,13 @@ function FlashcardViewer({ card, isFlipped, onFlip }: FlashcardViewerProps) {
     );
 }
 
-// --- Add/Edit Flashcard Dialog Component ---
+// --- Add/Edit Flashcard Dialog Component (Unchanged) ---
 interface FlashcardEditorDialogProps {
     deckId: string;
-    cardToEdit?: Flashcard | null; // Pass card for editing, null/undefined for creating
+    cardToEdit?: Flashcard | null; 
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    onSaveSuccess: (savedCard: Flashcard) => void; // Callback after successful save
+    onSaveSuccess: (savedCard: Flashcard) => void; 
 }
 
 function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSaveSuccess }: FlashcardEditorDialogProps) {
@@ -128,27 +127,11 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
                 <form onSubmit={handleSubmit} className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label htmlFor="front-content">Front</Label>
-                        <Textarea
-                            id="front-content"
-                            value={front}
-                            onChange={(e) => setFront(e.target.value)}
-                            placeholder="Term, question, concept..."
-                            disabled={isSaving}
-                            required
-                            className="min-h-[100px]"
-                        />
+                        <Textarea id="front-content" value={front} onChange={(e) => setFront(e.target.value)} placeholder="Term, question, concept..." disabled={isSaving} required className="min-h-[100px]"/>
                     </div>
                      <div className="grid gap-2">
                         <Label htmlFor="back-content">Back</Label>
-                        <Textarea
-                            id="back-content"
-                            value={back}
-                            onChange={(e) => setBack(e.target.value)}
-                            placeholder="Definition, answer, explanation..."
-                            disabled={isSaving}
-                            required
-                             className="min-h-[100px]"
-                        />
+                        <Textarea id="back-content" value={back} onChange={(e) => setBack(e.target.value)} placeholder="Definition, answer, explanation..." disabled={isSaving} required className="min-h-[100px]"/>
                     </div>
                      <DialogFooter>
                          <DialogClose asChild>
@@ -168,12 +151,14 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
 // --- Main Deck View Page Component ---
 export default function DeckViewPage() {
     const [deck, setDeck] = useState<DeckWithCardsResponse | null>(null);
+    const [studyCards, setStudyCards] = useState<Flashcard[]>([]); // --- NEW: State for study session cards
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [cardToEdit, setCardToEdit] = useState<Flashcard | null>(null);
+    const [isReviewing, setIsReviewing] = useState(false); // --- NEW: State for review API call
 
     const { user, session, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -181,21 +166,24 @@ export default function DeckViewPage() {
     const { toast } = useToast();
     const deckId = params.deckId as string;
 
+    // --- MODIFIED: Fetch study session data ---
     const fetchDeckData = async () => {
         if (!session || !deckId) return;
         setIsLoading(true);
         setError('');
         try {
-            const response = await fetch(`/api/decks/${deckId}`, {
+            // Fetch from the new /study endpoint
+            const response = await fetch(`/api/decks/${deckId}/study`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             const data: ApiResponse<DeckWithCardsResponse> = await response.json();
             if (!data.success || !data.data) {
-                throw new Error(data.error || 'Failed to load deck.');
+                throw new Error(data.error || 'Failed to load deck study session.');
             }
-            setDeck(data.data);
-            setCurrentCardIndex(0); // Reset index when loading/reloading
-            setIsFlipped(false);    // Reset flip state
+            setDeck(data.data); // This contains deck info + total card count
+            setStudyCards(data.data.flashcards); // These are just the cards to study now
+            setCurrentCardIndex(0); 
+            setIsFlipped(false);
         } catch (err: any) {
             setError(err.message || 'Deck not found or access denied.');
             toast({ title: 'Error Loading Deck', description: err.message, variant: 'destructive' });
@@ -212,25 +200,50 @@ export default function DeckViewPage() {
         if (user && deckId) {
             fetchDeckData();
         }
-    }, [user, authLoading, deckId, router]);
+    }, [user, authLoading, deckId, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // --- NEW: Handle review button clicks ---
+    const handleReview = async (quality: 'again' | 'good' | 'easy') => {
+        const card = currentCard;
+        if (!card || !session || isReviewing) return;
+
+        setIsReviewing(true);
+        try {
+            const response = await fetch(`/api/flashcards/${card.id}/review`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ quality }),
+            });
+            const result: ApiResponse<Flashcard> = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to save review.');
+            }
+            // Success, move to next card
+            goToNextCard();
+        } catch (error: any) {
+            toast({ title: 'Review Failed', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsReviewing(false);
+        }
+    };
+
+    // --- MODIFIED: Go to next card in study session ---
     const goToNextCard = () => {
-        if (!deck || deck.flashcards.length === 0) return;
-        setCurrentCardIndex((prev) => (prev + 1) % deck.flashcards.length);
+        if (studyCards.length === 0) return;
+        // This will automatically move to the "session complete" state if it's the last card
+        setCurrentCardIndex((prev) => prev + 1);
         setIsFlipped(false);
     };
 
-    const goToPrevCard = () => {
-        if (!deck || deck.flashcards.length === 0) return;
-        setCurrentCardIndex((prev) => (prev - 1 + deck.flashcards.length) % deck.flashcards.length);
-        setIsFlipped(false);
-    };
+    // --- We don't need a "previous" button in study mode ---
 
-     const handleDeleteCard = async (cardId: string) => {
+    const handleDeleteCard = async (cardId: string) => {
         if (!session) return;
-        // Error: Parameter 'c' implicitly has an 'any' type. (Problem 1/2)
-        const cardToDelete = deck?.flashcards.find(c => c.id === cardId);
-        if (!cardToDelete || !confirm(`Delete card "${cardToDelete.front_content.substring(0, 20)}..."?`)) return;
+        const cardToDelete = studyCards.find(c => c.id === cardId) || deck?.flashcards.find(c => c.id === cardId);
+        if (!cardToDelete || !confirm(`Delete card "${cardToDelete.front_content.substring(0, 20)}..."? This will remove it permanently.`)) return;
 
         try {
             const response = await fetch(`/api/flashcards/${cardId}`, {
@@ -241,7 +254,8 @@ export default function DeckViewPage() {
             if (!result.success) throw new Error(result.error || 'Failed to delete card.');
 
             toast({ title: 'Card Deleted' });
-            fetchDeckData(); // Refresh deck data
+            // Refresh study session
+            fetchDeckData(); 
         } catch (error: any) {
             toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
         }
@@ -255,7 +269,6 @@ export default function DeckViewPage() {
     if (error) {
         return (
              <div className="flex flex-col h-[calc(100vh-8rem)] items-center justify-center text-center">
-                {/* Error: Cannot find name 'Layers'. (Problem 3) */}
                 <Layers className="mx-auto h-16 w-16 text-destructive" />
                 <h1 className="mt-6 text-2xl font-bold text-destructive">Error Loading Deck</h1>
                 <p className="mt-2 text-muted-foreground">{error}</p>
@@ -266,8 +279,9 @@ export default function DeckViewPage() {
         );
     }
 
-    const currentCard = deck?.flashcards?.[currentCardIndex];
-    const totalCards = deck?.flashcards?.length ?? 0;
+    const currentCard = studyCards[currentCardIndex]; // Get card from study session array
+    const totalCardsInDeck = deck?.cardCount ?? 0;
+    const sessionComplete = currentCardIndex >= studyCards.length;
 
     return (
         <>
@@ -284,11 +298,25 @@ export default function DeckViewPage() {
 
             <h1 className="text-3xl font-bold mb-2 text-center">{deck?.title}</h1>
             <p className="text-sm text-muted-foreground text-center mb-8">
-                 Card {totalCards > 0 ? currentCardIndex + 1 : 0} of {totalCards}
+                 {sessionComplete
+                    ? `Session Complete! (Total cards in deck: ${totalCardsInDeck})`
+                    : `Card ${currentCardIndex + 1} of ${studyCards.length} in this session. (Total: ${totalCardsInDeck})`
+                 }
              </p>
 
             <div className="max-w-xl mx-auto">
-                {currentCard ? (
+                {/* --- MODIFIED: Handle session complete state --- */}
+                {sessionComplete ? (
+                    <div className="w-full h-64 border bg-card rounded-lg flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
+                        <Check className="w-16 h-16 text-green-500 mb-4" />
+                        <p className="text-xl font-medium mb-4">All done for now!</p>
+                        <p className="text-sm mb-6">You've reviewed all cards due today.</p>
+                         <Button onClick={fetchDeckData}>
+                            <RotateCcw className="w-4 h-4 mr-2" />
+                            Study Again (if any are due)
+                        </Button>
+                    </div>
+                ) : currentCard ? (
                     <FlashcardViewer
                         card={currentCard}
                         isFlipped={isFlipped}
@@ -296,39 +324,53 @@ export default function DeckViewPage() {
                     />
                 ) : (
                     <div className="w-full h-64 border bg-card rounded-lg flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
-                        <p className="text-lg font-medium mb-4">This deck is empty!</p>
+                        <Zap className="w-12 h-12 text-primary mb-4" />
+                        <p className="text-lg font-medium mb-4">
+                            {totalCardsInDeck > 0 ? "No cards due for review!" : "This deck is empty!"}
+                        </p>
                          <Button onClick={() => { setCardToEdit(null); setIsEditorOpen(true); }}>
                             <Plus className="w-4 h-4 mr-2" />
-                            Add the First Card
+                            {totalCardsInDeck > 0 ? "Add a New Card" : "Add the First Card"}
                         </Button>
                     </div>
                 )}
 
-                {totalCards > 0 && (
+                {/* --- MODIFIED: Show review buttons only when flipped --- */}
+                {!sessionComplete && currentCard && (
                     <div className="flex justify-between items-center mt-6">
-                        <Button variant="outline" size="icon" onClick={goToPrevCard} disabled={totalCards <= 1}>
-                            <ArrowLeft className="w-5 h-5" />
-                            <span className="sr-only">Previous Card</span>
-                        </Button>
-
-                         <div className="flex gap-2">
-                             <Button variant="outline" size="sm" onClick={() => { setCardToEdit(currentCard); setIsEditorOpen(true); }} disabled={!currentCard}>
-                                 <Edit className="w-4 h-4 mr-2" /> Edit
-                             </Button>
-                             <Button variant="destructive" size="sm" onClick={() => currentCard && handleDeleteCard(currentCard.id)} disabled={!currentCard}>
-                                 <Trash2 className="w-4 h-4 mr-2" /> Delete
-                             </Button>
-                         </div>
-
-                        <Button variant="outline" size="icon" onClick={goToNextCard} disabled={totalCards <= 1}>
-                            <ArrowRight className="w-5 h-5" />
-                             <span className="sr-only">Next Card</span>
-                        </Button>
+                        {isFlipped ? (
+                            <div className="w-full grid grid-cols-3 gap-2 sm:gap-4">
+                                <Button variant="outline" className="bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400" onClick={() => handleReview('again')} disabled={isReviewing}>
+                                    Again
+                                </Button>
+                                <Button variant="outline" className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400" onClick={() => handleReview('good')} disabled={isReviewing}>
+                                    Good
+                                </Button>
+                                 <Button variant="outline" className="bg-green-50 hover:bg-green-100 dark:bg-green-900/30 dark:hover:bg-green-900/50 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400" onClick={() => handleReview('easy')} disabled={isReviewing}>
+                                    Easy
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="w-full grid grid-cols-3 gap-4">
+                                 {/* --- Management buttons (Edit/Delete) shown before flip --- */}
+                                <Button variant="ghost" size="sm" onClick={() => { setCardToEdit(currentCard); setIsEditorOpen(true); }} disabled={!currentCard || isReviewing}>
+                                    <Edit className="w-4 h-4 mr-2" /> Edit Card
+                                </Button>
+                                <div className="flex justify-center">
+                                    <Button className="w-full" onClick={() => setIsFlipped(true)}>
+                                        Show Answer
+                                    </Button>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => currentCard && handleDeleteCard(currentCard.id)} disabled={!currentCard || isReviewing} className="text-destructive hover:text-destructive">
+                                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
 
-             {/* Add/Edit Dialog */}
+             {/* Add/Edit Dialog (Unchanged) */}
              <FlashcardEditorDialog
                 deckId={deckId}
                 cardToEdit={cardToEdit}
@@ -337,17 +379,13 @@ export default function DeckViewPage() {
                 onSaveSuccess={(savedCard) => {
                     // Refresh data after save
                     fetchDeckData();
-                    // Optionally try to find the saved card's index, otherwise reset
-                    // Error: Parameter 'c' implicitly has an 'any' type. (Problem 2/2)
-                    const savedIndex = deck?.flashcards.findIndex(c => c.id === savedCard.id) ?? -1;
-                    if (savedIndex !== -1) {
-                        setCurrentCardIndex(savedIndex);
-                        setIsFlipped(false);
-                    }
+                    // We just reset to the start of the study session
+                    setCurrentCardIndex(0);
+                    setIsFlipped(false);
                 }}
              />
 
-              {/* Add CSS for flip animation (can be in globals.css or here) */}
+             {/* CSS for flip animation (Unchanged) */}
              <style jsx global>{`
                 .perspective { perspective: 1000px; }
                 .preserve-3d { transform-style: preserve-3d; }
