@@ -1,61 +1,79 @@
-/* src/app/globals.css */
-
 @import "tailwindcss";
-/* @import "tailwindcss/typography"; */ /* <-- REMOVED: This is now loaded in tailwind.config.mjs */
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  /* Light Mode (Based on your screenshot) */
-  --background: oklch(98.3% 0.006 257.7); /* Very light grey-blue */
-  --foreground: oklch(28.4% 0.024 260.6); /* Dark slate-purple text */
-  --card: oklch(100% 0 0); /* White */
-  --card-foreground: oklch(28.4% 0.024 260.6);
+/* Light Mode Theme - Clean & Bright */
+:root {
+  --background: oklch(100% 0 0); /* Pure White */
+  --foreground: oklch(29.23% 0.02 263.88); /* Dark Gray for Text */
+  --card: oklch(100% 0 0); /* Pure White */
+  --card-foreground: oklch(29.23% 0.02 263.88);
   --popover: oklch(100% 0 0);
-  --popover-foreground: oklch(28.4% 0.024 260.6);
-  --primary: oklch(73.5% 0.09 270.3); /* Light periwinkle (from 'Generate Quiz' button) */
-  --primary-foreground: oklch(100% 0 0); /* White */
-  --secondary: oklch(96.3% 0.008 261.2); /* Light grey toggle background */
-  --secondary-foreground: oklch(45.5% 0.02 261.2); /* Text on toggle */
-  --muted: oklch(96.3% 0.008 261.2);
-  --muted-foreground: oklch(60% 0.015 260.6); /* Sub-heading text */
-  --accent: oklch(97% 0.01 260); /* Hover state */
-  --accent-foreground: oklch(28.4% 0.024 260.6);
-  --destructive: oklch(62.8% 0.22 16.51); /* Kept old red */
-  --destructive-foreground: oklch(98.83% 0.01 292.34); /* Kept old */
-  --border: oklch(93.2% 0.01 261.2); /* Light grey border */
-  --input: oklch(93.2% 0.01 261.2);
-  --ring: oklch(73.5% 0.09 270.3); /* Ring matches primary */
+  --popover-foreground: oklch(29.23% 0.02 263.88);
+  --primary: oklch(57.56% 0.16 270.38); /* A vibrant purple */
+  --primary-foreground: oklch(98.83% 0.01 292.34);
+  --secondary: oklch(96.86% 0.01 263.88); /* Light Gray */
+  --secondary-foreground: oklch(29.23% 0.02 263.88);
+  --muted: oklch(96.86% 0.01 263.88);
+  --muted-foreground: oklch(56.88% 0.02 263.88);
+  --accent: oklch(96.86% 0.01 263.88);
+  --accent-foreground: oklch(29.23% 0.02 263.88);
+  --destructive: oklch(62.8% 0.22 16.51);
+  --destructive-foreground: oklch(98.83% 0.01 292.34);
+  --border: oklch(93.8% 0.01 263.88);
+  --input: oklch(93.8% 0.01 263.88);
+  --ring: oklch(57.56% 0.16 270.38);
   --radius: 0.75rem;
+}
+/* src/app/globals.css */
 
-  /* Shadcn UI radii variables */
+/* Dark Mode Theme - Inspired by YouLearn AI */
+.dark {
+  --background: oklch(15% 0 0); /* Dark Gray */
+  --foreground: oklch(98.83% 0.01 292.34); /* Light Gray for Text */
+  --card: oklch(20% 0 0); /* Slightly Lighter Gray */
+  --card-foreground: oklch(98.83% 0.01 292.34);
+  --popover: oklch(15% 0 0);
+  --popover-foreground: oklch(98.83% 0.01 292.34);
+  --primary: oklch(65.91% 0.17 270.38); /* Brighter Purple for Dark Mode */
+  --primary-foreground: oklch(98.83% 0.01 292.34);
+  --secondary: oklch(25% 0 0); /* Medium Dark Gray */
+  --secondary-foreground: oklch(98.83% 0.01 292.34);
+  --muted: oklch(25% 0 0);
+  --muted-foreground: oklch(69.83% 0.01 292.34);
+  --accent: oklch(25% 0 0);
+  --accent-foreground: oklch(98.83% 0.01 292.34);
+  --destructive: oklch(62.8% 0.22 16.51);
+  --destructive-foreground: oklch(98.83% 0.01 292.34);
+  --border: oklch(30% 0 0);
+  --input: oklch(30% 0 0);
+  --ring: oklch(65.91% 0.17 270.38);
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
-  /* New Dark Mode Theme */
-  .dark {
-    --background: oklch(18% 0.01 260); /* Dark slate blue */
-    --foreground: oklch(95% 0.01 260); /* Light grey-blue text */
-    --card: oklch(22% 0.015 260); /* Slightly lighter card */
-    --card-foreground: oklch(95% 0.01 260);
-    --popover: oklch(18% 0.01 260);
-    --popover-foreground: oklch(95% 0.01 260);
-    --primary: oklch(73.5% 0.09 270.3); /* Keep periwinkle, it stands out */
-    --primary-foreground: oklch(20% 0.02 260); /* Dark text on light button */
-    --secondary: oklch(30% 0.02 260); /* Medium-dark grey */
-    --secondary-foreground: oklch(95% 0.01 260); /* Light text */
-    --muted: oklch(30% 0.02 260);
-    --muted-foreground: oklch(70% 0.01 260); /* Muted light text */
-    --accent: oklch(30% 0.02 260);
-    --accent-foreground: oklch(95% 0.01 260);
-    --destructive: oklch(62.8% 0.22 16.51); /* Kept old red */
-    --destructive-foreground: oklch(98.83% 0.01 292.34); /* Kept old */
-    --border: oklch(35% 0.02 260);
-    --input: oklch(35% 0.02 260);
-    --ring: oklch(73.5% 0.09 270.3); /* Ring matches primary */
-  }
 }
 
 @layer base {
