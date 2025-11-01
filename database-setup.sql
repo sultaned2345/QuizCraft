@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+
 -- Create graded_essays table
 CREATE TABLE IF NOT EXISTS public.graded_essays (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

@@ -1,12 +1,13 @@
+// src/app/api/documents/[documentId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabase } from '@/lib/supabase'; // Import Supabase client for storage
+import { supabase } from '@/lib/supabase'; // Use client for RLS-enabled storage access
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
-const STORAGE_BUCKET_NAME = 'user_documents'; // Ensure consistency
+const STORAGE_BUCKET_NAME = 'user_documents';
 
 // --- DELETE Handler: Delete a document record and its file from storage ---
 export async function DELETE(
@@ -14,72 +15,74 @@ export async function DELETE(
     { params }: { params: { documentId: string } }
 ) {
     try {
-        const user = await requireAuth(request);
-        const { documentId } = params;
+        const user = await requireAuth(request); ///route.ts]
+        const { documentId } = params; ///route.ts]
 
         if (!documentId) {
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Document ID is required.' }, { status: 400 });
+            return NextResponse.json<ApiResponse>({ success: false, error: 'Document ID is required.' }, { status: 400 }); ///route.ts]
         }
 
         // 1. Find the document record to get the storage path and verify ownership
         const documentToDelete = await prisma.documents.findUnique({
             where: {
                 id: documentId,
-                user_id: user.id, // Verify ownership
+                user_id: user.id, // Verify ownership/route.ts]
             },
             select: {
-                storage_path: true, // Need the path to delete the file
+                storage_path: true, // Need the path to delete the file/route.ts]
             },
         });
 
         if (!documentToDelete) {
-             console.warn(`User ${user.id} attempt to delete document ${documentId} denied (not found or not owner).`);
-            // Return 404 whether it doesn't exist or isn't owned by user
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 });
+            return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 }); ///route.ts]
         }
 
         // 2. Delete the file from Supabase Storage
         if (documentToDelete.storage_path) {
+            // Use the standard client which respects RLS (user can delete their own files)
             const { error: storageError } = await supabase.storage
                 .from(STORAGE_BUCKET_NAME)
-                .remove([documentToDelete.storage_path]); // Pass path in an array
+                .remove([documentToDelete.storage_path]); ///route.ts]
 
             if (storageError) {
-                // Log the error but proceed to delete the DB record anyway
-                console.error(`Supabase storage error deleting file ${documentToDelete.storage_path}:`, storageError);
-                // Depending on requirements, you might choose to return an error here instead
-                // return NextResponse.json<ApiResponse>({ success: false, error: `Failed to delete file from storage: ${storageError.message}` }, { status: 500 });
+                console.error(`Supabase storage error deleting file ${documentToDelete.storage_path}:`, storageError); ///route.ts]
             } else {
-                 console.log(`Successfully deleted file from storage: ${documentToDelete.storage_path}`);
+                 console.log(`Successfully deleted file from storage: ${documentToDelete.storage_path}`); ///route.ts]
             }
-        } else {
-            console.warn(`Document record ${documentId} had no storage_path, skipping storage deletion.`);
         }
 
-
-        // 3. Delete the document record from the database
-        await prisma.documents.delete({
-            where: {
-                id: documentId,
-                // user_id: user.id // Ownership already confirmed above
-            },
-        });
+        // 3. Delete the document record and embeddings in a transaction
+        await prisma.$transaction([
+            // Delete embeddings
+            prisma.content_embeddings.deleteMany({
+                where: {
+                    content_id: documentId,
+                    user_id: user.id
+                }
+            }),
+            // Delete the document itself
+            prisma.documents.delete({
+                where: {
+                    id: documentId,
+                },
+            }) ///route.ts]
+        ]);
 
         // 4. Return success response
         return NextResponse.json<ApiResponse>({
             success: true,
             message: 'Document deleted successfully.',
-        });
+        }); ///route.ts]
 
     } catch (error: any) {
-        if (error instanceof Response) return error; // Handle requireAuth errors
+        // ... (error handling remains the same) .../route.ts]
+        if (error instanceof Response) return error; 
 
-        // Handle specific Prisma errors
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
-             if (error.code === 'P2025') { // Record to delete not found (should be caught by the initial findUnique)
+             if (error.code === 'P2025') { 
                 return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found.' }, { status: 404 });
              }
-             if (error.code === 'P2023') { // Invalid UUID format
+             if (error.code === 'P2023') { 
                  return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Document ID format.' }, { status: 400 });
              }
              console.error('Prisma Error deleting document:', { code: error.code, meta: error.meta });
@@ -91,5 +94,3 @@ export async function DELETE(
         return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
     }
 }
-
-// Note: We might add GET (fetch specific document metadata) or PUT (update metadata like file_name) handlers here later if needed.

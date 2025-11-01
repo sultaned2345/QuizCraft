@@ -8,13 +8,14 @@ import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 import pdfParse from 'pdf-parse-fork';
 import { cleanExtractedText } from '@/lib/file-parser';
-import mammoth from 'mammoth'; // <-- NEW IMPORT
-import JSZip from 'jszip'; // <-- NEW IMPORT
-import { DOMParser } from 'xmldom'; // <-- NEW IMPORT
+import mammoth from 'mammoth';
+import JSZip from 'jszip';
+import { DOMParser } from 'xmldom';
+import { generateEmbeddingsForContent } from '@/lib/embedding'; // <-- NEW IMPORT
 
 export const runtime = 'nodejs';
 
-// --- MODIFIED CONSTANTS ---
+// ... (Constants and Interfaces remain the same) ...
 const MAX_FILE_SIZE = 3 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = [
     'application/pdf', 
@@ -28,30 +29,13 @@ const ALLOWED_EXTENSIONS = [
     '.docx',
     '.pptx'
 ];
-// --- END MODIFICATION ---
-
 const STORAGE_BUCKET_NAME = 'user_documents';
 const FREE_DOCUMENT_LIMIT = 5;
 
-// (Interfaces DocumentMetadata, PaginatedDocumentsResponse remain the same)
-interface DocumentMetadata {
-    id: string;
-    file_name: string;
-    file_type: string;
-    file_size: number;
-    created_at: string; // Use string for ISO date format
-    storage_path: string;
-}
-interface PaginatedDocumentsResponse {
-    documents: DocumentMetadata[];
-    count: number;
-    limit: number | typeof Infinity;
-    totalPages: number;
-    currentPage: number;
-}
+interface DocumentMetadata { id: string; file_name: string; file_type: string; file_size: number; created_at: string; storage_path: string; }
+interface PaginatedDocumentsResponse { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
 
-
-// (Helpers getSupabaseClientForUser, validateDocumentLimit remain the same)
+// ... (getSupabaseClientForUser, validateDocumentLimit, getTextFromPPTXNodes, extractTextFromPPTX, extractTextFromFile helpers remain the same) ...
 function getSupabaseClientForUser(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -86,9 +70,6 @@ async function validateDocumentLimit(userId: string): Promise<{
         return { isValid: true }; // Permissive on error
     }
 }
-
-// --- NEW HELPER: Extract text from PPTX buffer ---
-// (Based on Stack Overflow research)
 function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string): string {
     let text = '';
     const textNodes = (node as Element).getElementsByTagNameNS(namespaceURI, tagName);
@@ -99,7 +80,6 @@ function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string)
     }
     return text.trim();
 }
-
 async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
     try {
         const zip = new JSZip();
@@ -110,13 +90,13 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
         
         while (true) {
             const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
-            if (!slideFile) break; // No more slides
+            if (!slideFile) break; 
             
             const slideXmlStr = await slideFile.async('text');
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(slideXmlStr, 'application/xml');
             
-            fullText += getTextFromPPTXNodes(xmlDoc, "t", aNamespace) + ' \n'; // Add newline between slides
+            fullText += getTextFromPPTXNodes(xmlDoc, "t", aNamespace) + ' \n'; 
             slideIndex++;
         }
         return fullText.trim();
@@ -125,10 +105,6 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
         throw new Error(`Failed to parse PPTX file: ${err.message || 'Unknown error'}`);
     }
 }
-// --- END NEW HELPER ---
-
-
-// --- MODIFIED: extractTextFromFile function ---
 async function extractTextFromFile(file: File, buffer: Buffer): Promise<string> {
     let rawText = '';
     const fileType = file.type || '';
@@ -153,7 +129,6 @@ async function extractTextFromFile(file: File, buffer: Buffer): Promise<string> 
         throw new Error(`Text extraction failed: ${error.message}`); 
     }
 }
-// --- END MODIFICATION ---
 
 
 // --- POST Handler (Modified file type validation) ---
@@ -163,23 +138,21 @@ export async function POST(request: NextRequest) {
     let supabaseForUser: any;
 
     try {
-        user = await requireAuth(request);
-        supabaseForUser = getSupabaseClientForUser(request);
+        user = await requireAuth(request); //
+        supabaseForUser = getSupabaseClientForUser(request); //
 
-        const limitCheck = await validateDocumentLimit(user.id);
+        const limitCheck = await validateDocumentLimit(user.id); //
         if (!limitCheck.isValid) {
-            return NextResponse.json<ApiResponse>({ success: false, error: limitCheck.error, message: limitCheck.message }, { status: 403 });
+            return NextResponse.json<ApiResponse>({ success: false, error: limitCheck.error, message: limitCheck.message }, { status: 403 }); //
         }
 
-        const formData = await request.formData();
+        const formData = await request.formData(); //
         const file = formData.get('file') as File | null;
-        if (!file) return NextResponse.json<ApiResponse>({ success: false, error: 'No file provided.' }, { status: 400 });
+        if (!file) return NextResponse.json<ApiResponse>({ success: false, error: 'No file provided.' }, { status: 400 }); //
 
-        // --- MODIFIED: File type/size validation ---
+        // ... (File validation logic remains the same) ...
          const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext));
          const hasValidMime = file.type && ALLOWED_MIME_TYPES.includes(file.type);
-         
-         // Trust extension if MIME is generic
          let probableType = file.type;
          if (!hasValidMime && hasValidExtension) {
              if (file.name.toLowerCase().endsWith('.docx')) probableType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -187,57 +160,61 @@ export async function POST(request: NextRequest) {
              else if (file.name.toLowerCase().endsWith('.pdf')) probableType = 'application/pdf';
              else if (file.name.toLowerCase().endsWith('.txt')) probableType = 'text/plain';
          }
-
          if (!ALLOWED_MIME_TYPES.includes(probableType) && !hasValidExtension) {
              console.warn(`Invalid file type: name=${file.name}, type=${file.type}, probable=${probableType}`);
              return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid file type. Only PDF, TXT, DOCX, and PPTX allowed.' }, { status: 400 });
          }
-        // --- END MODIFICATION ---
+        if (file.size > MAX_FILE_SIZE) return NextResponse.json<ApiResponse>({ success: false, error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.` }, { status: 400 }); //
 
-        if (file.size > MAX_FILE_SIZE) return NextResponse.json<ApiResponse>({ success: false, error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.` }, { status: 400 });
-
-        const fileBuffer = Buffer.from(await file.arrayBuffer());
+        const fileBuffer = Buffer.from(await file.arrayBuffer()); //
         let extractedText: string;
         try {
-            extractedText = await extractTextFromFile(file, fileBuffer);
-            if (!extractedText || extractedText.length < 50) throw new Error("Extracted text is too short (minimum 50 characters required).");
+            extractedText = await extractTextFromFile(file, fileBuffer); //
+            if (!extractedText || extractedText.length < 50) throw new Error("Extracted text is too short (minimum 50 characters required)."); //
         } catch (textError: any) {
-             return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 });
+             return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 }); //
         }
 
-        storagePath = `${user.id}/${Date.now()}-${file.name}`;
+        storagePath = `${user.id}/${Date.now()}-${file.name}`; //
         const { data: uploadData, error: uploadError } = await supabaseForUser.storage
             .from(STORAGE_BUCKET_NAME)
-            .upload(storagePath, fileBuffer, { contentType: probableType || file.type || undefined, upsert: false });
+            .upload(storagePath, fileBuffer, { contentType: probableType || file.type || undefined, upsert: false }); //
 
         if (uploadError) {
-             if (uploadError.message.includes('security policy')) { throw new Error(`Storage security policy violation: ${uploadError.message}`); }
-            throw new Error(`Failed to upload file to storage: ${uploadError.message}`);
+            throw new Error(`Failed to upload file to storage: ${uploadError.message}`); //
         }
-        if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); }
+        if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); } //
 
         const newDocumentData = await prisma.documents.create({
             data: {
                 user_id: user.id,
                 file_name: file.name,
-                file_type: probableType || file.type || 'unknown', // Save the determined type
+                file_type: probableType || file.type || 'unknown',
                 file_size: file.size,
                 storage_path: uploadData.path,
                 extracted_text: extractedText,
             },
             select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true }
-        });
+        }); //
+
+        // --- NEW: Asynchronously generate embeddings ---
+        generateEmbeddingsForContent(newDocumentData.id, 'document', extractedText, user.id)
+          .catch(err => {
+            console.error(`Failed to generate embeddings for document ${newDocumentData.id}:`, err);
+          });
+        // --- END NEW ---
 
         const newDocument = {
             ...newDocumentData,
             created_at: newDocumentData.created_at?.toISOString() || '',
-        };
+        }; //
 
         return NextResponse.json<ApiResponse<DocumentMetadata>>({
             success: true, data: newDocument, message: 'Document uploaded successfully.'
-        }, { status: 201 });
+        }, { status: 201 }); //
 
     } catch (error: any) {
+        // ... (error handling remains the same) ...
         if (error instanceof Response) return error;
         console.error('Error uploading document:', error);
         if (storagePath && user && supabaseForUser && error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -256,7 +233,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// (GET Handler remains the same)
+// ... (GET Handler remains the same) ...
 export async function GET(request: NextRequest) {
      try {
         const user = await requireAuth(request);
