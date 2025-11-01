@@ -112,23 +112,27 @@ export default function CreatePage() {
   }, [searchParams, session, toast, textContent, selectedFile]); // Add dependencies
 
 
+  // --- MODIFIED: handleFileChange ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const maxSize = 3 * 1024 * 1024; // 3MB
-      const isValidType = validateFileType(file.name, file.type);
+      
+      // Updated validation
+      const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some(ext => file.name.toLowerCase().endsWith(ext));
 
       if (!isValidType) {
-        setError("Unsupported file type. Please upload a PDF or TXT file.");
+        setError("Unsupported file. Please upload PDF, TXT, DOCX, or PPTX."); // Updated message
         setSelectedFile(null);
-        if (e.target) e.target.value = ''; // Clear file input
+        if (e.target) e.target.value = '';
         return;
       }
+      // ---
 
       if (file.size > maxSize) {
         setError(`File size exceeds 3MB. Max size is ${formatFileSize(maxSize)}.`);
         setSelectedFile(null);
-        if (e.target) e.target.value = ''; // Clear file input
+        if (e.target) e.target.value = '';
         return;
       }
 
@@ -138,6 +142,7 @@ export default function CreatePage() {
       // Don't clear e.target.value here immediately, let browser handle display
     }
   };
+  // ---
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setTextContent(e.target.value);
@@ -247,8 +252,18 @@ export default function CreatePage() {
                             <div className={`relative border-2 border-dashed ${error && !selectedFile ? 'border-destructive' : 'border-slate-300 dark:border-slate-700'} rounded-lg p-6 text-center`}>
                                 <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
                                 <p className="mt-2 font-semibold">{selectedFile ? selectedFile.name : 'Drag & drop or click'}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">PDF/TXT, max 3MB.{selectedFile && ` (${formatFileSize(selectedFile.size)})`}</p>
-                                <Input id="file-upload" type="file" accept=".pdf,.txt,application/pdf,text/plain" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={isProcessing} onClick={(e)=>(e.currentTarget.value = '')}/>
+                                <p className="mt-1 text-xs text-muted-foreground">PDF, TXT, DOCX, PPTX (max 3MB).{selectedFile && ` (${formatFileSize(selectedFile.size)})`}</p>
+                                {/* --- MODIFIED: accept attribute --- */}
+                                <Input 
+                                  id="file-upload" 
+                                  type="file" 
+                                  accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" 
+                                  onChange={handleFileChange} 
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                  disabled={isProcessing} 
+                                  onClick={(e)=>(e.currentTarget.value = '')}
+                                />
+                                {/* --- */}
                             </div>
                         </div>
                         {/* Settings */}

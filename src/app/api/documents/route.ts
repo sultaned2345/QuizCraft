@@ -1,24 +1,39 @@
 // src/app/api/documents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@supabase/supabase-js'; // Keep for scoped client in POST
+import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
 import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 import pdfParse from 'pdf-parse-fork';
 import { cleanExtractedText } from '@/lib/file-parser';
+import mammoth from 'mammoth'; // <-- NEW IMPORT
+import JSZip from 'jszip'; // <-- NEW IMPORT
+import { DOMParser } from 'xmldom'; // <-- NEW IMPORT
 
 export const runtime = 'nodejs';
 
-// Config remains the same
+// --- MODIFIED CONSTANTS ---
 const MAX_FILE_SIZE = 3 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ['application/pdf', 'text/plain'];
-const ALLOWED_EXTENSIONS = ['.pdf', '.txt'];
-const STORAGE_BUCKET_NAME = 'user_documents';
-const FREE_DOCUMENT_LIMIT = 5; // Keep or adjust as needed
+const ALLOWED_MIME_TYPES = [
+    'application/pdf', 
+    'text/plain',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation' // .pptx
+];
+const ALLOWED_EXTENSIONS = [
+    '.pdf', 
+    '.txt',
+    '.docx',
+    '.pptx'
+];
+// --- END MODIFICATION ---
 
-// Document type for API response
+const STORAGE_BUCKET_NAME = 'user_documents';
+const FREE_DOCUMENT_LIMIT = 5;
+
+// (Interfaces DocumentMetadata, PaginatedDocumentsResponse remain the same)
 interface DocumentMetadata {
     id: string;
     file_name: string;
@@ -27,18 +42,16 @@ interface DocumentMetadata {
     created_at: string; // Use string for ISO date format
     storage_path: string;
 }
-
-// Define a type for the paginated response data structure
 interface PaginatedDocumentsResponse {
     documents: DocumentMetadata[];
-    count: number; // Total count of documents for the user
-    limit: number | typeof Infinity; // Usage limit for the plan
+    count: number;
+    limit: number | typeof Infinity;
     totalPages: number;
     currentPage: number;
 }
 
 
-// --- Helpers (getSupabaseClientForUser, validateDocumentLimit, extractTextFromFile) remain the same ---
+// (Helpers getSupabaseClientForUser, validateDocumentLimit remain the same)
 function getSupabaseClientForUser(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -58,7 +71,6 @@ async function validateDocumentLimit(userId: string): Promise<{
             select: { subscription_plan: true }
         });
         const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
-        // Use FREE_DOCUMENT_LIMIT constant defined above
         const limit = plan === 'pro' ? Infinity : FREE_DOCUMENT_LIMIT;
 
         if (plan !== 'pro') {
@@ -74,6 +86,49 @@ async function validateDocumentLimit(userId: string): Promise<{
         return { isValid: true }; // Permissive on error
     }
 }
+
+// --- NEW HELPER: Extract text from PPTX buffer ---
+// (Based on Stack Overflow research)
+function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string): string {
+    let text = '';
+    const textNodes = (node as Element).getElementsByTagNameNS(namespaceURI, tagName);
+    for (let i = 0; i < textNodes.length; i++) {
+        if (textNodes[i].textContent) {
+            text += textNodes[i].textContent + ' ';
+        }
+    }
+    return text.trim();
+}
+
+async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
+    try {
+        const zip = new JSZip();
+        await zip.loadAsync(buffer);
+        const aNamespace = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        let fullText = '';
+        let slideIndex = 1;
+        
+        while (true) {
+            const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
+            if (!slideFile) break; // No more slides
+            
+            const slideXmlStr = await slideFile.async('text');
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(slideXmlStr, 'application/xml');
+            
+            fullText += getTextFromPPTXNodes(xmlDoc, "t", aNamespace) + ' \n'; // Add newline between slides
+            slideIndex++;
+        }
+        return fullText.trim();
+    } catch (err: any) {
+        console.error('Error extracting text from PPTX:', err);
+        throw new Error(`Failed to parse PPTX file: ${err.message || 'Unknown error'}`);
+    }
+}
+// --- END NEW HELPER ---
+
+
+// --- MODIFIED: extractTextFromFile function ---
 async function extractTextFromFile(file: File, buffer: Buffer): Promise<string> {
     let rawText = '';
     const fileType = file.type || '';
@@ -83,14 +138,25 @@ async function extractTextFromFile(file: File, buffer: Buffer): Promise<string> 
             rawText = (await pdfParse(buffer)).text || '';
         } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {
             rawText = buffer.toString('utf8');
-        } else { throw new Error(`Unsupported type: ${fileType || 'unknown'}`); }
+        } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileNameLower.endsWith('.docx')) {
+            const result = await mammoth.extractRawText({ buffer });
+            rawText = result.value || '';
+        } else if (fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || fileNameLower.endsWith('.pptx')) {
+            rawText = await extractTextFromPPTX(buffer);
+        } else { 
+            throw new Error(`Unsupported type: ${fileType || 'unknown'} for file ${file.name}`); 
+        }
+
         if (!rawText || rawText.trim().length === 0) throw new Error("No text found.");
         return cleanExtractedText(rawText);
-    } catch (error: any) { throw new Error(`Text extraction failed: ${error.message}`); }
+    } catch (error: any) { 
+        throw new Error(`Text extraction failed: ${error.message}`); 
+    }
 }
+// --- END MODIFICATION ---
 
 
-// --- POST Handler (remains the same) ---
+// --- POST Handler (Modified file type validation) ---
 export async function POST(request: NextRequest) {
     let user;
     let storagePath: string | null = null;
@@ -109,15 +175,25 @@ export async function POST(request: NextRequest) {
         const file = formData.get('file') as File | null;
         if (!file) return NextResponse.json<ApiResponse>({ success: false, error: 'No file provided.' }, { status: 400 });
 
-        // File type/size validation...
-         const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
-         if (!ALLOWED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext)) || (file.type && !ALLOWED_MIME_TYPES.includes(file.type))) {
-              const probableType = file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : (file.name.toLowerCase().endsWith('.txt') ? 'text/plain' : file.type);
-             if (!probableType || !ALLOWED_MIME_TYPES.includes(probableType)){
-                 console.warn(`Invalid file type detected: name=${file.name}, reported type=${file.type}, probable type=${probableType}`);
-                 return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid file type. Only PDF and TXT allowed.' }, { status: 400 });
-             }
-        }
+        // --- MODIFIED: File type/size validation ---
+         const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext));
+         const hasValidMime = file.type && ALLOWED_MIME_TYPES.includes(file.type);
+         
+         // Trust extension if MIME is generic
+         let probableType = file.type;
+         if (!hasValidMime && hasValidExtension) {
+             if (file.name.toLowerCase().endsWith('.docx')) probableType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+             else if (file.name.toLowerCase().endsWith('.pptx')) probableType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+             else if (file.name.toLowerCase().endsWith('.pdf')) probableType = 'application/pdf';
+             else if (file.name.toLowerCase().endsWith('.txt')) probableType = 'text/plain';
+         }
+
+         if (!ALLOWED_MIME_TYPES.includes(probableType) && !hasValidExtension) {
+             console.warn(`Invalid file type: name=${file.name}, type=${file.type}, probable=${probableType}`);
+             return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid file type. Only PDF, TXT, DOCX, and PPTX allowed.' }, { status: 400 });
+         }
+        // --- END MODIFICATION ---
+
         if (file.size > MAX_FILE_SIZE) return NextResponse.json<ApiResponse>({ success: false, error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.` }, { status: 400 });
 
         const fileBuffer = Buffer.from(await file.arrayBuffer());
@@ -129,11 +205,10 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 });
         }
 
-        // Upload file to Supabase Storage --- USING SCOPED CLIENT ---
         storagePath = `${user.id}/${Date.now()}-${file.name}`;
         const { data: uploadData, error: uploadError } = await supabaseForUser.storage
             .from(STORAGE_BUCKET_NAME)
-            .upload(storagePath, fileBuffer, { contentType: file.type || undefined, upsert: false });
+            .upload(storagePath, fileBuffer, { contentType: probableType || file.type || undefined, upsert: false });
 
         if (uploadError) {
              if (uploadError.message.includes('security policy')) { throw new Error(`Storage security policy violation: ${uploadError.message}`); }
@@ -141,39 +216,34 @@ export async function POST(request: NextRequest) {
         }
         if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); }
 
-        // Save metadata to database using Prisma
         const newDocumentData = await prisma.documents.create({
             data: {
                 user_id: user.id,
                 file_name: file.name,
-                file_type: file.type || 'unknown',
+                file_type: probableType || file.type || 'unknown', // Save the determined type
                 file_size: file.size,
                 storage_path: uploadData.path,
                 extracted_text: extractedText,
             },
-            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true } // Include storage_path
+            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true }
         });
 
-         // Serialize dates for response
         const newDocument = {
             ...newDocumentData,
             created_at: newDocumentData.created_at?.toISOString() || '',
         };
 
-
-        return NextResponse.json<ApiResponse<DocumentMetadata>>({ // Use DocumentMetadata type
+        return NextResponse.json<ApiResponse<DocumentMetadata>>({
             success: true, data: newDocument, message: 'Document uploaded successfully.'
         }, { status: 201 });
 
     } catch (error: any) {
         if (error instanceof Response) return error;
         console.error('Error uploading document:', error);
-        // Optional Cleanup...
         if (storagePath && user && supabaseForUser && error instanceof Prisma.PrismaClientKnownRequestError) {
              console.warn(`Database insert failed after storage upload for path: ${storagePath}. Attempting cleanup.`);
              try { await supabaseForUser.storage.from(STORAGE_BUCKET_NAME).remove([storagePath]); console.log(`Cleaned up: ${storagePath}`); } catch (cleanupError) { console.error(`Cleanup failed for ${storagePath}:`, cleanupError); }
          }
-        // Error Handling...
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
              console.error('Prisma Error creating document record:', { code: error.code, meta: error.meta });
              return NextResponse.json<ApiResponse>({ success: false, error: 'Database error saving document metadata.' }, { status: 500 });
@@ -186,26 +256,21 @@ export async function POST(request: NextRequest) {
     }
 }
 
-
-// --- UPDATED GET Handler: List documents for the user with Pagination ---
+// (GET Handler remains the same)
 export async function GET(request: NextRequest) {
      try {
         const user = await requireAuth(request);
 
-        // --- Pagination Parameters ---
         const url = new URL(request.url);
         const page = parseInt(url.searchParams.get('page') || '1', 10);
-        const limit = parseInt(url.searchParams.get('limit') || '9', 10); // Default 9 per page
+        const limit = parseInt(url.searchParams.get('limit') || '9', 10);
         const skip = (page - 1) * limit;
 
-        // Fetch limit info separately (using Prisma-based validator)
         const limitCheck = await validateDocumentLimit(user.id);
 
-        // Fetch documents and total count using Prisma in a transaction
         const [documentsData, totalCount] = await prisma.$transaction([
              prisma.documents.findMany({
                 where: { user_id: user.id },
-                // Select only necessary fields for the list view
                 select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true },
                 orderBy: { created_at: 'desc' },
                 take: limit,
@@ -218,16 +283,15 @@ export async function GET(request: NextRequest) {
 
         const totalPages = Math.ceil(totalCount / limit);
 
-         // Map created_at to string ISO format for serialization
          const formattedDocuments: DocumentMetadata[] = documentsData.map(doc => ({
              ...doc,
-             created_at: doc.created_at?.toISOString() || '', // Ensure it's a string
+             created_at: doc.created_at?.toISOString() || '',
          }));
 
         const responseData: PaginatedDocumentsResponse = {
             documents: formattedDocuments,
-            count: totalCount, // Use the count from the transaction
-            limit: limitCheck.limit ?? Infinity, // Use the limit from validation
+            count: totalCount,
+            limit: limitCheck.limit ?? Infinity,
             totalPages,
             currentPage: page,
         };
@@ -240,7 +304,6 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         if (error instanceof Response) return error;
         console.error('Error fetching documents:', error);
-         // Handle Prisma specific error for invalid UUID format if applicable
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2023') {
              return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid User ID format somehow?' }, { status: 400 });
         }
