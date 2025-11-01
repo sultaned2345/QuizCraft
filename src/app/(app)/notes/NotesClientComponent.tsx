@@ -1,3 +1,4 @@
+/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/app/(app)/notes/NotesClientComponent.tsx */
 // src/app/(app)/notes/NotesClientComponent.tsx
 'use client';
 
@@ -70,7 +71,8 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   useEffect(() => {
     const tags = new Set<string>();
     notes.forEach(note => {
-      note.tags.forEach(tag => tags.add(tag));
+      // --- FIX: Add safeguard ---
+      (note.tags || []).forEach(tag => tags.add(tag));
     });
     setAllTags(tags);
   }, [notes]);
@@ -197,7 +199,8 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
       const matchesSearch = !searchTerm || note.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesTag = !selectedTag || note.tags.includes(selectedTag);
+      // --- FIX: Add safeguard ---
+      const matchesTag = !selectedTag || (note.tags || []).includes(selectedTag);
       return matchesSearch && matchesTag;
     });
   }, [notes, searchTerm, selectedTag]);
@@ -297,9 +300,10 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
               </CardHeader>
               <CardContent className="flex-grow">
                  {/* --- NEW: Show Tags --- */}
-                 {note.tags.length > 0 ? (
+                 {/* --- FIX: Add safeguard --- */}
+                 {(note.tags || []).length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {note.tags.map(tag => (
+                      {(note.tags || []).map(tag => (
                         <Badge key={tag} variant="secondary" className="font-normal">
                           {tag}
                         </Badge>
@@ -308,7 +312,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                   ) : (
                     <p className="text-sm text-muted-foreground italic">No tags.</p>
                   )}
-                 {/* --- END NEW --- */}
+                 {/* --- END NEW / FIX --- */}
               </CardContent>
               <CardFooter className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => handleEditClick(note)} disabled={isFetchingNote}>

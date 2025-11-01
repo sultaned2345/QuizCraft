@@ -1,3 +1,4 @@
+/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/app/(app)/notes/page.tsx */
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { NotesClientComponent } from './NotesClientComponent'; // Import the new client component
@@ -21,6 +22,7 @@ interface NoteListItem {
   title: string;
   created_at: string;
   updated_at: string;
+  tags: string[]; // <-- ADDED THIS FIELD
   // content is excluded
 }
 
@@ -51,6 +53,7 @@ async function getInitialNotes(userId: string, page: number = 1, limit: number =
                     title: true,
                     created_at: true,
                     updated_at: true,
+                    tags: true, // <-- ADDED THIS FIELD
                 }
             }),
             prisma.notes.count({
@@ -61,6 +64,7 @@ async function getInitialNotes(userId: string, page: number = 1, limit: number =
         // Serialize dates
         const notes: NoteListItem[] = notesData.map(note => ({
             ...note,
+            tags: note.tags || [], // <-- ADDED THIS LINE to default to an empty array
             created_at: note.created_at?.toISOString() || '',
             updated_at: note.updated_at?.toISOString() || '',
         }));
