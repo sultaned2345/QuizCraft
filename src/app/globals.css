@@ -1,8 +1,8 @@
 /* src/app/globals.css */
 
 @import "tailwindcss";
-/* @import "@tailwindcss/typography"; */ /* <-- DISABLED FOR TESTING */
-@import "tw-animate-css"; */
+@import "@tailwindcss/typography"; 
+/* @import "tw-animate-css"; */ /* <-- This plugin was removed */
 
 @custom-variant dark (&:is(.dark *));
 
