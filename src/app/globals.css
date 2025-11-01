@@ -1,5 +1,6 @@
+/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/app/globals.css */
 @import "tailwindcss";
-@import "tw-animate-css";
+/* @import "tw-animate-css"; <-- REMOVED THIS LINE */
 
 @custom-variant dark (&:is(.dark *));
 
