@@ -33,8 +33,9 @@ export async function GET(
         }
 
         // Serialize dates (Prisma dates are objects)
-        const responseNote = {
+        const responseNote: Note = {
             ...note,
+            tags: note.tags || [], // <-- ADDED
             created_at: note.created_at.toISOString(),
             updated_at: note.updated_at.toISOString(),
         };

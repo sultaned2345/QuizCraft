@@ -3,21 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js'; // Keep if used elsewhere or for validation client
 import { requireAuth } from '@/lib/auth';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
-import { ApiResponse, CreateNoteData, UpdateNoteData, Note } from '@/types/database';
+import { ApiResponse, CreateNoteData, UpdateNoteData, Note, NoteListItem, PaginatedNotesResponse } from '@/types/database'; // <-- UPDATED IMPORTS
 import { prisma } from '@/lib/prisma'; // Use Prisma for data operations
 import { Prisma } from '@prisma/client'; // Import Prisma for types if needed
-
-// Define a type for the paginated response data
-interface PaginatedNotesResponse {
-  notes: Note[];
-  count: number; // Total count of notes for the user
-  limit: number | typeof Infinity; // Usage limit for the plan
-  totalPages: number;
-  currentPage: number;
-}
-
-// Helper can be removed if not using scoped Supabase client for validation anymore
-// function getSupabaseClientForUser(...) { ... }
 
 // Validation function updated to use Prisma
 async function validateNoteCreation(userId: string): Promise<{ isValid: boolean; error?: string; message?: string; }> {
@@ -72,17 +60,25 @@ export async function GET(request: NextRequest) {
             orderBy: { created_at: 'desc' },
             take: limit,
             skip: skip,
-            // Select only necessary fields for list view if needed later
-            // select: { id: true, title: true, content: true, created_at: true, updated_at: true }
+            // --- UPDATED SELECT ---
+            select: { 
+              id: true, 
+              user_id: true, 
+              title: true, 
+              tags: true, // <-- ADDED
+              created_at: true, 
+              updated_at: true 
+            }
         }),
         prisma.notes.count({
             where: { user_id: user.id },
         }),
     ]);
 
-    // Ensure dates are serialized correctly (Prisma usually handles this, but explicit conversion is safe)
-    const notes = notesData.map(note => ({
+    // Ensure dates are serialized correctly
+    const notes: NoteListItem[] = notesData.map(note => ({ // <-- Use NoteListItem
         ...note,
+        tags: note.tags || [], // <-- ADDED (ensure it's an array)
         created_at: note.created_at?.toISOString() || '',
         updated_at: note.updated_at?.toISOString() || '',
     }));
@@ -130,23 +126,25 @@ export async function POST(request: NextRequest) {
     }
     // Validation helper remains useful
     const { validateRequestBody } = await import('@/lib/auth'); // Re-import locally if needed
-    const validation = validateRequestBody(body, ['title', 'content']);
+    const validation = validateRequestBody(body, ['title', 'content']); // Tags are optional
     if (!validation.isValid) {
       return NextResponse.json<ApiResponse>({ success: false, error: validation.error }, { status: 400 });
     }
-
+    
     // --- Use Prisma for insertion ---
     const newNote = await prisma.notes.create({
         data: {
             user_id: user.id,
             title: body.title.trim(),
             content: body.content.trim(),
+            tags: body.tags || [], // <-- ADDED
         }
     });
 
     // Serialize dates
     const responseNote = {
         ...newNote,
+        tags: newNote.tags || [], // <-- ADDED
         created_at: newNote.created_at?.toISOString() || '',
         updated_at: newNote.updated_at?.toISOString() || '',
     };
@@ -178,10 +176,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const body: UpdateNoteData = await request.json();
-    const { title, content } = body;
+    const { title, content, tags } = body; // <-- ADDED tags
 
-    if (title === undefined && content === undefined) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Title or content is required for update' }, { status: 400 });
+    if (title === undefined && content === undefined && tags === undefined) { // <-- ADDED tags
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Title, content, or tags is required for update' }, { status: 400 });
     }
 
     // --- Verify ownership using Prisma ---
@@ -203,9 +201,12 @@ export async function PUT(request: NextRequest) {
       updates.title = title.trim();
     }
     if (content !== undefined) {
-       if (content.trim().length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'Content cannot be empty' }, { status: 400 });
+       // Allow empty content
        updates.content = content.trim();
      }
+    if (tags !== undefined && Array.isArray(tags)) { // <-- ADDED
+        updates.tags = tags;
+    }
     // Prisma's @updatedAt handles the timestamp automatically
     // updates.updated_at = new Date(); // No longer needed if using @updatedAt
 
@@ -221,6 +222,7 @@ export async function PUT(request: NextRequest) {
      // Serialize dates
     const updatedNote = {
         ...updatedNoteData,
+        tags: updatedNoteData.tags || [], // <-- ADDED
         created_at: updatedNoteData.created_at?.toISOString() || '',
         updated_at: updatedNoteData.updated_at?.toISOString() || '',
     };

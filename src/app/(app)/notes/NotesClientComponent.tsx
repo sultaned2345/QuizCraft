@@ -1,7 +1,7 @@
 // src/app/(app)/notes/NotesClientComponent.tsx
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react'; // <-- ADDED useEffect
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,16 +9,19 @@ import { Note, ApiResponse } from '@/types/database'; // Import FULL Note type
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge'; // <-- NEW IMPORT
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search } from 'lucide-react';
+import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X } from 'lucide-react'; // <-- NEW IMPORT (X)
 import { NoteEditor } from '@/components/NoteEditor';
 import { GenerateNotesDialog } from '@/components/GenerateNotesDialog';
+import { cn } from '@/lib/utils'; // <-- NEW IMPORT
 
 // Type for the simplified Note structure from the API
 interface NoteListItem {
   id: string;
   user_id: string;
   title: string;
+  tags: string[]; // <-- ADDED
   created_at: string;
   updated_at: string;
   // content is excluded
@@ -45,9 +48,8 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   
-  // *** CHANGED: State now holds the full Note object for the editor ***
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-  const [isFetchingNote, setIsFetchingNote] = useState(false); // Loading state for single note
+  const [isFetchingNote, setIsFetchingNote] = useState(false);
   
   const [usage, setUsage] = useState({ count: initialData.count, limit: initialData.limit });
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,9 +57,24 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const notesPerPage = 9;
 
+  // --- NEW STATE FOR TAGS ---
+  const [allTags, setAllTags] = useState<Set<string>>(new Set());
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  // ---
+
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+
+  // --- NEW EFFECT: Calculate all tags when notes change ---
+  useEffect(() => {
+    const tags = new Set<string>();
+    notes.forEach(note => {
+      note.tags.forEach(tag => tags.add(tag));
+    });
+    setAllTags(tags);
+  }, [notes]);
+  // ---
 
   // --- Fetch More Notes (Client-Side) ---
   const fetchMoreNotes = useCallback(async (page: number) => {
@@ -71,7 +88,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
       if (!data.success || !data.data) {
         throw new Error(data.error || 'Failed to load more notes.');
       }
-      setNotes(prev => [...prev, ...data.data!.notes]);
+      setNotes(prev => [...prev, ...data.data!.notes]); // This triggers the useEffect for tags
       setCurrentPage(data.data.currentPage);
       setTotalPages(data.data.totalPages);
       setUsage({ count: data.data.count, limit: data.data.limit });
@@ -95,7 +112,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
             });
             const data: ApiResponse<PaginatedNotesData> = await response.json();
             if (!data.success || !data.data) throw new Error(data.error || 'Failed refresh.');
-            setNotes(data.data.notes);
+            setNotes(data.data.notes); // This triggers the useEffect for tags
             setCurrentPage(data.data.currentPage);
             setTotalPages(data.data.totalPages);
             setUsage({ count: data.data.count, limit: data.data.limit });
@@ -104,7 +121,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         }
     }, [session, toast, notesPerPage]);
 
-  // --- *** NEW: Handler for clicking Edit button *** ---
+  // --- Handler for clicking Edit button ---
   const handleEditClick = async (noteItem: NoteListItem) => {
     if (!session) return;
     setIsFetchingNote(true);
@@ -112,7 +129,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
     setIsEditorOpen(true); // Open dialog to show loader
 
     try {
-        // Fetch the full note content from the new endpoint
+        // Fetch the full note content (which now includes tags)
         const response = await fetch(`/api/notes/${noteItem.id}`, {
              headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
@@ -133,19 +150,31 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   };
 
 
-  // --- Save/Delete Handlers (Remain the same) ---
-  const handleSaveNote = async (noteData: { id?: string; title: string; content: string }) => {
+  // --- Save/Delete Handlers ---
+  const handleSaveNote = async (noteData: { id?: string; title: string; content: string; tags: string[] }) => {
      try {
        const isUpdating = !!noteData.id;
        const url = isUpdating ? `/api/notes?id=${noteData.id}` : '/api/notes';
        const method = isUpdating ? 'PUT' : 'POST';
-       const response = await fetch(url, { method, headers: { 'Authorization': `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: noteData.title, content: noteData.content }) });
+       
+       // --- MODIFIED: Send tags in the body ---
+       const response = await fetch(url, { 
+         method, 
+         headers: { 'Authorization': `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, 
+         body: JSON.stringify({ 
+           title: noteData.title, 
+           content: noteData.content,
+           tags: noteData.tags // <-- ADDED
+         }) 
+       });
+       // ---
+       
        const result = await response.json();
        if (!result.success) throw new Error(result.error);
        toast({ title: `Note ${isUpdating ? 'Updated' : 'Created'}` });
        setIsEditorOpen(false);
        setSelectedNote(null);
-       refreshFirstPage();
+       refreshFirstPage(); // This will also refresh the tag list
      } catch (error: any) {
        toast({ title: "Save Failed", description: error.message, variant: "destructive" });
      }
@@ -158,19 +187,21 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
        const result = await response.json();
        if (!result.success) throw new Error(result.error);
        toast({ title: "Note Deleted" });
-       refreshFirstPage();
+       refreshFirstPage(); // This will also refresh the tag list
      } catch (error: any) {
        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
      }
   };
 
-  // Memoized filtering (remains the same)
+  // --- MODIFIED: Memoized filtering now includes tags ---
   const filteredNotes = useMemo(() => {
-    if (!searchTerm) return notes;
-    return notes.filter(note =>
-      note.title.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [notes, searchTerm]);
+    return notes.filter(note => {
+      const matchesSearch = !searchTerm || note.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTag = !selectedTag || note.tags.includes(selectedTag);
+      return matchesSearch && matchesTag;
+    });
+  }, [notes, searchTerm, selectedTag]);
+  // ---
 
 
   return (
@@ -189,7 +220,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           <Button onClick={() => setIsGeneratorOpen(true)}>
               <Sparkles className="w-4 h-4 mr-2" /> Generate with AI
           </Button>
-          <Button onClick={() => { setSelectedNote(null); setIsEditorOpen(true); setIsFetchingNote(false); /* Set fetching false for new notes */ }}>
+          <Button onClick={() => { setSelectedNote(null); setIsEditorOpen(true); setIsFetchingNote(false); }}>
             <Plus className="w-4 h-4 mr-2" /> New Note
           </Button>
         </div>
@@ -201,6 +232,36 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
+      {/* --- NEW: Tag Filter --- */}
+      {allTags.size > 0 && (
+        <div className="mb-6 flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium">Filter by tag:</span>
+          {Array.from(allTags).sort().map(tag => (
+            <Button
+              key={tag}
+              variant={selectedTag === tag ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setSelectedTag(tag)}
+              className="h-7 px-2 py-1 text-xs"
+            >
+              {tag}
+            </Button>
+          ))}
+          {selectedTag && (
+             <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedTag(null)}
+              className="h-7 px-2 py-1 text-xs text-muted-foreground"
+            >
+              <X className="w-3 h-3 mr-1" /> Clear
+            </Button>
+          )}
+        </div>
+      )}
+      {/* --- END NEW --- */}
+
+
       {/* Grid or Empty State (remains the same) */}
        {(notes.length === 0) ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
@@ -208,11 +269,24 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           <h3 className="mt-4 text-lg font-semibold">No Notes Yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Create your first note or use AI.</p>
         </div>
-      ) : filteredNotes.length === 0 && searchTerm ? (
+      ) : filteredNotes.length === 0 ? ( // <-- MODIFIED: Check filteredNotes
          <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Matching Notes Found</h3>
-          <p className="mt-1 text-sm text-muted-foreground">No loaded notes match "{searchTerm}".</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {searchTerm && selectedTag ? `No loaded notes match "${searchTerm}" with tag "${selectedTag}".`
+            : searchTerm ? `No loaded notes match "${searchTerm}".`
+            : selectedTag ? `No loaded notes have the tag "${selectedTag}".`
+            : 'No notes found.'}
+          </p>
+          {selectedTag && (
+             <Button
+              variant="link"
+              onClick={() => setSelectedTag(null)}
+            >
+              Clear tag filter
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -222,10 +296,21 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                 <CardTitle className="text-lg truncate">{note.title}</CardTitle>
               </CardHeader>
               <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground italic">Content omitted for performance.</p>
+                 {/* --- NEW: Show Tags --- */}
+                 {note.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {note.tags.map(tag => (
+                        <Badge key={tag} variant="secondary" className="font-normal">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No tags.</p>
+                  )}
+                 {/* --- END NEW --- */}
               </CardContent>
               <CardFooter className="flex justify-end gap-2">
-                  {/* *** CHANGED: Use new handleEditClick function *** */}
                   <Button variant="outline" size="sm" onClick={() => handleEditClick(note)} disabled={isFetchingNote}>
                       {isFetchingNote && selectedNote?.id === note.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Edit className="w-4 h-4 mr-2" />}
                       {isFetchingNote && selectedNote?.id === note.id ? '' : 'Edit'}
@@ -240,7 +325,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
       )}
 
       {/* Load More Button (remains the same) */}
-      {totalPages > currentPage && !searchTerm && (
+      {totalPages > currentPage && !searchTerm && !selectedTag && ( // <-- MODIFIED: Hide if filtering
           <div className="mt-8 text-center">
               <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
                   {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Notes
@@ -251,7 +336,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
 
       {/* Modals */}
       <NoteEditor
-        // *** CHANGED: Pass the full 'selectedNote' and loading state ***
         note={selectedNote}
         isFetching={isFetchingNote}
         isOpen={isEditorOpen}

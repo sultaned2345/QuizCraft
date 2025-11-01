@@ -78,6 +78,7 @@ model notes {
   user_id    String    @db.Uuid // Foreign key referencing profiles.id
   title      String
   content    String
+  tags       String[]  @default([])
   created_at DateTime? @default(now()) @db.Timestamptz(6)
   updated_at DateTime? @updatedAt @db.Timestamptz(6)
 

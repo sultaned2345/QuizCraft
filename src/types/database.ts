@@ -40,6 +40,7 @@ export interface Note {
   user_id: string;
   title: string;
   content: string;
+  tags: string[]; // <-- ADDED
   created_at: string;
   updated_at: string;
 }
@@ -128,11 +129,13 @@ export interface UpdateQuizData {
 export interface CreateNoteData {
   title: string;
   content: string;
+  tags?: string[]; // <-- ADDED
 }
 
 export interface UpdateNoteData {
   title?: string;
   content?: string;
+  tags?: string[]; // <-- ADDED
 }
 
 export interface CreateDeckData {
@@ -167,6 +170,7 @@ export interface NoteListItem {
   id: string;
   user_id: string;
   title: string;
+  tags: string[]; // <-- ADDED
   created_at: string;
   updated_at: string;
   // content is excluded

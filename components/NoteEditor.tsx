@@ -17,14 +17,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Eye, Pencil } from 'lucide-react';
 import { Note } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MarkdownViewer } from '@/components/MarkdownViewer'; // <-- NEW IMPORT
+import { MarkdownViewer } from '@/components/MarkdownViewer';
 import { cn } from '@/lib/utils';
 
 interface NoteEditorProps {
   note: Note | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (noteData: { id?: string; title: string; content: string }) => Promise<void>;
+  onSave: (noteData: {
+    id?: string;
+    title: string;
+    content: string;
+    tags: string[]; // <-- ADDED
+  }) => Promise<void>;
   isFetching?: boolean;
 }
 
@@ -37,33 +42,46 @@ export function NoteEditor({
 }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tags, setTags] = useState(''); // <-- NEW: Store tags as a comma-separated string
   const [isSaving, setIsSaving] = useState(false);
-  const [mode, setMode] = useState<'write' | 'preview'>('write'); // <-- NEW STATE
+  const [mode, setMode] = useState<'write' | 'preview'>('write');
 
   useEffect(() => {
     if (isOpen) {
       if (note) {
+        // If we have a note object, populate fields
         setTitle(note.title);
         setContent(note.content);
+        setTags(note.tags ? note.tags.join(', ') : ''); // <-- NEW: Set tags
       } else {
+        // If note is null (for creating new or while fetching), clear fields
         setTitle('');
         setContent('');
+        setTags(''); // <-- NEW: Clear tags
       }
       setMode('write'); // Always default to 'write' mode when opening
     }
-  }, [note, isOpen]);
+  }, [note, isOpen]); // Effect runs when 'note' object changes
 
   const handleSave = async () => {
     if (!title.trim()) {
       alert('Title cannot be empty.');
       return;
     }
-    // Allow saving empty content
+
+    // --- NEW: Convert tag string to array ---
+    const tagsArray = tags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+    // ---
+
     setIsSaving(true);
     await onSave({
       id: note?.id,
       title,
       content,
+      tags: tagsArray, // <-- PASS TAGS ARRAY
     });
     setIsSaving(false);
   };
@@ -72,7 +90,6 @@ export function NoteEditor({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* --- MODIFIED: Made dialog wider --- */}
       <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
@@ -85,12 +102,18 @@ export function NoteEditor({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Show skeletons while fetching full note content */}
         {isFetching ? (
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="title" className="text-right">
                 Title
+              </Label>
+              <Skeleton className="h-10 col-span-3" />
+            </div>
+            {/* --- NEW: Skeleton for Tags --- */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tags" className="text-right">
+                Tags
               </Label>
               <Skeleton className="h-10 col-span-3" />
             </div>
@@ -102,9 +125,7 @@ export function NoteEditor({
             </div>
           </div>
         ) : (
-          // Show the form once fetching is done (or for new notes)
-          <div className="grid gap-4 py-4 flex-1 overflow-y-auto">
-            {/* --- MODIFIED: Title Input --- */}
+          <div className="grid gap-4 py-4 flex-1 overflow-y-auto pr-2">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="title-input" className="text-right">
                 Title
@@ -118,13 +139,28 @@ export function NoteEditor({
               />
             </div>
 
-            {/* --- MODIFIED: Content Editor with Toggle --- */}
+            {/* --- NEW: Tags Input --- */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tags-input" className="text-right">
+                Tags
+              </Label>
+              <Input
+                id="tags-input"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                className="col-span-3"
+                placeholder="e.g. biology, exam1, chapter3"
+                disabled={isDisabled}
+              />
+            </div>
+            {/* --- END NEW --- */}
+
+
             <div className="grid grid-cols-4 items-start gap-4 flex-1 min-h-[300px]">
               <div className="text-right space-y-2">
                 <Label htmlFor="content-input" className="pt-2">
                   Content
                 </Label>
-                {/* Toggle Buttons */}
                 <div className="flex flex-col items-end gap-2">
                   <Button
                     type="button"
@@ -147,7 +183,6 @@ export function NoteEditor({
                 </div>
               </div>
 
-              {/* Content Area */}
               <div className="col-span-3 flex-1 h-full min-h-[300px]">
                 {mode === 'write' ? (
                   <Textarea
@@ -162,7 +197,7 @@ export function NoteEditor({
                   <div
                     className={cn(
                       'w-full min-h-[300px] rounded-md border bg-muted p-4 overflow-y-auto',
-                      content ? 'text-primary' : 'text-muted-foreground',
+                      content ? '' : 'text-muted-foreground',
                     )}
                   >
                     {content ? (
