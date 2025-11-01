@@ -1,7 +1,7 @@
 /* src/app/globals.css */
 
 @import "tailwindcss";
-/* @import "@tailwindcss/typography"; */ /* <-- This was the *previous* fix */
+/* @import "@tailwindcss/typography"; */ /* <-- This plugin was removed */
 /* @import "tw-animate-css"; */ /* <-- This plugin was removed */
 
 @custom-variant dark (&:is(.dark *));
@@ -33,14 +33,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
-  /* The .dark block was here, but it's not allowed inside @theme.
-    It has been moved into @layer base below.
-  */
 }
 
 @layer base {
-  /* --- DARK MODE VARS MOVED HERE --- */
   .dark {
     --background: oklch(15% 0 0); /* Dark Gray */
     --foreground: oklch(98.83% 0.01 292.34); /* Light Gray for Text */
@@ -62,12 +57,20 @@
     --input: oklch(30% 0 0);
     --ring: oklch(65.91% 0.17 270.38);
   }
-  /* --- END OF MOVE --- */
 
   * {
-    @apply border-border outline-ring/50;
+    /* --- FIX --- */
+    /* Use the CSS variable directly */
+    border-color: var(--border);
+    /* Replicate outline-ring/50 */
+    outline-color: oklch(var(--ring) / 0.5); 
+    /* --- END FIX --- */
   }
   body {
-    @apply bg-background text-foreground;
+    /* --- FIX --- */
+    /* Use the CSS variables directly */
+    background-color: var(--background);
+    color: var(--foreground);
+    /* --- END FIX --- */
   }
 }
