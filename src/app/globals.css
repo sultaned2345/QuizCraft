@@ -58,19 +58,18 @@
     --ring: oklch(65.91% 0.17 270.38);
   }
 
+  /* --- FIX IS HERE --- */
   * {
-    /* --- FIX --- */
     /* Use the CSS variable directly */
     border-color: var(--border);
     /* Replicate outline-ring/50 */
-    outline-color: oklch(var(--ring) / 0.5); 
-    /* --- END FIX --- */
+    /* This assumes 'ring' is in oklch(L C H) format */
+    outline-color: oklch(from var(--ring) l c h / 0.5); 
   }
   body {
-    /* --- FIX --- */
     /* Use the CSS variables directly */
     background-color: var(--background);
     color: var(--foreground);
-    /* --- END FIX --- */
   }
+  /* --- END OF FIX --- */
 }
