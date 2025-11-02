@@ -4,13 +4,19 @@ import { prisma } from '@/lib/prisma';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
-import { ApiResponse } from '@/types/database';
+import { ApiResponse, DocumentMetadata } from '@/types/database'; // Updated type
 import { Prisma } from '@prisma/client';
 import { generateEmbeddingsForContent } from '@/lib/embedding';
 // --- DYNAMIC: Import the new server-side helper ---
 import { extractTextFromServerFile } from '@/lib/file-parser.server';
+// --- NEW: Import Google AI ---
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runtime = 'nodejs';
+
+// --- NEW: AI Config ---
+const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
+const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 
 // ... (Constants and Interfaces remain the same) ...
 const MAX_FILE_SIZE = 3 * 1024 * 1024;
@@ -29,7 +35,7 @@ const ALLOWED_EXTENSIONS = [
 const STORAGE_BUCKET_NAME = 'user_documents';
 const FREE_DOCUMENT_LIMIT = 5;
 
-interface DocumentMetadata { id: string; file_name: string; file_type: string; file_size: number; created_at: string; storage_path: string; }
+// --- MODIFIED: Interface now includes ai_summary ---
 interface PaginatedDocumentsResponse { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
 
 // ... (getSupabaseClientForUser, validateDocumentLimit helpers remain the same) ...
@@ -68,8 +74,35 @@ async function validateDocumentLimit(userId: string): Promise<{
     }
 }
 
-// --- DYNAMIC: All local text extraction helpers are REMOVED ---
-// (getTextFromPPTXNodes, extractTextFromPPTX, extractTextFromFile)
+// --- NEW HELPER: Generate AI Summary ---
+async function generateAISummary(text: string): Promise<string | null> {
+    if (!API_KEY) {
+        console.error("Missing GOOGLE_AI_API_KEY for summary.");
+        return null;
+    }
+    // Take first ~3000 chars for a fast summary
+    const textSnippet = text.substring(0, 3000); 
+
+    try {
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ 
+            model: AI_MODEL_NAME,
+            generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+        });
+        const prompt = `Generate a 1-2 sentence summary for the following text. Return ONLY valid JSON in this exact shape: {"summary": "..."}\n\nText:\n"""\n${textSnippet}\n"""`;
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const content = response.text();
+        
+        const parsed: { summary: string } = JSON.parse(content);
+        return parsed.summary || null;
+    } catch (error) {
+        console.error("Failed to generate AI summary:", error);
+        return null; // Return null on error, don't fail the upload
+    }
+}
+// --- END NEW HELPER ---
 
 
 // --- POST Handler (Refactored) ---
@@ -117,6 +150,11 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 }); //
         }
 
+        // --- DYNAMIC: Generate summary (non-blocking) ---
+        // We run this in parallel with storage upload
+        const summaryPromise = generateAISummary(extractedText);
+        // --- END DYNAMIC ---
+
         storagePath = `${user.id}/${Date.now()}-${file.name}`; //
         const { data: uploadData, error: uploadError } = await supabaseForUser.storage
             .from(STORAGE_BUCKET_NAME)
@@ -127,6 +165,10 @@ export async function POST(request: NextRequest) {
         }
         if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); } //
 
+        // --- DYNAMIC: Wait for summary result ---
+        const aiSummary = await summaryPromise; 
+        // --- END DYNAMIC ---
+
         const newDocumentData = await prisma.documents.create({
             data: {
                 user_id: user.id,
@@ -135,8 +177,9 @@ export async function POST(request: NextRequest) {
                 file_size: file.size,
                 storage_path: uploadData.path,
                 extracted_text: extractedText,
+                ai_summary: aiSummary, // <-- Save the summary
             },
-            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true }
+            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true } // <-- Select summary
         }); //
 
         // --- NEW: Asynchronously generate embeddings ---
@@ -146,9 +189,12 @@ export async function POST(request: NextRequest) {
           });
         // --- END NEW ---
 
-        const newDocument = {
+        const newDocument: DocumentMetadata = {
             ...newDocumentData,
+            user_id: user.id, // Add user_id for type consistency
+            ai_summary: newDocumentData.ai_summary || null, // Ensure it's null, not undefined
             created_at: newDocumentData.created_at?.toISOString() || '',
+            file_size: Number(newDocumentData.file_size) // Ensure file_size is number
         }; //
 
         return NextResponse.json<ApiResponse<DocumentMetadata>>({
@@ -175,7 +221,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// --- DYNAMIC: Original GET Handler (Restored) ---
+// --- DYNAMIC: Original GET Handler (Restored and Modified) ---
 export async function GET(request: NextRequest) {
      try {
         const user = await requireAuth(request);
@@ -190,7 +236,8 @@ export async function GET(request: NextRequest) {
         const [documentsData, totalCount] = await prisma.$transaction([
              prisma.documents.findMany({
                 where: { user_id: user.id },
-                select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true },
+                // --- MODIFIED: Select ai_summary ---
+                select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true },
                 orderBy: { created_at: 'desc' },
                 take: limit,
                 skip: skip,
@@ -204,7 +251,10 @@ export async function GET(request: NextRequest) {
 
          const formattedDocuments: DocumentMetadata[] = documentsData.map(doc => ({
              ...doc,
+             user_id: user.id, // Add user_id
+             ai_summary: doc.ai_summary || null, // Ensure null
              created_at: doc.created_at?.toISOString() || '',
+             file_size: Number(doc.file_size) // Ensure number
          }));
 
         const responseData: PaginatedDocumentsResponse = {

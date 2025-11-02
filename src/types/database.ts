@@ -71,6 +71,7 @@ export interface DocumentMetadata {
   file_size: number;
   storage_path: string;
   extracted_text?: string | null; // Optional, might not be needed in all contexts
+  ai_summary?: string | null; // --- ADDED ---
   created_at: string;
 }
 
@@ -215,6 +216,13 @@ export interface PaginatedNotesResponse {
   currentPage: number;
 }
 
+// --- NEW: Add GeneratedDeckInfo type ---
+export interface GeneratedDeckInfo {
+  id: string;
+  title: string;
+}
+// --- END NEW ---
+
 // For Paginated Decks List
 export interface PaginatedDecksResponse {
   decks: FlashcardDeck[]; // Assuming full deck needed for list, adjust if not
@@ -294,7 +302,7 @@ export interface Database {
         Update: Partial<Omit<Flashcard, 'id' | 'deck_id' | 'created_at'>>;
       };
       documents: {
-        Row: DocumentMetadata;
+        Row: DocumentMetadata; // This now includes ai_summary
         Insert: Omit<DocumentMetadata, 'id' | 'created_at'>;
         Update: Partial<
           Omit<DocumentMetadata, 'id' | 'user_id' | 'created_at'>

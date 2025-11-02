@@ -52,7 +52,7 @@ const safetySettings = [
 ];
 
 // --- (Tool Schemas and Handlers remain unchanged) ---
-// ... (tools, handleAddQuestionToQuiz, handleUpdateQuestionInQuiz, handleDeleteQuestionFromQuiz, saveChatHistory) ...
+// ... (tools, handleAddQuestionToQuiz, handleUpdateQuestionInQuiz, handleDeleteQuestionFromQuiz) ...
 // --- Tool Schemas ---
 const tools: { spec: FunctionDeclaration }[] = [
   {
@@ -203,15 +203,17 @@ async function handleDeleteQuestionFromQuiz(args: { questionId: string }) {
   }
 }
 
-// --- Helper to save chat history ---
-async function saveChatHistory(userId: string, role: 'user' | 'model', content: string) {
+// --- MODIFIED: Helper to save chat history ---
+async function saveChatHistory(userId: string, role: 'user' | 'model', content: string, context?: PageContext | null) {
     if (!content.trim()) return; // Don't save empty messages
     try {
         await prisma.chat_history.create({
             data: {
                 user_id: userId,
                 role,
-                content
+                content,
+                context_id: context?.id || null, // Save context ID or null
+                context_type: context?.type || null, // Save context type or null
             }
         });
     } catch (e) {
@@ -223,6 +225,7 @@ async function saveChatHistory(userId: string, role: 'user' | 'model', content: 
 export async function POST(request: NextRequest) {
   let userMessageContent: string = "";
   let userId: string = "";
+  let requestContext: PageContext | undefined | null = null; // Store context for saving model response
 
   try {
     const user = await requireAuth(request);
@@ -233,6 +236,7 @@ export async function POST(request: NextRequest) {
       context?: PageContext 
     };
     userMessageContent = message; // Store for history saving
+    requestContext = context; // Store context for saving model/error response
 
     if (!API_KEY) {
       throw new Error("Missing GOOGLE_AI_API_KEY environment variable");
@@ -250,6 +254,9 @@ export async function POST(request: NextRequest) {
       // --- BRANCH A: QUIZ REFINEMENT (Refactored for Tool Use) ---
       console.log(`[Chat API] Handling Quiz Refinement for quiz: ${context.id}`);
       
+      // --- ADDED: Save user message with context ---
+      await saveChatHistory(userId, 'user', message, context);
+
       const quiz = await prisma.quiz.findFirst({
         where: { id: context.id, userId: user.id },
         include: { questions: true }
@@ -285,16 +292,13 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
         { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy new request is: ${message}` }] }
       ];
 
-      // We don't save quiz-editing chats to the general history
-      // await saveChatHistory(userId, 'user', `(Context: Quiz ${quiz.id}) ${message}`);
-
     // --- NEW BRANCH FOR DOCUMENT-SPECIFIC CHAT ---
     } else if (context?.type === 'document' && context.id) {
       // --- BRANCH B: DOCUMENT-SPECIFIC RAG ---
       console.log(`[Chat API] Handling Document-Specific RAG for doc: ${context.id}`);
       
-      // We don't save document-specific chats to the general history
-      // await saveChatHistory(userId, 'user', message); 
+      // --- ADDED: Save user message with context ---
+      await saveChatHistory(userId, 'user', message, context); 
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
 
@@ -353,6 +357,9 @@ ${contextString}`;
     } else if (context?.type === 'essay' && context.id) {
       // --- BRANCH C: ESSAY FOLLOW-UP ---
       console.log(`[Chat API] Handling Essay Follow-up for essay: ${context.id}`);
+
+      // --- ADDED: Save user message with context ---
+      await saveChatHistory(userId, 'user', message, context);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
 
@@ -385,17 +392,14 @@ ${JSON.stringify(gradedEssay.feedback)}
         })),
       ];
       // This branch falls through to the common streaming logic
-      // We will save this history as it's general follow-up.
-      await saveChatHistory(userId, 'user', message);
-
     } else {
       // --- BRANCH D: DEFAULT RAG (Retrieval-Augmented Generation) ---
       console.log(`[Chat API] Handling Default RAG for user: ${user.id}`);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
       
-      // --- Save user message to DB ---
-      await saveChatHistory(userId, 'user', message);
+      // --- MODIFIED: Save user message with NULL context ---
+      await saveChatHistory(userId, 'user', message, null);
       
       const queryEmbedding = await generateQueryEmbedding(message);
       // --- MODIFIED RPC CALL: Pass NULL for p_content_id ---
@@ -436,9 +440,12 @@ ${JSON.stringify(gradedEssay.feedback)}
 
 ${contextString}`;
 
-      // --- NEW: Load general chat history ---
+      // --- NEW: Load general (null context) chat history ---
       const generalHistory = await prisma.chat_history.findMany({
-          where: { user_id: user.id },
+          where: { 
+            user_id: user.id,
+            context_id: null // <-- Only get general chat
+          },
           orderBy: { created_at: 'asc' },
           takeLast: 10, // Get last 10 messages
       });
@@ -520,11 +527,9 @@ ${contextString}`;
           }
         }
         
-        // --- Save model response to history ---
-        // Only save if it's not a quiz-editing or document-specific chat context
-        if (!context || (context.type !== 'quiz' && context.type !== 'document')) {
-            await saveChatHistory(userId, 'model', fullModelResponse);
-        }
+        // --- MODIFIED: Save model response to history ---
+        // Save the full response with the correct context
+        await saveChatHistory(userId, 'model', fullModelResponse, requestContext);
 
         controller.close();
       },
@@ -541,13 +546,9 @@ ${contextString}`;
     if (error instanceof Response) return error;
     console.error("Error in /api/chat:", error);
     
-    // Save error to history?
+    // --- MODIFIED: Save error to history with context ---
     if (userId && userMessageContent) {
-        // Only save if it was a general chat
-        const tempContext = (request as any).context; // A bit of a hack to get context here
-        if (!tempContext || (tempContext.type !== 'quiz' && tempContext.type !== 'document')) {
-            await saveChatHistory(userId, 'model', `Error: ${error.message || "An internal server error occurred."}`);
-        }
+        await saveChatHistory(userId, 'model', `Error: ${error.message || "An internal server error occurred."}`, requestContext);
     }
     
     return NextResponse.json(
