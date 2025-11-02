@@ -9,14 +9,24 @@ import { FlashcardDeck, ApiResponse } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+// --- THIS IS THE FIX ---
+// Added CardDescription to the import list
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+  CardDescription,
+} from '@/components/ui/card';
+// --- END OF FIX ---
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
+  DialogDescription as DialogDesc, // Renamed to avoid conflict with CardDescription
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
@@ -43,7 +53,13 @@ interface FlashcardsClientComponentProps {
 }
 
 // --- NEW: Study Queue Widget (internal component) ---
-function StudyQueueCard({ dueCount, firstDueDeckId }: { dueCount: number; firstDueDeckId: string | null }) {
+function StudyQueueCard({
+  dueCount,
+  firstDueDeckId,
+}: {
+  dueCount: number;
+  firstDueDeckId: string | null;
+}) {
   const router = useRouter();
 
   if (dueCount === 0) {
@@ -67,8 +83,10 @@ function StudyQueueCard({ dueCount, firstDueDeckId }: { dueCount: number; firstD
           <Layers className="w-5 h-5 text-primary" />
           <span>Study Queue</span>
         </CardTitle>
+        {/* This component was causing the error */}
         <CardDescription>
-          You have <strong>{dueCount} flashcard{dueCount > 1 ? 's' : ''}</strong> due for review.
+          You have <strong>{dueCount} flashcard{dueCount > 1 ? 's' : ''}</strong> due for
+          review.
         </CardDescription>
       </CardHeader>
       <CardFooter>
@@ -151,7 +169,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       ]);
 
       const decksData: ApiResponse<PaginatedDecksData> = await decksResponse.json();
-      if (!decksData.success || !decksData.data) throw new Error(decksData.error || 'Failed refresh.');
+      if (!decksData.success || !decksData.data)
+        throw new Error(decksData.error || 'Failed refresh.');
 
       setDecks(decksData.data.decks);
       setCurrentPage(decksData.data.currentPage);
@@ -209,7 +228,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         body: JSON.stringify({ title: editDeckTitle.trim() }),
       });
       const result: ApiResponse<FlashcardDeck> = await response.json();
-      if (!result.success || !result.data) throw new Error(result.error || 'Failed to update deck.');
+      if (!result.success || !result.data)
+        throw new Error(result.error || 'Failed to update deck.');
       toast({ title: 'Deck Updated!', description: `Renamed to "${result.data.title}".` });
       setIsEditDialogOpen(false);
       setEditingDeck(null);
@@ -235,7 +255,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
     }
   };
-
 
   return (
     <>
@@ -263,7 +282,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Create New Deck</DialogTitle>
-              <DialogDescription>Enter a title.</DialogDescription>
+              <DialogDesc>Enter a title.</DialogDesc>
             </DialogHeader>
             <form onSubmit={handleCreateDeck} className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
@@ -320,7 +339,12 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                 <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}>
                   <BookCopy className="w-4 h-4 mr-2" /> Study
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(deck)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleOpenEditDialog(deck)}
+                >
                   <Edit className="w-4 h-4" />
                   <span className="sr-only">Edit</span>
                 </Button>
@@ -356,7 +380,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Deck Title</DialogTitle>
-            <DialogDescription>Rename your flashcard deck.</DialogDescription>
+            <DialogDesc>Rename your flashcard deck.</DialogDesc>
           </DialogHeader>
           <form onSubmit={handleEditDeck} className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
@@ -380,7 +404,9 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
               </DialogClose>
               <Button
                 type="submit"
-                disabled={isSaving || !editDeckTitle.trim() || editDeckTitle.trim() === editingDeck?.title}
+                disabled={
+                  isSaving || !editDeckTitle.trim() || editDeckTitle.trim() === editingDeck?.title
+                }
               >
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes
               </Button>
