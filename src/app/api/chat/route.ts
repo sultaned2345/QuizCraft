@@ -4,22 +4,14 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Content } from "@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; 
 import { generateQueryEmbedding } from '@/lib/embedding';
-import { prisma } from '@/lib/prisma'; // <-- 1. IMPORT PRISMA
+import { prisma } from '@/lib/prisma'; // Import Prisma
 
 export const runtime = "nodejs";
 
 const MODEL_NAME = "gemini-2.5-flash-lite";
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 
-// --- 2. DEFINE CONTEXT TYPE ---
-interface PageContext {
-  type: 'quiz' | 'essay' | 'page';
-  id?: string;
-  name?: string;
-}
-
-const generationConfig = { /* ... (no changes) ... */ };
-const safetySettings = [ /* ... (no changes) ... */ ];
+// Define the source structure
 interface AISource {
   content_id: string;
   content_type: 'note' | 'document';
@@ -27,10 +19,33 @@ interface AISource {
   citation: number;
 }
 
+// Define Context type
+interface PageContext {
+  type: 'quiz' | 'essay' | 'page';
+  id?: string;
+  name?: string;
+}
+
+// Base generation config (can be overridden)
+const generationConfig = {
+  temperature: 0.6,
+  topK: 1,
+  topP: 1,
+  maxOutputTokens: 4096,
+  responseMimeType: "application/json",
+};
+
+const safetySettings = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+];
+
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
-    // 3. PARSE CONTEXT FROM BODY
     const { history, message, context } = await request.json() as { 
       history: Content[], 
       message: string, 
@@ -62,13 +77,17 @@ export async function POST(request: NextRequest) {
         throw new Error("Quiz not found or access denied.");
       }
 
-      // Note: We stream text back, but the AI is instructed to create JSON *within* the text.
-      systemPrompt = `You are an expert quiz editor. The user is editing their quiz and has a request.
-Given the user's request, analyze the provided quiz JSON.
-Your response MUST be a conversational message that CONTAINS a single valid JSON block for *only* the question that needs to be updated or added.
-If the user asks to "make question 3 harder," modify the question at index 2.
-If the user asks to "add a new question," generate one new question object.
-The JSON block must be in this *exact* shape:
+      // --- FIX: Stricter prompt ---
+      // This new prompt forces the AI to either provide the JSON or a clear error message
+      // related to *editing*, not RAG.
+      systemPrompt = `You are an expert quiz editor. Your task is to modify a quiz based on user requests.
+The user will provide the full quiz JSON and a request.
+You must respond with a conversational message that CONTAINS one single valid JSON block.
+This JSON block must represent the *single* question that was modified or added.
+
+- If the user asks to "modify question 3," you will return the JSON for *only* the new question 3.
+- If the user asks to "add a question," you will return the JSON for *only* the new question.
+- The JSON block MUST be in this *exact* shape:
 {
   "question_text": string,
   "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "FILL_IN_THE_BLANK",
@@ -76,23 +95,46 @@ The JSON block must be in this *exact* shape:
   "correct_answer": string,
   "explanation": string | null
 }
-Example response: "Sure! Here is the updated question 3 as a True/False question:\n\n\`\`\`json\n{ "question_text": "...", ... }\n\`\`\`"
-If the request is conversational (e.g., "how are you?"), just respond normally without any JSON.`;
+- If the user's request is unclear or you cannot perform the edit (e.g., "modify question 10" on a 5-question quiz), respond with a clear error message WITHOUT any JSON.
+- DO NOT mention study materials. Your context is only the quiz.
+
+Example response for a successful edit:
+"Sure! Here is the updated version of question 1:\n\n\`\`\`json
+{
+  "question_text": "What is the capital of France?",
+  "question_type": "MULTIPLE_CHOICE",
+  "options": ["Paris", "London", "Berlin", "Madrid"],
+  "correct_answer": "Paris",
+  "explanation": "Paris is the capital and most populous city of France."
+}
+\`\`\`"
+
+Example response for a failed edit:
+"I'm sorry, I can't modify question 10 because this quiz only has 5 questions. Please specify a valid question number."
+`;
       
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
         { role: "model", parts: [{ text: "I'm ready to help you edit this quiz. What would you like to change?" }] },
-        { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy request is: ${message}` }] }
+        // Add previous conversational history
+        ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
+          role: msg.role,
+          parts: [{ text: msg.text }],
+        })),
+        // Add the *full quiz context* as part of the *new* user message
+        { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy new request is: ${message}` }] }
       ];
       
-      // This branch will stream text, including the JSON block
       const chat = model.startChat({
-        generationConfig: { ...generationConfig, responseMimeType: "text/plain" }, // Override to plain text
+        // Must be text/plain to allow conversational text *and* the JSON block
+        generationConfig: { ...generationConfig, responseMimeType: "text/plain" }, 
         safetySettings,
-        history: chatHistory,
+        // History includes everything *except* the final user message
+        history: chatHistory.slice(0, -1),
       });
 
-      const result = await chat.sendMessageStream(message); // Use the user's message as the final prompt
+      // Send *only* the final message (which contains the context + new request)
+      const result = await chat.sendMessageStream(chatHistory[chatHistory.length - 1].parts);
       
       return new Response(result.stream, {
         headers: { 
@@ -146,7 +188,10 @@ ${JSON.stringify(gradedEssay.feedback)}
           match_count: 5,
           p_user_id: user.id
       });
-      if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
+      if (rpcError) { 
+        console.error("Error matching chunks:", rpcError);
+        throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
+      }
 
       let contextString = "--- START OF RELEVANT STUDY MATERIALS ---\n\n";
       if (chunks && chunks.length > 0) {
