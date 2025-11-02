@@ -5,7 +5,7 @@ import {
   HarmCategory,
   HarmBlockThreshold,
   Content,
-  FunctionDeclarationSchemaType, // <-- FIX: Renamed from FunctionDeclarationSchema.Type
+  SchemaType, // <-- FIX: This is the correct export
   FunctionDeclaration,
   Part,
 } from "@google/generative-ai";
@@ -58,31 +58,31 @@ const tools: { spec: FunctionDeclaration }[] = [
       name: "addQuestionToQuiz",
       description: "Adds a new question to a specific quiz.",
       parameters: {
-        type: FunctionDeclarationSchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT, // <-- FIX
         properties: {
-          quizId: { type: FunctionDeclarationSchemaType.STRING, description: "The ID of the quiz to add the question to." }, // <-- FIX
-          question_text: { type: FunctionDeclarationSchemaType.STRING }, // <-- FIX
+          quizId: { type: SchemaType.STRING, description: "The ID of the quiz to add the question to." }, // <-- FIX
+          question_text: { type: SchemaType.STRING }, // <-- FIX
           question_type: { 
-            type: FunctionDeclarationSchemaType.STRING, // <-- FIX
+            type: SchemaType.STRING, // <-- FIX
             enum: ["MULTIPLE_CHOICE", "TRUE_FALSE", "FILL_IN_THE_BLANK", "MATCHING"]
           },
           options: { 
-            type: FunctionDeclarationSchemaType.ARRAY, // <-- FIX
-            items: { type: FunctionDeclarationSchemaType.STRING }, // <-- FIX
+            type: SchemaType.ARRAY, // <-- FIX
+            items: { type: SchemaType.STRING }, // <-- FIX
             nullable: true,
             description: "For MULTIPLE_CHOICE or MATCHING. For FILL_IN_THE_BLANK, this is an array of acceptable answers."
           },
           prompts: {
-            type: FunctionDeclarationSchemaType.ARRAY, // <-- FIX
-            items: { type: FunctionDeclarationSchemaType.STRING }, // <-- FIX
+            type: SchemaType.ARRAY, // <-- FIX
+            items: { type: SchemaType.STRING }, // <-- FIX
             nullable: true,
             description: "For MATCHING type only. The list of prompts."
           },
           correct_answer: { 
-            type: FunctionDeclarationSchemaType.STRING, // <-- FIX
+            type: SchemaType.STRING, // <-- FIX
             description: "For MC, must be one of the options. For T/F, must be 'True' or 'False'. For FILL_IN_THE_BLANK, can be N/A. For MATCHING, can be N/A."
           },
-          explanation: { type: FunctionDeclarationSchemaType.STRING, nullable: true }, // <-- FIX
+          explanation: { type: SchemaType.STRING, nullable: true }, // <-- FIX
         },
         required: ["quizId", "question_text", "question_type", "correct_answer"]
       }
@@ -93,18 +93,18 @@ const tools: { spec: FunctionDeclaration }[] = [
       name: "updateQuestionInQuiz",
       description: "Updates an existing question in a quiz.",
       parameters: {
-        type: FunctionDeclarationSchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT, // <-- FIX
         properties: {
-          questionId: { type: FunctionDeclarationSchemaType.STRING, description: "The ID of the question to update." }, // <-- FIX
+          questionId: { type: SchemaType.STRING, description: "The ID of the question to update." }, // <-- FIX
           newQuestionData: {
-            type: FunctionDeclarationSchemaType.OBJECT, // <-- FIX
+            type: SchemaType.OBJECT, // <-- FIX
             description: "An object containing *only* the fields to be updated.",
             properties: {
-              question_text: { type: FunctionDeclarationSchemaType.STRING, nullable: true }, // <-- FIX
-              options: { type: FunctionDeclarationSchemaType.ARRAY, items: { type: FunctionDeclarationSchemaType.STRING }, nullable: true }, // <-- FIX
-              prompts: { type: FunctionDeclarationSchemaType.ARRAY, items: { type: FunctionDeclarationSchemaType.STRING }, nullable: true }, // <-- FIX
-              correct_answer: { type: FunctionDeclarationSchemaType.STRING, nullable: true }, // <-- FIX
-              explanation: { type: FunctionDeclarationSchemaType.STRING, nullable: true }, // <-- FIX
+              question_text: { type: SchemaType.STRING, nullable: true }, // <-- FIX
+              options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }, // <-- FIX
+              prompts: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }, // <-- FIX
+              correct_answer: { type: SchemaType.STRING, nullable: true }, // <-- FIX
+              explanation: { type: SchemaType.STRING, nullable: true }, // <-- FIX
             }
           }
         },
@@ -117,9 +117,9 @@ const tools: { spec: FunctionDeclaration }[] = [
       name: "deleteQuestionFromQuiz",
       description: "Deletes a question from a quiz.",
       parameters: {
-        type: FunctionDeclarationSchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT, // <-- FIX
         properties: {
-          questionId: { type: FunctionDeclarationSchemaType.STRING, description: "The ID of the question to delete." } // <-- FIX
+          questionId: { type: SchemaType.STRING, description: "The ID of the question to delete." } // <-- FIX
         },
         required: ["questionId"]
       }
