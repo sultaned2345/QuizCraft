@@ -14,16 +14,21 @@ import {
   StickyNote,
   Layers,
   FileSignature,
-  MessageSquare,
   FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { ChatbotDialog } from '@/components/ChatbotDialog';
 import { PageProvider } from '@/contexts/PageContext'; 
+// --- 1. IMPORT TOOLTIP COMPONENTS ---
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ... (AppHeader component remains unchanged) ...
 const AppHeader = () => {
-  /* ... (no changes) ... */
   const { signOut } = useAuth();
   const router = useRouter();
 
@@ -45,34 +50,73 @@ const AppHeader = () => {
   );
 };
 
-// ... (SidebarNav component remains unchanged) ...
-const SidebarNav = () => {
+// --- 2. MODIFIED SIDEBARNAV ---
+const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
   const pathname = usePathname();
+  
   const navItems = [
     { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
+    { label: 'AI Tutor', icon: Sparkles, action: onOpenChat }, 
   ];
 
   return (
-    <nav className="flex flex-col items-start gap-1 px-2 text-sm font-medium lg:px-4">
-      {navItems.map((item) => (
-        <Link
-          key={item.label}
-          href={item.href}
-          className={cn(
-            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-            // --- MODIFIED: Highlight logic for /documents and /documents/[id] ---
-            (pathname === item.href || (item.href === '/documents' && pathname.startsWith('/documents/')) || (item.href !== '/documents' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
-          )}
-        >
-          <item.icon className="h-4 w-4" />
-          {item.label}
-        </Link>
-      ))}
-    </nav>
+    // Add TooltipProvider around the navigation
+    <TooltipProvider delayDuration={0}>
+      <nav className="flex flex-col items-center gap-2 px-2 text-sm font-medium lg:px-4">
+        {navItems.map((item) => {
+          const isActive = item.href && (pathname === item.href || (item.href === '/documents' && pathname.startsWith('/documents/')) || (item.href !== '/documents' && pathname.startsWith(item.href)));
+          
+          // Common classes for the icon buttons
+          const itemClasses = cn(
+              'flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-primary',
+              isActive && 'bg-muted text-primary'
+          );
+
+          // Render a Button for the action item
+          if (item.action) {
+            return (
+              <Tooltip key={item.label}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={cn(itemClasses, "mt-2 border-t border-dashed rounded-none pt-4")} // Add separator
+                    onClick={item.action}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    <span className="sr-only">{item.label}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>{item.label}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+          
+          // Render a Link for navigation items
+          return (
+            <Tooltip key={item.label}>
+              <TooltipTrigger asChild>
+                <Link
+                  href={item.href || '#'}
+                  className={itemClasses}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className="sr-only">{item.label}</span>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>{item.label}</p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </nav>
+    </TooltipProvider>
   );
 };
 
@@ -80,49 +124,30 @@ const SidebarNav = () => {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   
-  // --- NEW: Check pathname ---
-  const pathname = usePathname();
-  // Regex to match /documents/[any-uuid-or-string]
-  const isDocViewPage = /^\/documents\/[a-zA-Z0-9-]+$/.test(pathname);
-  // ---
-
   return (
     <PageProvider>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
-        <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
-          {/* ... (Sidebar content remains the same) ... */}
-          <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-            <Link href="/documents" className="flex items-center gap-2 font-semibold">
+        {/* --- 3. MODIFIED ASIDE (SMALLER) --- */}
+        <aside className="fixed inset-y-0 left-0 z-10 hidden w-20 flex-col border-r bg-background sm:flex">
+          <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
+            {/* Logo is now just an icon */}
+            <Link href="/documents" className="flex items-center justify-center gap-2 font-semibold">
               <Sparkles className="h-6 w-6 text-primary" />
-              <span className="">QuizCraft</span>
+              <span className="sr-only">QuizCraft</span>
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-4">
-            <SidebarNav />
+            <SidebarNav onOpenChat={() => setIsChatbotOpen(true)} />
           </div>
         </aside>
-        <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-60">
+        
+        {/* --- 4. MODIFIED MAIN CONTENT (NEW PADDING) --- */}
+        <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-20">
           <AppHeader />
           <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
         </div>
 
-        {/* --- MODIFIED: Conditionally render Chatbot Trigger --- */}
-        {!isDocViewPage && (
-          <div className="fixed bottom-6 right-6 z-40">
-            <Button
-              size="icon"
-              className="rounded-full h-14 w-14 shadow-lg"
-              onClick={() => setIsChatbotOpen(true)}
-            >
-              <MessageSquare className="h-6 w-6" />
-              <span className="sr-only">Open AI Tutor</span>
-            </Button>
-          </div>
-        )}
-        {/* --- END MODIFICATION --- */}
-
-
-        {/* Chatbot Dialog Component (now inside provider) */}
+        {/* Chatbot Dialog Component (unchanged) */}
         <ChatbotDialog isOpen={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
       </div>
     </PageProvider>

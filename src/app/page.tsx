@@ -6,15 +6,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-// --- MODIFICATION: Import new icons ---
 import { Upload, FileText, ArrowRight, Sparkles, FileSignature, StickyNote, Layers } from "lucide-react";
-// ---
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LandingPage() {
-  const [inputMode, setInputMode] = useState<"text" | "file">("text");
+  const [inputMode, setInputMode] = useState<"text" | "file">("text"); // State is preserved for file handling logic
   const [textContent, setTextContent] = useState("");
   const [fileName, setFileName] = useState("");
   const { user, loading } = useAuth();
@@ -22,15 +20,29 @@ export default function LandingPage() {
 
   const handleActionClick = () => {
     if (loading) return;
+    
+    // Store content in local storage to pass to create page (or use state management)
+    // This is a simple way to pass the data without complex state.
+    try {
+      if (textContent) {
+        localStorage.setItem("landingPageContent", textContent);
+      } else {
+        localStorage.removeItem("landingPageContent");
+      }
+      // We can't store the file, so we'll just redirect.
+      // The `create` page will need to handle file uploads.
+      // For now, this just directs the user to the right starting point.
+    } catch (e) {
+      console.error("Could not set item in local storage", e);
+    }
+    
     if (user) {
-      // --- MODIFICATION: Go to documents or create ---
-      // If they've added content, go to create. Otherwise, documents.
+      // If they've added content, go to create page
       if (textContent || fileName) {
         router.push("/create");
       } else {
-        router.push("/documents");
+        router.push("/documents"); // Default to documents if no content
       }
-      // --- END MODIFICATION ---
     } else {
       router.push("/login");
     }
@@ -40,8 +52,10 @@ export default function LandingPage() {
     const file = e.target.files?.[0];
     if (file) {
       setFileName(file.name);
-      // In a real scenario, you might read the file content here
-      // or prepare it for upload on the create page.
+      setTextContent(""); // Clear text content
+      // We'll let the /create page handle the actual upload
+      // But we'll push to it
+      handleActionClick();
     }
   };
 
@@ -72,9 +86,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           {loading ? null : user ? (
-            // --- MODIFICATION: Link to Documents ---
             <Button onClick={() => router.push("/documents")}>My Documents</Button>
-            // --- END MODIFICATION ---
           ) : (
             <>
               <Button variant="ghost" asChild>
@@ -88,111 +100,106 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero Section (MODIFIED) */}
-      <main className="container mx-auto px-4 py-16 md:py-24 text-center">
-        <h1 className="text-4xl md:text-6xl font-extrabold mb-4 leading-tight">
-          Chat With Your Documents
+      {/* --- MODIFIED HERO --- */}
+      <main className="container mx-auto px-4 py-24 md:py-40 text-center flex flex-col items-center">
+        <h1 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight max-w-4xl">
+          Your Personal AI Study Partner
         </h1>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-          Upload your study materials, lecture notes, or any PDF, and our AI will help you learn.
-          Generate quizzes, flashcards, and summaries instantly.
+        <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto mb-10">
+          Upload any document, PDF, or note and instantly generate quizzes, flashcards, and summaries. Stop reading, start learning.
         </p>
-        {/* --- END MODIFICATION --- */}
 
-        <Card className="max-w-2xl mx-auto p-4 md:p-6 shadow-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
-          <CardContent className="p-0">
-            <div className="flex justify-center mb-4 border border-slate-200 dark:border-slate-700 rounded-lg p-1 w-min mx-auto">
-              <Button
-                variant={inputMode === "text" ? "secondary" : "ghost"}
-                onClick={() => setInputMode("text")}
-                className="w-32"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Text
-              </Button>
-              <Button
-                variant={inputMode === "file" ? "secondary" : "ghost"}
-                onClick={() => setInputMode("file")}
-                className="w-32"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                File
-              </Button>
-            </div>
-
-            {inputMode === "text" ? (
-              <Textarea
-                placeholder="Paste your notes, an article, or any text here..."
-                className="h-32 text-base"
-                value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-              />
-            ) : (
-              <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 flex flex-col items-center justify-center">
-                <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                <p className="font-semibold">
-                  {fileName || "Click to upload a file"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  PDF, TXT, DOCX, PPTX (Max 3MB)
-                </p>
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  onChange={handleFileChange}
-                  accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                />
-              </div>
-            )}
-
+        {/* --- NEW "v0-style" Input Area --- */}
+        <div className="w-full max-w-3xl relative">
+          <Textarea
+            placeholder="Paste your notes, an article, or any text here to get started..."
+            className="h-40 p-6 pr-40 text-base rounded-lg shadow-xl"
+            value={textContent}
+            onChange={(e) => {
+              setTextContent(e.target.value);
+              setFileName(""); // Clear file name if user types
+            }}
+          />
+          <div className="absolute top-6 right-6 flex flex-col gap-2">
             <Button
               size="lg"
-              className="w-full mt-4 text-lg"
+              className="w-full"
               onClick={handleActionClick}
-              disabled={loading} // Only disable on auth loading
+              disabled={loading || (!textContent && !fileName)}
             >
               Get Started <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full relative"
+              onClick={() => (document.getElementById('file-upload-landing') as HTMLInputElement)?.click()}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {fileName ? "File Selected!" : "Upload File"}
+              <input
+                type="file"
+                id="file-upload-landing"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={handleFileChange}
+                accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+              />
+            </Button>
+            {fileName && (
+              <p className="text-xs text-muted-foreground truncate" title={fileName}>
+                {fileName}
+              </p>
+            )}
+          </div>
+        </div>
       </main>
+      {/* --- END HERO --- */}
 
-      {/* --- MODIFICATION: Features Section (Updated copy) --- */}
-      <section className="bg-white dark:bg-slate-800/30 py-20">
+
+      {/* --- MODIFIED FEATURES SECTION --- */}
+      <section className="bg-white dark:bg-slate-800/30 py-24">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold">A Full Study Toolkit</h2>
-            <p className="text-muted-foreground mt-2">
-              All powered by your personal document library.
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">A Complete Toolkit for Effective Learning</h2>
+            <p className="text-lg text-muted-foreground mt-3 max-w-2xl mx-auto">
+              Go from document to deep understanding in minutes.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+          {/* 3-column row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             <FeatureCard
               icon={<FileText size={28} />}
               title="Chat with Documents"
-              description="Upload your materials and ask questions. Our AI provides cited answers from your content."
+              description="Upload your materials and ask specific questions. Our AI provides cited answers directly from your content."
             />
             <FeatureCard
               icon={<Sparkles size={28} />}
-              title="AI-Powered Quizzes"
-              description="Instantly generate quizzes from any document to test your knowledge."
+              title="Instant Quizzes"
+              description="Instantly generate multiple-choice, true/false, and fill-in-the-blank quizzes from any document to test your knowledge."
             />
             <FeatureCard
               icon={<Layers size={28} />}
               title="Smart Flashcards"
-              description="Create decks in one click from your notes, or study with spaced repetition."
+              description="Create flashcard decks in one click from your notes, complete with spaced repetition to improve memory retention."
             />
+          </div>
+          {/* 2-column row, centered */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto mt-8">
             <FeatureCard
               icon={<FileSignature size={28} />}
               title="AI Essay Grader"
-              description="Get instant, detailed feedback on your writing, complete with scores and suggestions."
+              description="Get instant, detailed feedback on your writing, complete with scores, highlights, and suggestions."
+            />
+            <FeatureCard
+              icon={<StickyNote size={28} />}
+              title="AI Note Summarizer"
+              description="Paste text or a URL and get concise, structured notes on the key concepts."
             />
           </div>
         </div>
       </section>
-      {/* --- END MODIFICATION --- */}
+      {/* --- END FEATURES --- */}
 
-      {/* Footer is now handled by layout.tsx */}
     </div>
   );
 }
