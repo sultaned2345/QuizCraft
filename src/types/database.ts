@@ -108,6 +108,14 @@ export interface GradeEssayResponseData {
   graded_at: string; // ISO string format
 }
 
+export interface QuizAttempt {
+  id: string;
+  user_id: string;
+  quiz_id: string;
+  score: number;
+  total: number;
+  created_at: string;
+}
 
 // --- Form Data Types ---
 export interface CreateQuizData {
