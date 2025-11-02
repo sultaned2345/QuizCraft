@@ -93,7 +93,41 @@ export default function QuizPage() {
   const { toast } = useToast();
   const quizId = params.quizId as string;
 
+  // --- FIX: saveAttempt MOVED HERE and wrapped in useCallback ---
+  const saveAttempt = useCallback(async (score: number, total: number) => {
+    if (!session || !quizId) {
+      console.warn('No session or quizId, cannot save attempt.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/quiz/attempt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          quizId: quizId,
+          score: score,
+          total: total,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || 'Failed to save attempt');
+      }
+
+      console.log('Quiz attempt saved successfully.');
+    } catch (error) {
+      console.error('Error saving quiz attempt:', error);
+      // We won't show a toast for this, as it's a background task.
+    }
+  }, [session, quizId]); // Dependencies for saveAttempt
+
   // --- MODIFIED: New function to handle ending the quiz ---
+  // This function is now defined *after* saveAttempt
   const handleQuizEnd = useCallback(() => {
     // Check if already ended to prevent double submissions
     if (viewMode === 'results') return; 
@@ -103,7 +137,7 @@ export default function QuizPage() {
       saveAttempt(finalScore, questions.length);
     }
     setViewMode('results');
-  }, [userAnswers, questions, saveAttempt, viewMode]); // Added dependencies
+  }, [userAnswers, questions, saveAttempt, viewMode]); // saveAttempt dependency is now valid
 
   // Define loadQuizData using useCallback to avoid redefining it on every render
   const loadQuizData = useCallback(async () => {
@@ -221,38 +255,7 @@ export default function QuizPage() {
   }, [timeLeft, viewMode, toast, handleQuizEnd]);
   // ---
 
-  // --- NEW FUNCTION: saveAttempt ---
-  const saveAttempt = async (score: number, total: number) => {
-    if (!session || !quizId) {
-      console.warn('No session or quizId, cannot save attempt.');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/quiz/attempt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          quizId: quizId,
-          score: score,
-          total: total,
-        }),
-      });
-
-      if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.error || 'Failed to save attempt');
-      }
-
-      console.log('Quiz attempt saved successfully.');
-    } catch (error) {
-      console.error('Error saving quiz attempt:', error);
-      // We won't show a toast for this, as it's a background task.
-    }
-  };
+  // --- saveAttempt function was moved *before* handleQuizEnd ---
 
   const handleAnswerSelect = (answer: string) => {
     if (isAnswered) return;
