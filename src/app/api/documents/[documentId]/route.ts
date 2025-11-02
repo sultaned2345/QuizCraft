@@ -1,13 +1,31 @@
 // src/app/api/documents/[documentId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabase } from '@/lib/supabaseClient'; // <-- FIX: Changed from '@/lib/supabase'
+// --- FIX: Import createClient, not the singleton browser client ---
+import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 const STORAGE_BUCKET_NAME = 'user_documents';
+
+// --- FIX: Add this helper function (copied from /api/documents/route.ts) ---
+// This creates a Supabase client authenticated as the user making the request.
+function getSupabaseClientForUser(request: NextRequest) {
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) throw new Error("Missing auth token for storage operation");
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    
+    return createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+}
+// --- END FIX ---
+
 
 // --- DELETE Handler: Delete a document record and its file from storage ---
 export async function DELETE(
@@ -37,21 +55,28 @@ export async function DELETE(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 }); ///route.ts]
         }
 
+        // --- FIX: Create and use an authenticated client for storage operations ---
+        const supabaseForUser = getSupabaseClientForUser(request);
+        // --- END FIX ---
+
         // 2. Delete the file from Supabase Storage
         if (documentToDelete.storage_path) {
-            // Use the standard client which respects RLS (user can delete their own files)
-            const { error: storageError } = await supabase.storage
+            // --- FIX: Use the authenticated client (supabaseForUser) ---
+            const { error: storageError } = await supabaseForUser.storage
                 .from(STORAGE_BUCKET_NAME)
                 .remove([documentToDelete.storage_path]); ///route.ts]
 
             if (storageError) {
                 console.error(`Supabase storage error deleting file ${documentToDelete.storage_path}:`, storageError); ///route.ts]
+                // Throw an error to stop the transaction
+                throw new Error(`Storage delete failed: ${storageError.message}`);
             } else {
                  console.log(`Successfully deleted file from storage: ${documentToDelete.storage_path}`); ///route.ts]
             }
         }
 
         // 3. Delete the document record and embeddings in a transaction
+        // This part will now work because 'content_embeddings' is in the schema
         await prisma.$transaction([
             // Delete embeddings
             prisma.content_embeddings.deleteMany({
@@ -75,7 +100,6 @@ export async function DELETE(
         }); ///route.ts]
 
     } catch (error: any) {
-        // ... (error handling remains the same) .../route.ts]
         if (error instanceof Response) return error; 
 
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
