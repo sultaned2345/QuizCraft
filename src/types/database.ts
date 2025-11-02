@@ -75,14 +75,28 @@ export interface DocumentMetadata {
 }
 
 // --- Graded Essay Types (NEW) ---
-export interface GradedEssayFeedback {
-  clarity?: string;
-  argument?: string;
-  grammar?: string;
-  summary?: string;
-  // Add other categories as defined in your AI prompt
-  [key: string]: string | undefined; // Allow flexible categories
+
+// --- MODIFICATION: Define new structured feedback ---
+export interface EssayFeedbackHighlight {
+    text: string; // The exact text snippet from the essay
+    comment: string; // The AI's comment on that snippet
 }
+
+export interface EssayFeedbackCategory {
+    summary: string; // Overall summary for this category
+    highlights: EssayFeedbackHighlight[]; // Specific examples
+}
+
+export interface GradedEssayFeedback {
+  clarity?: EssayFeedbackCategory | string; // Support old (string) and new format
+  argument?: EssayFeedbackCategory | string;
+  grammar?: EssayFeedbackCategory | string;
+  summary: string; // Keep summary as a simple string
+  // Add other categories as defined in your AI prompt
+  [key: string]: EssayFeedbackCategory | string | undefined; // Allow flexible categories
+}
+// --- END MODIFICATION ---
+
 
 // --- MODIFICATION: Replaced PrismaJsonValue ---
 export type GenericJsonValue =
@@ -121,6 +135,7 @@ export interface GradeEssayResponseData {
   score: number | null;
   suggestions?: string[]; // Optional suggestions from AI
   graded_at: string; // ISO string format
+  essay_content: string; // --- ADDED: Return the graded text ---
 }
 
 export interface QuizAttempt {

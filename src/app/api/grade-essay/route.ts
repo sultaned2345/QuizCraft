@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Use admin client for usage update
-import { ApiResponse, GradeEssayData, GradeEssayResponseData, GradedEssayFeedback } from '@/types/database';
+import { ApiResponse, GradeEssayData, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory } from '@/types/database';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { Prisma } from '@prisma/client';
 import pdfParse from 'pdf-parse-fork';
@@ -31,26 +31,105 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// --- Expected AI JSON Output Structure ---
+// --- MODIFICATION: Updated AI JSON Output Structure ---
+interface AIFeedbackHighlight {
+  text: string;
+  comment: string;
+}
+interface AIFeedbackCategory {
+  summary: string;
+  highlights: AIFeedbackHighlight[];
+}
 interface AIGradedEssayResponse {
   score: number | null;
-  feedback: GradedEssayFeedback;
+  feedback: {
+    clarity: AIFeedbackCategory;
+    argument: AIFeedbackCategory;
+    grammar: AIFeedbackCategory;
+    summary: string; // Keep overall summary simple
+    // We can add more categories here
+  };
   suggestions: string[];
 }
 
-// --- Helper Function to Build AI Prompt ---
+// --- MODIFICATION: Helper Function to Build NEW AI Prompt ---
 function buildAIPrompt(essayText: string, rubricText?: string): string {
-    // ... (keep existing prompt building logic) ...
-     const baseInstruction = `You are a helpful writing tutor providing feedback on an essay...`; // Keep full instructions
-     const rubricInstruction = rubricText ? `Use the following rubric...\n"""\n${rubricText}\n"""\n` : `Evaluate based on standard academic criteria...`;
-     const outputFormat = `Return ONLY valid JSON in this exact shape:\n{\n  "score": number | null, ... \n  "feedback": { ... },\n  "suggestions": [ ... ]\n}`; // Keep full format definition
+    const baseInstruction = `You are a helpful writing tutor. Your task is to provide detailed feedback on an essay.
+Analyze the essay based on the user's rubric or standard academic criteria (clarity, argument, grammar).
+You MUST provide:
+1.  An overall 'score' (0-100) or null if not applicable.
+2.  A list of 'suggestions' (1-3 strings) for improvement.
+3.  A 'feedback' object with:
+    a. 'clarity': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
+    b. 'argument': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
+    c. 'grammar': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
+    d. 'summary': An overall summary (string) of the essay.
+
+For 'highlights', find 1-2 exact snippets ('text') from the essay for each category (clarity, argument, grammar) and provide a 'comment' for each snippet. If no highlights are found for a category, return an empty array [].`;
+
+     const rubricInstruction = rubricText 
+       ? `Use the following specific rubric or instructions provided by the user:\n"""\n${rubricText}\n"""\n` 
+       : `Evaluate based on standard academic criteria: Clarity (Is the point clear?), Argument (Is the logic sound?), Grammar (Are there errors?), and provide an overall Summary.`;
+
+     // --- MODIFICATION: Updated output format ---
+     const outputFormat = `Return ONLY valid JSON in this exact shape:
+{
+  "score": number | null,
+  "feedback": {
+    "clarity": {
+      "summary": "Your clarity is...",
+      "highlights": [
+        {"text": "an exact text snippet from the essay", "comment": "This part was unclear because..."},
+        {"text": "another snippet", "comment": "This sentence is very clear."}
+      ]
+    },
+    "argument": {
+      "summary": "Your argument is...",
+      "highlights": [
+        {"text": "The main point is", "comment": "This is a strong thesis statement."}
+      ]
+    },
+    "grammar": {
+      "summary": "Your grammar is...",
+      "highlights": [
+        {"text": "students, who are smart,", "comment": "Incorrect comma usage here."}
+      ]
+    },
+    "summary": "Overall, this essay..."
+  },
+  "suggestions": [
+    "Try to vary sentence structure.",
+    "Strengthen your thesis."
+  ]
+}`;
+     // --- END MODIFICATION ---
+
      return `${baseInstruction}\n\n${rubricInstruction}\n\nEssay Text:\n"""\n${essayText}\n"""\n\n${outputFormat}`;
 }
 
 // --- Helper Function to Call AI ---
 async function callAIToGradeEssay(essayText: string, rubricText?: string): Promise<AIGradedEssayResponse> {
-    // ... (keep existing AI call logic, including validation inside) ...
-    if (!API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY"); const genAI = new GoogleGenerativeAI(API_KEY); const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig, safetySettings }); const prompt = buildAIPrompt(essayText, rubricText); try { console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for grading...`); const result = await model.generateContent(prompt); const response = await result.response; const content = response.text(); if (!content) throw new Error("Empty response from AI model."); let parsed: AIGradedEssayResponse; try { parsed = JSON.parse(content); } catch (jsonError) { console.error("Failed to parse AI JSON response:", content); throw new Error("AI returned invalid JSON format."); } /* --- Stricter Validation --- */ if (!parsed || typeof parsed !== 'object') throw new Error("AI response is not a valid object."); if (!parsed.feedback || typeof parsed.feedback !== 'object') throw new Error("AI response missing or invalid 'feedback' object."); if (!parsed.feedback.summary) parsed.feedback.summary = "No summary provided."; if (!Array.isArray(parsed.suggestions)) parsed.suggestions = []; if (typeof parsed.score !== 'number' && parsed.score !== null) parsed.score = null; console.log(`AI grading successful using ${AI_MODEL_NAME}.`); return parsed; } catch (error: any) { console.error(`Error calling or parsing AI response from ${AI_MODEL_NAME} for grading:`, error); throw new Error(`AI grading failed: ${error.message}`); }
+    if (!API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY"); const genAI = new GoogleGenerativeAI(API_KEY); const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig, safetySettings }); const prompt = buildAIPrompt(essayText, rubricText); try { console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for grading...`); const result = await model.generateContent(prompt); const response = await result.response; const content = response.text(); if (!content) throw new Error("Empty response from AI model."); let parsed: AIGradedEssayResponse; try { parsed = JSON.parse(content); } catch (jsonError) { console.error("Failed to parse AI JSON response:", content); throw new Error("AI returned invalid JSON format."); } 
+    
+    /* --- MODIFICATION: Stricter Validation --- */ 
+    if (!parsed || typeof parsed !== 'object') throw new Error("AI response is not a valid object."); 
+    if (!parsed.feedback || typeof parsed.feedback !== 'object') throw new Error("AI response missing or invalid 'feedback' object."); 
+    
+    // Validate each category
+    const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
+    for (const cat of categories) {
+        if (!parsed.feedback[cat] || typeof parsed.feedback[cat].summary !== 'string' || !Array.isArray(parsed.feedback[cat].highlights)) {
+             console.error(`AI response missing or invalid 'feedback.${cat}' structure.`);
+             // Create a fallback structure so the request doesn't fail
+             parsed.feedback[cat] = { summary: `No feedback provided for ${cat}.`, highlights: [] };
+        }
+    }
+    if (!parsed.feedback.summary) parsed.feedback.summary = "No summary provided.";
+    if (!Array.isArray(parsed.suggestions)) parsed.suggestions = []; 
+    if (typeof parsed.score !== 'number' && parsed.score !== null) parsed.score = null; 
+    /* --- END MODIFICATION --- */
+    
+    console.log(`AI grading successful using ${AI_MODEL_NAME}.`); return parsed; } catch (error: any) { console.error(`Error calling or parsing AI response from ${AI_MODEL_NAME} for grading:`, error); throw new Error(`AI grading failed: ${error.message}`); }
 }
 
 // --- Helper to Update AI Usage using SERVICE ROLE ---
@@ -102,7 +181,7 @@ export async function POST(request: NextRequest) {
                  essay_content: essayText, // Save the original essay
                  rubric_or_criteria: rubricText,
                  // Safely access properties now after the check above
-                 feedback: aiResult.feedback as Prisma.JsonObject,
+                 feedback: aiResult.feedback as Prisma.JsonObject, // Save the new structured feedback
                  score: aiResult.score,
              },
              select: { id: true, graded_at: true }
@@ -124,6 +203,7 @@ export async function POST(request: NextRequest) {
             score: aiResult.score,
             suggestions: aiResult.suggestions,
             graded_at: savedGradedEssay.graded_at?.toISOString() || '',
+            essay_content: essayText, // --- ADDED: Return the essay content ---
         };
         return NextResponse.json<ApiResponse<GradeEssayResponseData>>({
             success: true,
