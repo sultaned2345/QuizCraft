@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-// --- REMOVED Dialog imports ---
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
+import { motion } from 'framer-motion'; // <-- 1. Import motion
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];
@@ -35,14 +35,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
-  // --- REMOVED Viewer State ---
-  // const [isViewerOpen, setIsViewerOpen] = useState(false);
-  // const [viewingContent, setViewingContent] = useState<ViewingContentState>({ title: '', text: null, pdfUrl: null });
-  // const [isLoadingContent, setIsLoadingContent] = useState(false);
-  // const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
-  // const [isLoadingRelated, setIsLoadingRelated] = useState(false);
-  // ---
-
   const [isGenerating, setIsGenerating] = useState<{ type: 'quiz' | 'notes' | 'flashcards'; docId: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
@@ -54,7 +46,26 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { setPageContext } = usePageContext();
 
-  // --- REMOVED RelatedContentWidget ---
+  // --- 2. Define animation variants ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: 'spring', stiffness: 100 }
+    },
+  };
+  // ---
 
   const fetchMoreDocuments = useCallback(async (page: number) => {
     // ... (function remains the same)
@@ -74,7 +85,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
    };
    
   const handleUpload = async () => {
-     // ... (function remains the same, but remove handleViewContent call)
+     // ... (function remains the same, with optimistic navigation)
      if (!selectedFile || !session) return; 
      setIsUploading(true); 
      setUploadError(''); 
@@ -89,11 +100,8 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); 
        setSelectedFile(null); 
        if(fileInputRef.current) fileInputRef.current.value = ''; 
-       await refreshFirstPage(); 
-       // --- REMOVED: handleViewContent(result.data); ---
-       // --- NEW: Navigate to the new page ---
-       router.push(`/documents/${result.data.id}`);
-       // ---
+       await refreshFirstPage(); // Refresh to show new item
+       router.push(`/documents/${result.data.id}`); // Navigate to new page
      } catch (error: any) { 
        setUploadError(error.message || 'Upload error.'); 
        toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); 
@@ -103,7 +111,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
    };
    
   const handleDeleteDocument = async (docId: string, docName: string) => { 
-    // ... (function remains the same)
+    // This function is already optimistic, so no changes needed.
     if (!session || !confirm(`Delete "${docName}"?`)) return; 
     const originalDocuments = [...documents];
     setDocuments(prevDocs => prevDocs.filter(d => d.id !== docId));
@@ -134,10 +142,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
     // ... (function remains the same)
     if(!session) return; setIsGenerating({type:'flashcards', docId}); toast({title:'Generating Flashcards...'}); try { const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); const result: ApiResponse<GeneratedDeckInfo> = await response.json(); if(!response.ok || !result.success || !result.data) throw new Error(result.error||'Failed generate.'); toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); router.push(`/flashcards/${result.data.id}`); } catch(e:any){ toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } 
   };
-
-  // --- REMOVED handleViewContent ---
-  
-  // --- REMOVED handleViewerOpenChange ---
 
   return (
     <>
@@ -177,45 +181,50 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       {documents.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
       ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          // --- 3. Wrap grid in motion.div ---
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
               {documents.map((doc) => (
-                <Card key={doc.id} className="flex flex-col">
-                  <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
-                    <div className="space-y-1 overflow-hidden">
-                      <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
-                      <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
-                      <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}>
-                      <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="flex-grow">
-                      <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
-                          {doc.ai_summary || 'No summary available.'}
-                      </p>
-                  </CardContent>
-                  <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
-                    {/* --- MODIFIED: Button now links to new page --- */}
-                    <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id}>
-                      <Eye className="w-4 h-4 mr-2" /> View & Chat
-                    </Button>
-                    {/* --- */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                      <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                      <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
-                    </div>
-                  </CardFooter>
-                </Card>
+                // --- 4. Wrap Card in motion.div ---
+                <motion.div key={doc.id} variants={itemVariants}>
+                  <Card className="flex flex-col h-full"> {/* Added h-full */}
+                    <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
+                      <div className="space-y-1 overflow-hidden">
+                        <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
+                        <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
+                        <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}>
+                        <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                        <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
+                            {doc.ai_summary || 'No summary available.'}
+                        </p>
+                    </CardContent>
+                    <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
+                      <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id}>
+                        <Eye className="w-4 h-4 mr-2" /> View & Chat
+                      </Button>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
+                        <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
+                        <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
+                      </div>
+                    </CardFooter>
+                  </Card>
+                </motion.div>
               ))}
-          </div>
+          </motion.div>
       )}
       {totalPages > currentPage && (
           <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
       )}
-
-      {/* --- REMOVED Dialog viewer --- */}
     </>
   );
 }

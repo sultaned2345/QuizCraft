@@ -1,7 +1,7 @@
 // src/app/(app)/notes/NotesClientComponent.tsx
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'; // Added useRef
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +15,7 @@ import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X } from 'luci
 import { NoteEditor } from '@/components/NoteEditor';
 import { GenerateNotesDialog } from '@/components/GenerateNotesDialog';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion'; // <-- IMPORT ANIMATION
 
 // Type for the simplified Note structure from the API
 interface NoteListItem {
@@ -64,6 +65,30 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const router = useRouter();
   const { toast } = useToast();
 
+  // --- NEW: Ref for caching prefetch promises ---
+  const fetchCache = useRef<Map<string, Promise<Note>>>(new Map());
+
+  // --- NEW: Animation Variants ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: 'spring', stiffness: 100 }
+    },
+  };
+  // ---
+
   useEffect(() => {
     const tags = new Set<string>();
     notes.forEach(note => {
@@ -73,7 +98,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   }, [notes]);
 
   const fetchMoreNotes = useCallback(async (page: number) => {
-    // ... (function remains the same)
+    // ... (Original function)
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
     try {
@@ -100,7 +125,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   }
 
    const refreshFirstPage = useCallback(async () => {
-        // ... (function remains the same)
+        // ... (Original function)
         if (!session) return;
         try {
             const response = await fetch(`/api/notes?page=1&limit=${notesPerPage}`, {
@@ -117,35 +142,61 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         }
     }, [session, toast, notesPerPage]);
 
+  // --- NEW: Prefetch function ---
+  const prefetchNote = (noteId: string) => {
+    if (!session || fetchCache.current.has(noteId)) {
+      return; // Already fetching or fetched
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch(`/api/notes/${noteId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        const result: ApiResponse<Note> = await response.json();
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to fetch note content.');
+        }
+        return result.data;
+      } catch (error) {
+        fetchCache.current.delete(noteId); // Remove failed promise
+        throw error;
+      }
+    })();
+
+    fetchCache.current.set(noteId, fetchPromise);
+  };
+
+  // --- MODIFIED: handleEditClick now uses cache ---
   const handleEditClick = async (noteItem: NoteListItem) => {
-    // ... (function remains the same)
     if (!session) return;
     setIsFetchingNote(true);
     setSelectedNote(null);
     setIsEditorOpen(true);
 
     try {
-        const response = await fetch(`/api/notes/${noteItem.id}`, {
-             headers: { 'Authorization': `Bearer ${session.access_token}` }
-        });
-        const result: ApiResponse<Note> = await response.json();
-
-        if (!result.success || !result.data) {
-             throw new Error(result.error || 'Failed to fetch note content.');
+        let fetchPromise = fetchCache.current.get(noteItem.id);
+      
+        if (!fetchPromise) {
+          // If not prefetched (e.g., fast click), fetch now
+          prefetchNote(noteItem.id);
+          fetchPromise = fetchCache.current.get(noteItem.id)!;
         }
-        
-        setSelectedNote(result.data);
+
+        const noteData = await fetchPromise;
+        setSelectedNote(noteData);
 
     } catch (error: any) {
         toast({ title: "Error", description: `Could not load note content: ${error.message}`, variant: "destructive" });
         setIsEditorOpen(false);
+        fetchCache.current.delete(noteItem.id); // Clear cache on error
     } finally {
         setIsFetchingNote(false);
     }
   };
 
   const handleSaveNote = async (noteData: { id?: string; title: string; content: string; tags: string[] }) => {
-     // ... (function remains the same)
+     // ... (Original function)
      try {
        const isUpdating = !!noteData.id;
        const url = isUpdating ? `/api/notes?id=${noteData.id}` : '/api/notes';
@@ -172,17 +223,15 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
      }
   };
 
-  // --- MODIFIED: Optimistic Deletion ---
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
+     // ... (Original optimistic function)
      if (!session || !confirm(`Are you sure you want to delete "${noteTitle}"?`)) return;
 
-     // 1. Optimistic Update
      const originalNotes = [...notes];
      setNotes(prevNotes => prevNotes.filter(n => n.id !== noteId));
      setUsage(prev => ({ ...prev, count: prev.count - 1 }));
 
      try {
-       // 2. API Call
        const response = await fetch(`/api/notes?id=${noteId}`, { 
          method: 'DELETE', 
          headers: { 'Authorization': `Bearer ${session.access_token}` } 
@@ -193,12 +242,9 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
          throw new Error(result.error || 'Delete failed on server.');
        }
        
-       // 3. Success
        toast({ title: "Note Deleted" });
-       // No refresh needed
        
      } catch (error: any) {
-       // 4. Rollback on Failure
        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
        setNotes(originalNotes);
        setUsage(prev => ({ ...prev, count: prev.count + 1 }));
@@ -206,7 +252,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   };
 
   const filteredNotes = useMemo(() => {
-    // ... (function remains the same)
+    // ... (Original function)
     return notes.filter(note => {
       const matchesSearch = !searchTerm || note.title.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesTag = !selectedTag || (note.tags || []).includes(selectedTag);
@@ -217,7 +263,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
 
   return (
     <>
-      {/* Header Section (remains the same) */}
+      {/* (Header Section) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
          <div>
           <h1 className="text-3xl font-bold">My Notes</h1>
@@ -237,13 +283,13 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       </div>
 
-      {/* Search Bar (remains the same) */}
+      {/* (Search Bar) */}
       <div className="mb-6 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
-      {/* Tag Filter (remains the same) */}
+      {/* (Tag Filter) */}
       {allTags.size > 0 && (
         <div className="mb-6 flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium">Filter by tag:</span>
@@ -271,13 +317,11 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
-      {/* --- MODIFICATION: Updated Empty State --- */}
        {(notes.length === 0) ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Notes Yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Create your first note or use AI.</p>
-          {/* --- ADDED THIS BUTTON --- */}
           <Button className="mt-6" onClick={() => { setSelectedNote(null); setIsEditorOpen(true); setIsFetchingNote(false); }}>
             <Plus className="w-4 h-4 mr-2" /> New Note
           </Button>
@@ -302,42 +346,56 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           )}
         </div>
       ) : (
-      // --- END MODIFICATION ---
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        // --- MODIFIED: Added motion.div wrapper ---
+        <motion.div 
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {filteredNotes.map((note) => (
-            <Card key={note.id} className="flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-lg truncate">{note.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                 {(note.tags || []).length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {(note.tags || []).map(tag => (
-                        <Badge key={tag} variant="secondary" className="font-normal">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No tags.</p>
-                  )}
-              </CardContent>
-              <CardFooter className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEditClick(note)} disabled={isFetchingNote}>
-                      {isFetchingNote && selectedNote?.id === note.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Edit className="w-4 h-4 mr-2" />}
-                      {isFetchingNote && selectedNote?.id === note.id ? '' : 'Edit'}
-                  </Button>
-                  {/* --- MODIFIED: Pass title to delete handler --- */}
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteNote(note.id, note.title)} disabled={isFetchingNote}>
-                      <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </Button>
-              </CardFooter>
-            </Card>
+            // --- MODIFIED: Added motion.div wrapper ---
+            <motion.div key={note.id} variants={itemVariants}>
+              <Card className="flex flex-col h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg truncate">{note.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                   {(note.tags || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {(note.tags || []).map(tag => (
+                          <Badge key={tag} variant="secondary" className="font-normal">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No tags.</p>
+                    )}
+                </CardContent>
+                <CardFooter className="flex justify-end gap-2">
+                    {/* --- MODIFIED: Added onMouseEnter --- */}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleEditClick(note)} 
+                      onMouseEnter={() => prefetchNote(note.id)}
+                      disabled={isFetchingNote}
+                    >
+                        {isFetchingNote && selectedNote?.id === note.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Edit className="w-4 h-4 mr-2" />}
+                        {isFetchingNote && selectedNote?.id === note.id ? '' : 'Edit'}
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteNote(note.id, note.title)} disabled={isFetchingNote}>
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                    </Button>
+                </CardFooter>
+              </Card>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
-      {/* Load More Button (remains the same) */}
+      {/* (Load More Button) */}
       {totalPages > currentPage && !searchTerm && !selectedTag && (
           <div className="mt-8 text-center">
               <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -347,7 +405,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           </div>
       )}
 
-      {/* Modals (remain the same) */}
+      {/* (Modals) */}
       <NoteEditor
         note={selectedNote}
         isFetching={isFetchingNote}

@@ -29,7 +29,9 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-react';
+import { motion } from 'framer-motion'; // <-- 1. Import motion
 
+// ... (Interface definitions remain the same) ...
 interface PaginatedDecksData {
   decks: FlashcardDeck[];
   count: number;
@@ -37,15 +39,14 @@ interface PaginatedDecksData {
   totalPages: number;
   currentPage: number;
 }
-
 interface FlashcardsPageData extends PaginatedDecksData {
   dueCount: number;
   firstDueDeckId: string | null;
 }
-
 interface FlashcardsClientComponentProps {
   initialData: FlashcardsPageData;
 }
+
 
 function StudyQueueCard({
   dueCount,
@@ -56,11 +57,9 @@ function StudyQueueCard({
 }) {
   // ... (function remains the same)
   const router = useRouter();
-
   if (dueCount === 0) {
     return null;
   }
-
   const handleStudyClick = () => {
     if (firstDueDeckId) {
       router.push(`/flashcards/${firstDueDeckId}`);
@@ -68,7 +67,6 @@ function StudyQueueCard({
       router.push('/flashcards');
     }
   };
-
   return (
     <Card className="mb-8 bg-primary/10 border-primary/40">
       <CardHeader>
@@ -104,10 +102,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const decksPerPage = 9;
-
   const [dueCount, setDueCount] = useState(initialData.dueCount);
   const [firstDueDeckId, setFirstDueDeckId] = useState(initialData.firstDueDeckId);
-
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingDeck, setEditingDeck] = useState<FlashcardDeck | null>(null);
   const [editDeckTitle, setEditDeckTitle] = useState('');
@@ -115,6 +111,27 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+
+  // --- 2. Define animation variants ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: 'spring', stiffness: 100 }
+    },
+  };
+  // ---
 
   const fetchMoreDecks = useCallback(async (page: number) => {
     // ... (function remains the same)
@@ -155,16 +172,13 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           headers: { Authorization: `Bearer ${session.access_token}` },
         }),
       ]);
-
       const decksData: ApiResponse<PaginatedDecksData> = await decksResponse.json();
       if (!decksData.success || !decksData.data)
         throw new Error(decksData.error || 'Failed refresh.');
-
       setDecks(decksData.data.decks);
       setCurrentPage(decksData.data.currentPage);
       setTotalPages(decksData.data.totalPages);
       setUsage({ count: decksData.data.count, limit: decksData.data.limit });
-
       const queueData: ApiResponse<{ dueCount: number; firstDueDeckId: string | null }> =
         await queueResponse.json();
       if (queueData.success && queueData.data) {
@@ -224,7 +238,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Updated!', description: `Renamed to "${result.data.title}".` });
       setIsEditDialogOpen(false);
       setEditingDeck(null);
-      refreshFirstPage(); // Refresh the list
+      refreshFirstPage();
     } catch (error: any) {
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
     } finally {
@@ -232,48 +246,35 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   };
 
-  // --- MODIFIED: Optimistic Deletion ---
+  // This function is already optimistic, no changes needed.
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
     if (!session || !confirm(`Delete "${deckTitle}"? All cards within will be deleted.`)) return;
-
-    // 1. Optimistic Update
     const originalDecks = [...decks];
     setDecks((prevDecks) => prevDecks.filter((d) => d.id !== deckId));
     setUsage(prev => ({ ...prev, count: prev.count - 1 }));
-
     try {
-      // 2. API Call
       const response = await fetch(`/api/decks/${deckId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const result: ApiResponse = await response.json();
-      
       if (!result.success) {
         throw new Error(result.error || 'Failed delete.');
       }
-
-      // 3. Success
       toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
-      // No refreshFirstPage() needed
-
     } catch (error: any) {
-      // 4. Rollback
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-      setDecks(originalDecks);
-      setUsage(prev => ({ ...prev, count: prev.count + 1 }));
+      setDecks(originalDecks); // Rollback
+      setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
     }
   };
 
   return (
     <>
-      {/* (Rest of JSX remains the same) */}
-      
-      {/* --- NEW: Render Study Queue Card --- */}
+      {/* (Study Queue Card) */}
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
-      {/* --- END NEW --- */}
 
-      {/* Header and Create Dialog Trigger */}
+      {/* (Header and Create Dialog Trigger) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Flashcard Decks</h1>
@@ -289,7 +290,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
               <Plus className="w-4 h-4 mr-2" /> New Deck
             </Button>
           </DialogTrigger>
-          {/* Create Dialog Content */}
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Create New Deck</DialogTitle>
@@ -324,59 +324,66 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
-      {/* --- MODIFICATION: Updated Empty State --- */}
       {decks.length === 0 ? (
+        // (Empty state)
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Decks Yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Create your first flashcard deck.</p>
-          {/* --- ADDED THIS BUTTON --- */}
           <Button className="mt-6" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" /> Create a Deck
           </Button>
         </div>
       ) : (
-      // --- END MODIFICATION ---
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        // --- 3. Wrap grid in motion.div ---
+        <motion.div 
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {decks.map((deck) => (
-            <Card key={deck.id} className="flex flex-col">
-              <CardHeader>
-                <Link href={`/flashcards/${deck.id}`} className="hover:underline">
-                  <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
-                </Link>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground">Contains flashcards...</p>
-              </CardContent>
-              <CardFooter className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}>
-                  <BookCopy className="w-4 h-4 mr-2" /> Study
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handleOpenEditDialog(deck)}
-                >
-                  <Edit className="w-4 h-4" />
-                  <span className="sr-only">Edit</span>
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handleDeleteDeck(deck.id, deck.title)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="sr-only">Delete</span>
-                </Button>
-              </CardFooter>
-            </Card>
+            // --- 4. Wrap Card in motion.div ---
+            <motion.div key={deck.id} variants={itemVariants}>
+              <Card className="flex flex-col h-full"> {/* Added h-full */}
+                <CardHeader>
+                  <Link href={`/flashcards/${deck.id}`} className="hover:underline">
+                    <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
+                  </Link>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                  <p className="text-sm text-muted-foreground">Contains flashcards...</p>
+                </CardContent>
+                <CardFooter className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}>
+                    <BookCopy className="w-4 h-4 mr-2" /> Study
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleOpenEditDialog(deck)}
+                  >
+                    <Edit className="w-4 h-4" />
+                    <span className="sr-only">Edit</span>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleDeleteDeck(deck.id, deck.title)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="sr-only">Delete</span>
+                  </Button>
+                </CardFooter>
+              </Card>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
-      {/* Load More Button (unchanged) */}
+      {/* (Load More Button and Edit Dialog remain the same) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -387,8 +394,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           </p>
         </div>
       )}
-
-      {/* Edit Deck Dialog (unchanged) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

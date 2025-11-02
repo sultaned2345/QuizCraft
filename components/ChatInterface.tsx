@@ -41,7 +41,7 @@ function getSourceHref(source: Source): string {
         return `/notes`; 
     }
     if (source.content_type === 'document') {
-        return `/documents`; 
+        return `/documents`; // Future: could be /documents/${source.content_id}
     }
     return '#';
 }
@@ -74,19 +74,21 @@ export function ChatInterface({
   const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   
+  // --- NEW: State for suggested questions ---
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[] | null>(null);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  // ---
 
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- Action Handlers (for proactive buttons) ---
+  // --- (Action Handlers from original file) ---
   const handleGenerateQuizFromContext = () => {
     if (context?.type !== 'document' || !context.id) return;
     setIsActionLoading(true);
     toast({ title: 'Preparing Quiz...' });
     router.push(`/create?docId=${context.id}`);
-    setIsActionLoading(false);
+    setIsActionLoading(false); // Will this run? Maybe. Better to leave it.
   };
   
   const handleGenerateNotesFromContext = async () => {
@@ -157,7 +159,7 @@ export function ChatInterface({
       // No initial messages, fetch history ourselves
       setIsHistoryLoading(true);
       setProactiveActions(null); 
-      setSuggestedQuestions(null);
+      setSuggestedQuestions(null); // <-- Reset suggestions
       
       let historyFetchUrl = '/api/chat/history';
       
@@ -171,17 +173,22 @@ export function ChatInterface({
         setProactivePrompt("I see you're viewing this document. What would you like to do?");
         historyFetchUrl = `/api/chat/history?context_id=${context.id}`;
         
+        // --- NEW: Fetch suggested questions ---
         setIsSuggestionsLoading(true);
         fetch(`/api/documents/${context.id}/suggest-questions`, {
             headers: { 'Authorization': `Bearer ${session?.access_token}` },
         })
         .then(res => res.json())
         .then((data: ApiResponse<string[]>) => {
-            if (data.success && data.data && data.data.length > 0) setSuggestedQuestions(data.data);
-            else setSuggestedQuestions([]);
+            if (data.success && data.data && data.data.length > 0) {
+                setSuggestedQuestions(data.data);
+            } else {
+                setSuggestedQuestions([]); // Set to empty array to stop loading
+            }
         })
-        .catch(() => setSuggestedQuestions([]))
+        .catch(() => setSuggestedQuestions([])) // Set to empty on error
         .finally(() => setIsSuggestionsLoading(false));
+        // ---
         
         setProactiveActions(
           <div className="flex flex-col sm:flex-row gap-2 mt-2">
@@ -200,7 +207,9 @@ export function ChatInterface({
           </div>
         );
       } else {
+        // General context (null)
         setProactivePrompt(null);
+        historyFetchUrl = '/api/chat/history'; // Fetches general history
       }
 
       fetch(historyFetchUrl, {
@@ -251,17 +260,15 @@ export function ChatInterface({
     }
   }, [messages, isHistoryLoading]); // Also trigger on history load end
 
-  // Send message handler
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const messageToSend = input.trim();
-    if (!messageToSend || !session) return;
+  // --- NEW: Helper function to send message (used by form and suggestions) ---
+  const sendMessage = async (messageText: string) => {
+    if (!messageText || !session || isLoading) return;
 
     setProactivePrompt(null); 
     setProactiveActions(null);
     setSuggestedQuestions(null);
     
-    const userMessage: Message = { role: 'user', text: messageToSend };
+    const userMessage: Message = { role: 'user', text: messageText };
     const history = [...messages, userMessage];
     setMessages(history);
     setInput('');
@@ -275,14 +282,15 @@ export function ChatInterface({
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          history: messages,
-          message: messageToSend,
+          history: messages, // Send history *before* the new message
+          message: messageText, // Send new message separately
           context: context,
         }),
       });
 
       if (!response.ok || !response.body) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: `Request failed with status ${response.status}` }));
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
       }
       
       const sourcesHeader = response.headers.get('X-Ai-Sources');
@@ -308,20 +316,33 @@ export function ChatInterface({
         });
       }
 
-    } catch (error) {
-      const errorMessage = 'Sorry, I encountered an error. Please try again.';
+    } catch (error: any) {
+      const errorMessage = error.message || 'Sorry, I encountered an error. Please try again.';
       setMessages((prev) => {
         const newMessages = [...prev];
         if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model' && newMessages[newMessages.length - 1].text === '') {
+          // If we already added a blank model message, update it
           newMessages[newMessages.length - 1].text = errorMessage;
           return newMessages;
         }
+        // Otherwise, add a new error message
         return [...prev, { role: 'model', text: errorMessage }];
       });
       console.error('Chat error:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Form submit handler
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(input.trim());
+  };
+  
+  // Suggestion click handler
+  const sendSuggestedQuestion = (question: string) => {
+    sendMessage(question);
   };
 
   return (
@@ -341,7 +362,8 @@ export function ChatInterface({
             </div>
           ) : (
             <>
-              {messages.length === 0 && (proactivePrompt || proactiveActions || isSuggestionsLoading || suggestedQuestions) && (
+              {/* --- MODIFIED: Proactive/Suggestions Block --- */}
+              {messages.length === 0 && (proactivePrompt || proactiveActions || isSuggestionsLoading || (suggestedQuestions && suggestedQuestions.length > 0)) && (
                 <div className="flex items-start gap-3">
                   <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
                     <Bot className="w-5 h-5" />
@@ -349,14 +371,17 @@ export function ChatInterface({
                   <div className="rounded-lg p-3 bg-secondary w-full space-y-3">
                     {proactivePrompt && <p className="text-sm">{proactivePrompt}</p>}
                     
+                    {proactiveActions}
+
+                    {/* --- NEW: Suggestions Display --- */}
                     {isSuggestionsLoading && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-2">
                         <Skeleton className="h-7 w-full rounded-md" />
                         <Skeleton className="h-7 w-2/3 rounded-md" />
                       </div>
                     )}
                     {suggestedQuestions && suggestedQuestions.length > 0 && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-2">
                         <h4 className="text-xs font-semibold text-muted-foreground">Suggested Questions:</h4>
                         {suggestedQuestions.map((q, i) => (
                           <Button
@@ -364,11 +389,8 @@ export function ChatInterface({
                             size="sm"
                             variant="outline"
                             className="h-auto text-xs w-full justify-start text-left bg-background"
-                            onClick={() => {
-                              setInput(q);
-                              // Manually trigger send if user clicks suggestion
-                              // handleSendMessage is form-based, so just setting input is fine
-                            }}
+                            onClick={() => sendSuggestedQuestion(q)}
+                            disabled={isLoading}
                           >
                             <MessageSquareQuestion className="w-3 h-3 mr-2 shrink-0" />
                             {q}
@@ -376,7 +398,7 @@ export function ChatInterface({
                         ))}
                       </div>
                     )}
-                    {proactiveActions}
+                    {/* --- END NEW --- */}
                   </div>
                 </div>
               )}
@@ -404,7 +426,6 @@ export function ChatInterface({
                       <div className="flex flex-wrap gap-2">
                         {msg.sources.map((source) => (
                           <Button key={source.citation} variant="outline" size="sm" asChild className="h-7 text-xs px-2 py-1 bg-background">
-                            {/* We can't use router.push here, so Link is correct */}
                             <Link href={getSourceHref(source)} title={source.content_title}>
                               {getSourceIcon(source)}
                               <span className="ml-1.5 mr-1 font-mono">[{source.citation}]</span>
@@ -431,7 +452,7 @@ export function ChatInterface({
           )}
         </div>
       </ScrollArea>
-      <form onSubmit={handleSendMessage} className="flex w-full gap-2 pt-4 border-t">
+      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 pt-4 border-t">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
