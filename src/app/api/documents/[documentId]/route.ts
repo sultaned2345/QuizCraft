@@ -1,7 +1,7 @@
 // src/app/api/documents/[documentId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabase } from '@/lib/supabase'; // Use client for RLS-enabled storage access
+import { supabase } from '@/lib/supabaseClient'; // <-- FIX: Changed from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
