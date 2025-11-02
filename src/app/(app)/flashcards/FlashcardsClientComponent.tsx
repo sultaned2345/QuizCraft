@@ -324,17 +324,19 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
-      {/* Grid or Empty State (unchanged) */}
+      {/* --- MODIFICATION: Updated Empty State --- */}
       {decks.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Decks Yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Create your first flashcard deck.</p>
+          {/* --- ADDED THIS BUTTON --- */}
           <Button className="mt-6" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" /> Create a Deck
           </Button>
         </div>
       ) : (
+      // --- END MODIFICATION ---
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {decks.map((deck) => (
             <Card key={deck.id} className="flex flex-col">

@@ -1,4 +1,4 @@
-// file: src/app/(app)/documents/DocumentsClientComponent.tsx
+// src/app/(app)/documents/DocumentsClientComponent.tsx
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
@@ -17,6 +17,7 @@ import { formatFileSize } from '@/lib/file-parser';
 import { Skeleton } from '@/components/ui/skeleton';
 import NextLink from 'next/link';
 import { cn } from '@/lib/utils';
+import { usePageContext } from '@/contexts/PageContext'; // <-- 1. IMPORT
 
 // Types
 interface DocumentMetadata { id: string; file_name: string; file_type: string; file_size: number; created_at: string; storage_path: string; }
@@ -93,6 +94,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { setPageContext } = usePageContext(); // <-- 2. GET THE SETTER
 
   const fetchMoreDocuments = useCallback(async (page: number) => {
     // ... (function remains the same)
@@ -164,6 +166,11 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const handleViewContent = async (doc: DocumentMetadata) => {
     // ... (function remains the same)
     if (!session) return;
+    
+    // --- 3. SET PAGE CONTEXT ---
+    setPageContext({ type: 'document', id: doc.id }); 
+    // ---
+    
     setIsViewerOpen(true);
     setIsLoadingContent(true);
     setIsLoadingRelated(true);
@@ -227,16 +234,26 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       setIsLoadingContent(false);
     }
   };
+  
+  // --- 4. NEW HANDLER for Dialog close ---
+  const handleViewerOpenChange = (open: boolean) => {
+    setIsViewerOpen(open);
+    if (!open) {
+      setPageContext(null); // Clear context when dialog closes
+    }
+  };
+  // ---
 
   return (
     <>
-      {/* (Header & Upload Section remains the same) */}
+      {/* (Header remains the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Documents</h1>
           {usage.limit !== Infinity && (<p className="text-sm text-muted-foreground mt-1">Total Docs: {usage.count ?? 0} / {usage.limit}.</p>)}
         </div>
-        <Card className="w-full sm:max-w-md">
+        {/* --- 2C: MODIFICATION HERE (className added) --- */}
+        <Card className="w-full sm:max-w-md bg-card-foreground/5 dark:bg-card-foreground/10">
           <CardHeader className="pb-2"><CardTitle className="text-lg">Upload New</CardTitle></CardHeader>
           <CardContent>
             <div className="flex flex-col gap-2">
@@ -267,15 +284,15 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
             <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {documents.map((doc) => (<Card key={doc.id} className="flex flex-col"><CardHeader className="flex-row items-start justify-between gap-4 pb-2"><div className="space-y-1 overflow-hidden"><CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle><CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription><CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription></div><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}><Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span></Button></CardHeader><CardContent className="flex-grow"></CardContent><CardFooter className="flex flex-col items-stretch gap-2 pt-2"><Button variant="outline" size="sm" onClick={() => handleViewContent(doc)} disabled={isGenerating?.docId === doc.id}><Eye className="w-4 h-4 mr-2" /> View</Button><div className="grid grid-cols-1 sm:grid-cols-3 gap-2"><Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button><Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button><Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button></div></CardFooter></Card>))}
+                {documents.map((doc) => (<Card key={doc.id} className="flex flex-col"><CardHeader className="flex-row items-start justify-between gap-4 pb-2"><div className="space-y-1 overflow-hidden"><CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle><CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription><CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription></div><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}><Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span></Button></CardHeader><CardContent className="flex-grow"></CardContent><CardFooter className="flex flex-col items-stretch gap-2 pt-2"><Button variant="outline" size="sm" onClick={() => handleViewContent(doc)} disabled={isGenerating?.docId === doc.id}><Eye className="w-4 h-4 mr-2" /> View</Button><div className="grid grid-cols-1 sm:grid-cols-3 gap-2"><Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button><Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button><Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(docId)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button></div></CardFooter></Card>))}
             </div>
         )}
         {totalPages > currentPage && (
             <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
         )}
 
-      {/* (Content Viewer Dialog remains the same) */}
-      <Dialog open={isViewerOpen} onOpenChange={setIsViewerOpen}>
+      {/* --- 5. MODIFICATION: Use new open change handler --- */}
+      <Dialog open={isViewerOpen} onOpenChange={handleViewerOpenChange}>
         <DialogContent className="sm:max-w-4xl md:max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="truncate">Content: {viewingContent.title}</DialogTitle>

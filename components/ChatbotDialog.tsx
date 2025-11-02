@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // <-- 1. IMPORT
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,11 +16,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
-import { Bot, Loader2, Send, Sparkles, User as UserIcon, FileText, StickyNote } from 'lucide-react';
+import { Bot, Loader2, Send, Sparkles, User as UserIcon, FileText, StickyNote, FileQuestion, Layers } from 'lucide-react'; // <-- 2. ADDED ICONS
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/contexts/PageContext'; 
-import { ApiResponse } from '@/types/database'; // --- ADDED ---
-import { Skeleton } from '@/components/ui/skeleton'; // --- ADDED ---
+import { ApiResponse, GeneratedDeckInfo } from '@/types/database'; // <-- 3. IMPORT GeneratedDeckInfo
+import { Skeleton } from '@/components/ui/skeleton'; 
+import { useToast } from '@/hooks/use-toast'; // <-- 4. IMPORT
 
 // ... (Source, Message, ChatbotDialogProps, getSourceHref, getSourceIcon functions remain unchanged) ...
 interface Source {
@@ -61,15 +63,90 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false); // --- ADDED ---
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const { session } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { pageContext } = usePageContext(); 
   const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
+  const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null); // <-- 5. ADD STATE
+  const [isActionLoading, setIsActionLoading] = useState(false); // <-- 6. ADD STATE
+  
+  const router = useRouter(); // <-- 7. ADD HOOK
+  const { toast } = useToast(); // <-- 8. ADD HOOK
 
-  // --- MODIFIED: Effect for proactive prompts AND history loading ---
+  // --- 9. NEW: Action Handlers ---
+  const handleGenerateQuizFromContext = () => {
+    if (pageContext?.type !== 'document' || !pageContext.id) return;
+    setIsActionLoading(true);
+    toast({ title: 'Preparing Quiz...' });
+    router.push(`/create?docId=${pageContext.id}`);
+    onClose();
+    setIsActionLoading(false);
+  };
+  
+  const handleGenerateNotesFromContext = async () => {
+    if (pageContext?.type !== 'document' || !pageContext.id || !session) return;
+    setIsActionLoading(true);
+    toast({ title: 'Generating Notes...', description: 'Please wait, this may take a moment.' });
+    try {
+      const cRes = await fetch(`/api/documents/${pageContext.id}/content`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const cResult: ApiResponse<{ extracted_text: string | null }> = await cRes.json();
+      if (!cResult.success || !cResult.data?.extracted_text) throw new Error(cResult.error || 'Failed to fetch document content.');
+
+      const gRes = await fetch(`/api/generate-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          text: cResult.data.extracted_text,
+          sourceDocumentId: pageContext.id
+        })
+      });
+      const gResult: ApiResponse = await gRes.json();
+      if (!gRes.ok || !gResult.success) throw new Error(gResult.error || 'Failed to generate notes.');
+      
+      toast({ title: 'Notes Generated!' });
+      router.push('/notes');
+      onClose();
+    } catch (e: any) {
+      toast({ title: 'Note Generation Failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleGenerateFlashcardsFromContext = async () => {
+    if (pageContext?.type !== 'document' || !pageContext.id || !session) return;
+    setIsActionLoading(true);
+    toast({ title: 'Generating Flashcards...', description: 'Please wait, this may take a moment.' });
+    try {
+      const response = await fetch(`/api/generate-flashcards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ documentId: pageContext.id, numberOfCards: 15 })
+      });
+      const result: ApiResponse<GeneratedDeckInfo> = await response.json();
+      if (!response.ok || !result.success || !result.data) throw new Error(result.error || 'Failed to generate flashcards.');
+      
+      toast({ title: 'Flashcards Generated!', description: `Deck "${result.data.title}" created.` });
+      router.push(`/flashcards/${result.data.id}`);
+      onClose();
+    } catch (e: any) {
+      toast({ title: 'Card Generation Failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+  // --- END NEW ---
+
+
+  // --- 10. MODIFIED: Effect for proactive prompts AND history loading ---
   useEffect(() => {
     if (isOpen) {
+      // Reset actions first
+      setProactiveActions(null); 
+      
       if (pageContext?.type === 'quiz') {
         // Context: Quiz
         setMessages([]); // Clear history for context-specific chat
@@ -80,6 +157,31 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
         setMessages([]); // Clear history for context-specific chat
         setIsHistoryLoading(false);
         setProactivePrompt("I see you just got feedback on your essay. Have any follow-up questions? (e.g., \"Can you give me an example of a better thesis for this essay?\")");
+      
+      // --- NEW BRANCH ---
+      } else if (pageContext?.type === 'document') {
+        // Context: Document
+        setMessages([]); // Clear history for context-specific chat
+        setIsHistoryLoading(false);
+        setProactivePrompt("I see you're viewing a document. What would you like to do with it?");
+        setProactiveActions(
+          <div className="flex flex-col sm:flex-row gap-2 mt-2">
+            <Button size="sm" variant="secondary" onClick={handleGenerateQuizFromContext} disabled={isActionLoading}>
+              {isActionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileQuestion className="w-4 h-4 mr-2" />}
+              Generate Quiz
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleGenerateNotesFromContext} disabled={isActionLoading}>
+              {isActionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <StickyNote className="w-4 h-4 mr-2" />}
+              Summarize Notes
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleGenerateFlashcardsFromContext} disabled={isActionLoading}>
+              {isActionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Layers className="w-4 h-4 mr-2" />}
+              Make Flashcards
+            </Button>
+          </div>
+        );
+      // --- END NEW BRANCH ---
+
       } else {
         // Context: General (load history)
         setProactivePrompt(null);
@@ -108,8 +210,10 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
       // Clear messages when dialog is closed
       setMessages([]);
       setProactivePrompt(null);
+      setProactiveActions(null);
+      setIsActionLoading(false);
     }
-  }, [isOpen, pageContext, session]);
+  }, [isOpen, pageContext, session]); // <-- Removed action handlers from dep array
   // --- END MODIFICATION ---
 
   useEffect(() => {
@@ -127,6 +231,7 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
 
     // Clear proactive prompt if user sends a message
     setProactivePrompt(null); 
+    setProactiveActions(null); // <-- 11. Clear actions
     
     const userMessage: Message = { role: 'user', text: input };
     const history = [...messages, userMessage];
@@ -164,7 +269,7 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true }); // --- ADDED stream: true ---
+        const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
         
         setMessages((prev) => {
@@ -200,7 +305,8 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
             AI Tutor
           </DialogTitle>
           <DialogDescription>
-            {pageContext?.type === 'quiz' ? "Ask me to refine questions for this quiz."
+            {pageContext?.type === 'document' ? "I can help you work with this document."
+             : pageContext?.type === 'quiz' ? "Ask me to refine questions for this quiz."
              : pageContext?.type === 'essay' ? "Ask me follow-up questions about your feedback."
              : "Ask me anything about your study materials."}
           </DialogDescription>
@@ -222,17 +328,19 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
                     </div>
                 ) : (
                     <>
-                        {/* (Proactive prompt render remains unchanged) */}
-                        {messages.length === 0 && proactivePrompt && (
+                        {/* --- 12. MODIFIED: Proactive prompt/action render --- */}
+                        {messages.length === 0 && (proactivePrompt || proactiveActions) && (
                         <div className="flex items-start gap-3">
                             <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
                             <Bot className="w-5 h-5" />
                             </div>
-                            <div className="rounded-lg p-3 bg-secondary">
-                            <p className="text-sm">{proactivePrompt}</p>
+                            <div className="rounded-lg p-3 bg-secondary w-full">
+                              {proactivePrompt && <p className="text-sm">{proactivePrompt}</p>}
+                              {proactiveActions}
                             </div>
                         </div>
                         )}
+                        {/* --- END MODIFICATION --- */}
                         
                         {/* (messages.map remains unchanged) ... */}
                         {messages.map((msg, index) => (
@@ -291,9 +399,9 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your question..."
-              disabled={isLoading || isHistoryLoading}
+              disabled={isLoading || isHistoryLoading || isActionLoading}
             />
-            <Button type="submit" disabled={isLoading || isHistoryLoading || !input.trim()}>
+            <Button type="submit" disabled={isLoading || isHistoryLoading || isActionLoading || !input.trim()}>
               <Send className="w-4 h-4" />
             </Button>
           </form>

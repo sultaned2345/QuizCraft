@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileText, ArrowRight, Sparkles } from "lucide-react";
+// --- MODIFICATION: Import new icons ---
+import { Upload, FileText, ArrowRight, Sparkles, FileSignature, StickyNote, Layers } from "lucide-react";
+// ---
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -53,7 +55,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-      {/* Header */}
+      {/* Header (remains the same) */}
       <header className="py-4 px-6 md:px-12 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2">
           <Sparkles className="w-6 h-6 text-primary" />
@@ -76,14 +78,14 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero Section (remains the same) */}
       <main className="container mx-auto px-4 py-16 md:py-24 text-center">
         <h1 className="text-4xl md:text-6xl font-extrabold mb-4 leading-tight">
-          Turn Content into Quizzes
+          Turn Content into Study Tools
         </h1>
         <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-          Paste text or upload a file. Our AI instantly creates shareable
-          quizzes to supercharge your learning.
+          Paste text or upload a file. Our AI instantly creates quizzes,
+          flashcards, and notes to supercharge your learning.
         </p>
 
         <Card className="max-w-2xl mx-auto p-4 md:p-6 shadow-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
@@ -121,13 +123,13 @@ export default function LandingPage() {
                   {fileName || "Click to upload a file"}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  PDF or TXT (Max 3MB)
+                  PDF, TXT, DOCX, PPTX (Max 3MB)
                 </p>
                 <input
                   type="file"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={handleFileChange}
-                  accept=".pdf,.txt"
+                  accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                 />
               </div>
             )}
@@ -138,40 +140,46 @@ export default function LandingPage() {
               onClick={handleActionClick}
               disabled={!textContent && !fileName}
             >
-              Generate Quiz <ArrowRight className="w-5 h-5 ml-2" />
+              Get Started <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
           </CardContent>
         </Card>
       </main>
 
-      {/* Features Section */}
+      {/* --- MODIFICATION: Features Section --- */}
       <section className="bg-white dark:bg-slate-800/30 py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold">Why You'll Love QuizCraft</h2>
+            <h2 className="text-3xl font-bold">A Full Study Toolkit</h2>
             <p className="text-muted-foreground mt-2">
               Everything you need to create and share knowledge.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
             <FeatureCard
               icon={<Sparkles size={28} />}
-              title="AI-Powered"
-              description="Leverage the latest AI to generate relevant and challenging questions from your content in seconds."
+              title="AI-Powered Quizzes"
+              description="Leverage AI to generate relevant questions from any text, document, or topic in seconds."
             />
             <FeatureCard
-              icon={<Upload size={28} />}
-              title="Flexible Inputs"
-              description="Simply paste text or upload your PDF and TXT files. We handle the rest."
+              icon={<FileSignature size={28} />}
+              title="AI Essay Grader"
+              description="Get instant, detailed feedback on your writing, complete with scores and suggestions."
             />
             <FeatureCard
-              icon={<FileText size={28} />}
-              title="Instant Sharing"
-              description="Get a shareable link for your quiz as soon as it's created. Perfect for classrooms and teams."
+              icon={<Layers size={28} />}
+              title="Smart Flashcards"
+              description="Create decks manually or with AI, then study using spaced repetition to master any subject."
+            />
+            <FeatureCard
+              icon={<StickyNote size={28} />}
+              title="Smart Notes"
+              description="Upload documents or paste text to generate summarized, structured notes automatically."
             />
           </div>
         </div>
       </section>
+      {/* --- END MODIFICATION --- */}
 
       {/* Footer is now handled by layout.tsx */}
     </div>

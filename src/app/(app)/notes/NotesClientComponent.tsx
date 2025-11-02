@@ -271,12 +271,16 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
-      {/* Grid or Empty State (remains the same) */}
+      {/* --- MODIFICATION: Updated Empty State --- */}
        {(notes.length === 0) ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Notes Yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Create your first note or use AI.</p>
+          {/* --- ADDED THIS BUTTON --- */}
+          <Button className="mt-6" onClick={() => { setSelectedNote(null); setIsEditorOpen(true); setIsFetchingNote(false); }}>
+            <Plus className="w-4 h-4 mr-2" /> New Note
+          </Button>
         </div>
       ) : filteredNotes.length === 0 ? (
          <div className="text-center py-16 border-2 border-dashed rounded-lg">
@@ -298,6 +302,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           )}
         </div>
       ) : (
+      // --- END MODIFICATION ---
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNotes.map((note) => (
             <Card key={note.id} className="flex flex-col">
