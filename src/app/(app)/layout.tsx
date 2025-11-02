@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { ChatbotDialog } from '@/components/ChatbotDialog';
-import { PageProvider } from '@/contexts/PageContext'; // <-- 1. IMPORT
+import { PageProvider } from '@/contexts/PageContext'; 
 
 // ... (AppHeader component remains unchanged) ...
 const AppHeader = () => {
@@ -45,17 +45,15 @@ const AppHeader = () => {
   );
 };
 
-// --- MODIFIED SidebarNav ---
+// ... (SidebarNav component remains unchanged) ...
 const SidebarNav = () => {
   const pathname = usePathname();
   const navItems = [
-    // --- Re-ordered and Renamed ---
     { href: '/documents', label: 'Documents', icon: FileText },
-    { href: '/quizzes', label: 'Quizzes', icon: FileQuestion }, // <-- MODIFIED HREF
+    { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
-    // --- End of Change ---
   ];
 
   return (
@@ -66,9 +64,8 @@ const SidebarNav = () => {
           href={item.href}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-            // --- MODIFIED: Simplified Highlight logic ---
-            (pathname === item.href || (item.href !== '/documents' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
-            // This now correctly highlights /quizzes, /notes, etc., when on sub-pages
+            // --- MODIFIED: Highlight logic for /documents and /documents/[id] ---
+            (pathname === item.href || (item.href === '/documents' && pathname.startsWith('/documents/')) || (item.href !== '/documents' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
           )}
         >
           <item.icon className="h-4 w-4" />
@@ -78,14 +75,18 @@ const SidebarNav = () => {
     </nav>
   );
 };
-// --- END MODIFICATION ---
 
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  
+  // --- NEW: Check pathname ---
+  const pathname = usePathname();
+  // Regex to match /documents/[any-uuid-or-string]
+  const isDocViewPage = /^\/documents\/[a-zA-Z0-9-]+$/.test(pathname);
+  // ---
 
   return (
-    // <-- 2. WRAP WITH PROVIDER -->
     <PageProvider>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
@@ -105,22 +106,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
         </div>
 
-        {/* Chatbot Trigger Button */}
-        <div className="fixed bottom-6 right-6 z-40">
-          <Button
-            size="icon"
-            className="rounded-full h-14 w-14 shadow-lg"
-            onClick={() => setIsChatbotOpen(true)}
-          >
-            <MessageSquare className="h-6 w-6" />
-            <span className="sr-only">Open AI Tutor</span>
-          </Button>
-        </div>
+        {/* --- MODIFIED: Conditionally render Chatbot Trigger --- */}
+        {!isDocViewPage && (
+          <div className="fixed bottom-6 right-6 z-40">
+            <Button
+              size="icon"
+              className="rounded-full h-14 w-14 shadow-lg"
+              onClick={() => setIsChatbotOpen(true)}
+            >
+              <MessageSquare className="h-6 w-6" />
+              <span className="sr-only">Open AI Tutor</span>
+            </Button>
+          </div>
+        )}
+        {/* --- END MODIFICATION --- */}
+
 
         {/* Chatbot Dialog Component (now inside provider) */}
         <ChatbotDialog isOpen={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
       </div>
     </PageProvider>
-    // <-- 3. END WRAPPER -->
   );
 }

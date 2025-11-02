@@ -4,98 +4,57 @@
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-// --- MODIFIED: Import RelatedItem ---
-import { ApiResponse, DocumentMetadata, GeneratedDeckInfo, RelatedItem } from '@/types/database'; 
+import { ApiResponse, DocumentMetadata, GeneratedDeckInfo } from '@/types/database'; 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from '@/components/ui/dialog';
-import { ScrollArea } from "@/components/ui/scroll-area";
+// --- REMOVED Dialog imports ---
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle, Link } from 'lucide-react';
+import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
-import { Skeleton } from '@/components/ui/skeleton';
-import NextLink from 'next/link';
-import { cn } from '@/lib/utils';
 import { usePageContext } from '@/contexts/PageContext';
 
-// --- REMOVED: Local Type Definitions ---
-
-interface PaginatedDocumentsData { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
-interface ViewingContentState { title: string; text: string | null; pdfUrl: string | null; }
+interface PaginatedDocumentsData {
+  documents: DocumentMetadata[];
+  count: number;
+  limit: number | typeof Infinity;
+  totalPages: number;
+  currentPage: number;
+}
 
 interface DocumentsClientComponentProps {
   initialData: PaginatedDocumentsData;
 }
 
-// (RelatedContentWidget function remains the same, but now uses the imported RelatedItem type)
-function RelatedContentWidget({ items, isLoading, onLinkClick }: { items: RelatedItem[], isLoading: boolean, onLinkClick: () => void }) {
-    return (
-        <div className="w-full lg:w-64 lg:border-l lg:pl-4 overflow-y-auto">
-            <h4 className="text-sm font-semibold text-muted-foreground mb-3">Related Materials</h4>
-            {isLoading && (
-                <div className="space-y-2">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                </div>
-            )}
-            {!isLoading && items.length === 0 && (
-                <p className="text-xs text-muted-foreground italic">No related content found.</p>
-            )}
-            {!isLoading && items.length > 0 && (
-                <div className="space-y-2">
-                    {items.map((item) => (
-                        <div key={item.content_id} className="border rounded-md">
-                            <Button variant="outline" size="sm" asChild className="w-full justify-start h-auto py-2 rounded-b-none border-0 border-b rounded-b-none">
-                                <NextLink 
-                                    href={item.content_type === 'note' ? '/notes' : '/documents'} 
-                                    title={item.content_title}
-                                    onClick={onLinkClick}
-                                >
-                                    {item.content_type === 'note' ? <StickyNote className="w-4 h-4 mr-2 shrink-0" /> : <FileText className="w-4 h-4 mr-2 shrink-0" />}
-                                    <span className="truncate text-xs font-semibold">{item.content_title}</span>
-                                </NextLink>
-                            </Button>
-                            {item.content_chunk && (
-                                <p className="text-xs text-muted-foreground italic p-2 bg-muted/50 border-t truncate">
-                                    "...{item.content_chunk}..."
-                                </p>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
 export function DocumentsClientComponent({ initialData }: DocumentsClientComponentProps) {
-  // (State setup...)
   const [documents, setDocuments] = useState<DocumentMetadata[]>(initialData.documents);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number | undefined; limit: number | typeof Infinity | undefined }>({ count: initialData.count, limit: initialData.limit });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const [viewingContent, setViewingContent] = useState<ViewingContentState>({ title: '', text: null, pdfUrl: null });
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  
+  // --- REMOVED Viewer State ---
+  // const [isViewerOpen, setIsViewerOpen] = useState(false);
+  // const [viewingContent, setViewingContent] = useState<ViewingContentState>({ title: '', text: null, pdfUrl: null });
+  // const [isLoadingContent, setIsLoadingContent] = useState(false);
+  // const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
+  // const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  // ---
+
   const [isGenerating, setIsGenerating] = useState<{ type: 'quiz' | 'notes' | 'flashcards'; docId: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const documentsPerPage = 9;
 
-  const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
-  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
-
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { setPageContext } = usePageContext(); // (Imported)
+  const { setPageContext } = usePageContext();
+
+  // --- REMOVED RelatedContentWidget ---
 
   const fetchMoreDocuments = useCallback(async (page: number) => {
     // ... (function remains the same)
@@ -115,7 +74,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
    };
    
   const handleUpload = async () => {
-     // ... (function remains the same from previous step)
+     // ... (function remains the same, but remove handleViewContent call)
      if (!selectedFile || !session) return; 
      setIsUploading(true); 
      setUploadError(''); 
@@ -131,7 +90,10 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        setSelectedFile(null); 
        if(fileInputRef.current) fileInputRef.current.value = ''; 
        await refreshFirstPage(); 
-       handleViewContent(result.data); 
+       // --- REMOVED: handleViewContent(result.data); ---
+       // --- NEW: Navigate to the new page ---
+       router.push(`/documents/${result.data.id}`);
+       // ---
      } catch (error: any) { 
        setUploadError(error.message || 'Upload error.'); 
        toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); 
@@ -173,75 +135,9 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
     if(!session) return; setIsGenerating({type:'flashcards', docId}); toast({title:'Generating Flashcards...'}); try { const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); const result: ApiResponse<GeneratedDeckInfo> = await response.json(); if(!response.ok || !result.success || !result.data) throw new Error(result.error||'Failed generate.'); toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); router.push(`/flashcards/${result.data.id}`); } catch(e:any){ toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } 
   };
 
-  const handleViewContent = async (doc: DocumentMetadata) => {
-    // ... (function remains the same from previous step)
-    if (!session) return;
-    setPageContext({ type: 'document', id: doc.id }); 
-    setIsViewerOpen(true);
-    setIsLoadingContent(true);
-    setIsLoadingRelated(true); 
-    setViewingContent({ title: doc.file_name, text: null, pdfUrl: null });
-    setRelatedItems([]); 
-
-    try {
-      const contentPromise = fetch(`/api/documents/${doc.id}/content`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-      const urlPromise = (doc.file_type === 'application/pdf' || doc.file_name.toLowerCase().endsWith('.pdf'))
-        ? fetch(`/api/documents/${doc.id}/url`, { headers: { Authorization: `Bearer ${session.access_token}` } })
-        : Promise.resolve(null);
-      const [contentResponse, urlResponse] = await Promise.all([contentPromise, urlPromise]);
-      const textResult: ApiResponse<{ extracted_text: string | null; file_name: string }> = await contentResponse.json();
-      if (!textResult.success || !textResult.data) {
-        throw new Error(textResult.error || 'Failed to fetch document content.');
-      }
-      const docText = textResult.data.extracted_text;
-      setViewingContent(prev => ({ ...prev, title: textResult.data.file_name, text: docText }));
-      if (urlResponse) {
-        const urlResult: ApiResponse<{ signedUrl: string }> = await urlResponse.json();
-        if (urlResult.success && urlResult.data) {
-          setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
-        }
-      }
-      setIsLoadingContent(false); 
-      if (docText && docText.length > 50) {
-        try {
-            const relatedResponse = await fetch('/api/content/find-related', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                    contentId: doc.id,
-                    contentType: 'document',
-                    textContent: docText,
-                }),
-            });
-            const relatedResult: ApiResponse<RelatedItem[]> = await relatedResponse.json();
-            if (relatedResult.success && relatedResult.data) {
-                setRelatedItems(relatedResult.data);
-            }
-        } catch (relatedError) {
-            console.error("Failed to fetch related content:", relatedError);
-        }
-      }
-      setIsLoadingRelated(false);
-    } catch (error: any) {
-      toast({ title: 'Error Fetching Content', description: error.message, variant: 'destructive' });
-      setViewingContent({ title: doc.file_name, text: `Error: ${error.message}`, pdfUrl: null });
-      setIsLoadingContent(false); 
-      setIsLoadingRelated(false); 
-    }
-  };
+  // --- REMOVED handleViewContent ---
   
-  const handleViewerOpenChange = (open: boolean) => {
-    // ... (function remains the same)
-    setIsViewerOpen(open);
-    if (!open) {
-      setPageContext(null); // Clear context when dialog closes
-    }
-  };
+  // --- REMOVED handleViewerOpenChange ---
 
   return (
     <>
@@ -277,86 +173,49 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
         </Card>
       </div>
 
-      {/* (Document List - ai_summary rendering was already added in previous step's file) */}
-        {documents.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {documents.map((doc) => (
-                  <Card key={doc.id} className="flex flex-col">
-                    <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
-                      <div className="space-y-1 overflow-hidden">
-                        <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
-                        <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
-                        <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}>
-                        <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="flex-grow">
-                        <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
-                            {doc.ai_summary || 'No summary available.'}
-                        </p>
-                    </CardContent>
-                    <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
-                      <Button variant="outline" size="sm" onClick={() => handleViewContent(doc)} disabled={isGenerating?.docId === doc.id}><Eye className="w-4 h-4 mr-2" /> View & Chat</Button>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                        <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                        <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
-                      </div>
-                    </CardFooter>
-                  </Card>
-                ))}
-            </div>
-        )}
-        {totalPages > currentPage && (
-            <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
-        )}
-
-
-      {/* (Dialog viewer remains the same from previous step) */}
-      <Dialog open={isViewerOpen} onOpenChange={handleViewerOpenChange}>
-        <DialogContent className="sm:max-w-4xl md:max-w-5xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="truncate">Content: {viewingContent.title}</DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden py-4">
-            <div className="flex-1 overflow-hidden">
-                {isLoadingContent ? (
-                  <div className="flex justify-center items-center h-full min-h-[60vh]">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                ) : viewingContent.pdfUrl ? (
-                  <iframe
-                    src={viewingContent.pdfUrl}
-                    className="w-full h-full min-h-[65vh] border rounded-md"
-                    title={`PDF Viewer for ${viewingContent.title}`}
-                  />
-                ) : (
-                  <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
-                    <pre className="text-sm whitespace-pre-wrap break-words">
-                      {viewingContent.text || "No text extracted or file is empty."}
-                    </pre>
-                  </ScrollArea>
-                )}
-            </div>
-            <RelatedContentWidget 
-                items={relatedItems} 
-                isLoading={isLoadingRelated}
-                onLinkClick={() => setIsViewerOpen(false)}
-            />
+      {/* (Document List) */}
+      {documents.length === 0 ? (
+          <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
+      ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {documents.map((doc) => (
+                <Card key={doc.id} className="flex flex-col">
+                  <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
+                    <div className="space-y-1 overflow-hidden">
+                      <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
+                      <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
+                      <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}>
+                      <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="flex-grow">
+                      <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
+                          {doc.ai_summary || 'No summary available.'}
+                      </p>
+                  </CardContent>
+                  <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
+                    {/* --- MODIFIED: Button now links to new page --- */}
+                    <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id}>
+                      <Eye className="w-4 h-4 mr-2" /> View & Chat
+                    </Button>
+                    {/* --- */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
+                      <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
+                      <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              ))}
           </div>
+      )}
+      {totalPages > currentPage && (
+          <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
+      )}
 
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="secondary">Close</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* --- REMOVED Dialog viewer --- */}
     </>
   );
 }
