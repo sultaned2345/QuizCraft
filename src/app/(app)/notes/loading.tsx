@@ -1,6 +1,30 @@
 // src/app/(app)/notes/loading.tsx
+// UPDATED FILE
+
 import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonCard } from "@/components/SkeletonCard"; // Import the reusable card
+import { NoteCardSkeleton } from "@/components/skeletons/NoteCardSkeleton"; // <-- Use specific skeleton
+import { motion } from 'framer-motion'; // <-- Import motion
+
+// --- Animation Variants (copied from NotesClientComponent) ---
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 100 }
+  },
+};
+// ---
 
 export default function NotesLoading() {
   return (
@@ -22,12 +46,19 @@ export default function NotesLoading() {
         <Skeleton className="h-10 w-full rounded-md" />
       </div>
 
-      {/* Grid Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[...Array(6)].map((_, i) => ( // Show 6 placeholders
-          <SkeletonCard key={i} />
+      {/* Grid Skeleton --- WRAPPED IN MOTION --- */}
+      <motion.div 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {[...Array(6)].map((_, i) => (
+          <motion.div key={i} variants={itemVariants}>
+            <NoteCardSkeleton />
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </>
   );
 }

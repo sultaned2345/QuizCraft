@@ -1,4 +1,5 @@
 // src/app/(app)/essay-grader/page.tsx
+// UPDATED FILE
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
@@ -21,13 +22,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+// --- NEW IMPORTS ---
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+// ---
 import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton'; // --- THIS IS THE FIX ---
+import { Skeleton } from '@/components/ui/skeleton';
 
-// Type for history list
+// (Keep all existing interfaces: GradedEssayListItem, rubricPresets, AIUsageStatus)
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
-
-// --- NEW: Rubric Presets ---
 const rubricPresets = {
     general: {
         name: "General",
@@ -42,8 +55,6 @@ const rubricPresets = {
         rubric: "Evaluate this as a college admission essay. Focus on: (1) A compelling personal narrative, (2) A strong and unique authorial voice, (3) Clarity of thought and structure, and (4) Flawless grammar and style."
     }
 };
-
-// --- (AIUsageStatus interface remains the same) ---
 interface AIUsageStatus {
     currentCount: number | undefined;
     limit: number | typeof Infinity;
@@ -51,27 +62,55 @@ interface AIUsageStatus {
     isPro: boolean;
 }
 
+// --- NEW: Score Badge Component ---
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score === null) {
+    return (
+      <div className="text-center mb-6">
+        <h3 className="text-sm font-medium text-muted-foreground mb-1">Estimated Score</h3>
+        <p className="text-4xl font-bold">N/A</p>
+      </div>
+    );
+  }
+
+  let colorClass = 'text-gray-600 dark:text-gray-400';
+  if (score >= 90) colorClass = 'text-green-600 dark:text-green-500';
+  else if (score >= 80) colorClass = 'text-blue-600 dark:text-blue-500';
+  else if (score >= 70) colorClass = 'text-yellow-600 dark:text-yellow-500';
+  else colorClass = 'text-red-600 dark:text-red-500';
+
+  return (
+    <div className="text-center mb-6">
+      <h3 className="text-sm font-medium text-muted-foreground mb-1">Estimated Score</h3>
+      <p className={cn("text-6xl font-bold", colorClass)}>
+        {score}
+        <span className="text-4xl text-muted-foreground">/100</span>
+      </p>
+    </div>
+  );
+}
+// ---
+
 export default function EssayGraderPage() {
+  // (Keep all existing state hooks: essayText, rubricText, selectedFile, etc.)
   const [essayText, setEssayText] = useState('');
   const [rubricText, setRubricText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
   const [isLoading, setIsLoading] = useState(false);
-  const [gradedEssay, setGradedEssay] = useState<GradeEssayResponseData | null>(null); // --- RENAMED from feedback ---
+  const [gradedEssay, setGradedEssay] = useState<GradeEssayResponseData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
   const [aiUsage, setAiUsage] = useState<AIUsageStatus | null>(null);
   const [isUsageLoading, setIsUsageLoading] = useState(true);
-
-  // --- NEW: History State ---
   const [history, setHistory] = useState<GradedEssayListItem[] | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const { session } = useAuth();
   const { toast } = useToast();
   const { setPageContext } = usePageContext();
+  const router = useRouter(); // Added router for history push
 
-  // --- MODIFIED: Context now depends on gradedEssay.id ---
+  // (Keep all existing useEffect hooks for context and data fetching)
   useEffect(() => {
     if (gradedEssay?.id) {
       setPageContext({ type: 'essay', id: gradedEssay.id });
@@ -79,9 +118,8 @@ export default function EssayGraderPage() {
       setPageContext({ type: 'page', name: 'essay-grader' });
     }
     return () => setPageContext(null);
-  }, [gradedEssay, setPageContext]); // --- Uses gradedEssay ---
+  }, [gradedEssay, setPageContext]);
 
-  // --- MODIFIED: Fetch AI Usage AND History on Load ---
   useEffect(() => {
     if (!session) {
         setIsUsageLoading(false); 
@@ -117,8 +155,8 @@ export default function EssayGraderPage() {
     fetchUsage();
     fetchHistory();
   }, [session]); 
-  // --- END MODIFICATION ---
 
+  // (Keep handleFileChange, handleViewHistoryItem, and handleSubmit)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -146,10 +184,9 @@ export default function EssayGraderPage() {
      }
    };
    
-   // --- NEW: Handle loading old feedback from history ---
    const handleViewHistoryItem = async (essayId: string) => {
         if (!session) return;
-        setIsLoading(true); // Use main loader
+        setIsLoading(true);
         setError(null);
         setGradedEssay(null);
         setEssayText('');
@@ -164,18 +201,16 @@ export default function EssayGraderPage() {
                 throw new Error(result.error || 'Failed to fetch essay details.');
             }
             
-            // Re-constitute the GradeEssayResponseData object from the full GradedEssay
             const responseData: GradeEssayResponseData = {
                 id: result.data.id,
-                feedback: result.data.feedback as GradedEssayFeedback, // We must trust the DB schema
+                feedback: result.data.feedback as GradedEssayFeedback,
                 score: result.data.score,
-                suggestions: (result.data.feedback as any)?.suggestions || [], // Try to get suggestions if they were stored
+                suggestions: (result.data.feedback as any)?.suggestions || [],
                 graded_at: result.data.graded_at,
                 essay_content: result.data.essay_content,
             };
 
             setGradedEssay(responseData);
-            // Also set the original text/rubric for context, though they can't be re-submitted
             setEssayText(result.data.essay_content);
             setRubricText(result.data.rubric_or_criteria || '');
             
@@ -189,7 +224,6 @@ export default function EssayGraderPage() {
         }
    };
 
-  // --- MODIFIED: handleSubmit ---
   const handleSubmit = async () => {
     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
       setError('Please provide an essay by pasting text or uploading a file.');
@@ -205,7 +239,7 @@ export default function EssayGraderPage() {
     }
     setIsLoading(true);
     setError(null);
-    setGradedEssay(null); // --- Use new state ---
+    setGradedEssay(null);
     try {
       let response: Response;
       const headers: HeadersInit = { 'Authorization': `Bearer ${session.access_token}` };
@@ -228,10 +262,9 @@ export default function EssayGraderPage() {
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
-      setGradedEssay(result.data); // --- Use new state ---
+      setGradedEssay(result.data);
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
       
-      // Refresh history list to include this new item
       if (history) {
         const newHistoryItem: GradedEssayListItem = {
             id: result.data.id,
@@ -242,7 +275,6 @@ export default function EssayGraderPage() {
         setHistory([newHistoryItem, ...history]);
       }
       
-      // Update AI Usage (unchanged)
       if (aiUsage && aiUsage.currentCount !== undefined && aiUsage.limit !== Infinity) {
         setAiUsage(prev => {
              if (!prev) return null;
@@ -259,7 +291,7 @@ export default function EssayGraderPage() {
     }
   };
   
-  // --- NEW: Render essay text with highlights ---
+  // (Keep renderHighlightedEssay function)
   const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     let parts: (string | React.ReactNode)[] = [text];
@@ -314,63 +346,68 @@ export default function EssayGraderPage() {
     return <pre className="text-sm whitespace-pre-wrap break-words p-4">{parts.map((part, i) => <Fragment key={i}>{part}</Fragment>)}</pre>;
   };
 
-  // --- NEW: Render structured feedback ---
+  // --- REFACTORED: renderFeedback now uses Accordion ---
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     if (!fb) return null;
-    const categories: ('clarity' | 'argument' | 'grammar' | 'summary')[] = ['clarity', 'argument', 'grammar', 'summary']; 
+    const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     
     return (
-      <>
-        {categories.map((key) => {
-          const data = fb[key];
-          if (!data) return null;
+      <div className="space-y-4">
+        {/* Overall Summary first */}
+        {fb.summary && (
+          <div className="mb-4">
+            <h4 className="font-semibold text-base mb-1">Overall Summary</h4>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb.summary}</p>
+          </div>
+        )}
 
-          // Handle 'summary' which is just a string
-          if (key === 'summary' && typeof data === 'string') {
-            return (
-              <div key={key} className="mb-4">
-                <h4 className="font-semibold capitalize text-base mb-1">Overall Summary</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data}</p>
-              </div>
-            );
-          }
+        {/* Accordion for categories */}
+        <Accordion type="multiple" defaultValue={['clarity', 'argument', 'grammar']} className="w-full">
+          {categories.map((key) => {
+            const data = fb[key];
+            if (!data) return null;
 
-          // Handle new structured categories (Clarity, Argument, Grammar)
-          if (typeof data === 'object' && data.summary) {
-            return (
-              <div key={key} className="mb-4">
-                <h4 className="font-semibold capitalize text-base mb-1">{key}</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
-                {data.highlights && data.highlights.length > 0 && (
-                  <ul className="mt-2 space-y-2">
-                    {data.highlights.map((h, i) => (
-                      <li key={i} className="text-xs border-l-2 pl-3 py-1 border-border/50">
-                        <blockquote className="font-mono text-foreground p-2 bg-muted rounded">"{h.text}"</blockquote>
-                        <p className="text-muted-foreground mt-1">&rarr; {h.comment}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          }
-          
-          // Fallback for old feedback format (simple string)
-          if (typeof data === 'string' && key !== 'summary') {
-             return (
-                <div key={key} className="mb-4">
-                  <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data}</p>
-                </div>
+            // Handle new structured categories
+            if (typeof data === 'object' && data.summary) {
+              return (
+                <AccordionItem value={key} key={key}>
+                  <AccordionTrigger className="text-base font-semibold capitalize">{key}</AccordionTrigger>
+                  <AccordionContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
+                    {data.highlights && data.highlights.length > 0 && (
+                      <ul className="space-y-2">
+                        {data.highlights.map((h, i) => (
+                          <li key={i} className="text-xs border-l-2 pl-3 py-1 border-border/50">
+                            <blockquote className="font-mono text-foreground p-2 bg-muted rounded">"{h.text}"</blockquote>
+                            <p className="text-muted-foreground mt-1">&rarr; {h.comment}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
               );
-          }
-          
-          return null;
-        })}
-      </>
+            }
+            
+            // Fallback for old string format
+            if (typeof data === 'string') {
+              return (
+                 <AccordionItem value={key} key={key}>
+                    <AccordionTrigger className="text-base font-semibold capitalize">{key.replace(/_/g, ' ')}</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data}</p>
+                    </AccordionContent>
+                 </AccordionItem>
+               );
+            }
+            
+            return null;
+          })}
+        </Accordion>
+      </div>
     );
   };
-  // --- END MODIFICATION ---
+  // --- END REFACTOR ---
 
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
 
@@ -378,7 +415,6 @@ export default function EssayGraderPage() {
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
-          {/* (AI Usage display remains unchanged) */}
           <div className="text-sm text-muted-foreground">
               {isUsageLoading ? (
                   <span className="flex items-center gap-1"><Loader2 className="h-4 w-4 animate-spin" /> Checking AI usage...</span>
@@ -397,18 +433,17 @@ export default function EssayGraderPage() {
           </div>
       </div>
       
-      {/* --- MODIFIED: Main Grid --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* --- Left Column (Input) --- */}
         <div className="lg:col-span-1 space-y-6">
+           {/* (Input Card - Unchanged) */}
            <Card>
                 <CardHeader>
                     <CardTitle>Your Essay</CardTitle>
                     <CardDescription>Paste text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* (Input Mode Toggle remains unchanged) */}
                     <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
                         <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
                         <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
@@ -438,6 +473,7 @@ export default function EssayGraderPage() {
                     )}
                 </CardContent>
            </Card>
+           {/* (Criteria Card - Unchanged) */}
             <Card>
                 <CardHeader>
                     <CardTitle>Grading Criteria (Optional)</CardTitle>
@@ -451,7 +487,6 @@ export default function EssayGraderPage() {
                         className="min-h-[100px] border rounded-md"
                         disabled={isLoading}
                     />
-                    {/* --- NEW: Rubric Presets --- */}
                     <div className="mt-2 flex flex-wrap gap-2">
                         <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.general.rubric)}>
                             {rubricPresets.general.name}
@@ -463,10 +498,9 @@ export default function EssayGraderPage() {
                             {rubricPresets.admission.name}
                         </Button>
                     </div>
-                    {/* --- END NEW --- */}
                 </CardContent>
             </Card>
-            {/* (Error display and Submit button remain unchanged) */}
+            {/* (Error & Submit Button - Unchanged) */}
              {error && (
                 <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                     <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -487,63 +521,67 @@ export default function EssayGraderPage() {
              )}
         </div>
         
-        {/* --- Middle Column (Feedback) --- */}
+        {/* --- MODIFIED: Middle Column (Feedback) --- */}
         <div className="lg:col-span-1 space-y-6">
-           <Card className="min-h-[400px]"> 
+           <Card className="min-h-[400px] flex flex-col"> 
                 <CardHeader>
                     <CardTitle>AI Feedback</CardTitle>
                     <CardDescription>Results will appear here after grading.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex-1 flex flex-col">
                     {isLoading && ( 
-                        <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
                             <Loader2 className="w-8 h-8 animate-spin mb-4" />
                             <p>Analyzing your essay...</p>
                         </div>
                     )}
                     {!isLoading && gradedEssay && ( 
-                        <ScrollArea className="h-full max-h-[70vh]">
-                            {gradedEssay.score !== null && (
-                                <div className="mb-6 pb-4 border-b">
-                                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Estimated Score</h3>
-                                     <p className="text-4xl font-bold">{gradedEssay.score}<span className="text-2xl text-muted-foreground">/100</span></p>
-                                </div>
-                            )}
-                            
-                            {/* --- NEW: Render Original Essay (if available) --- */}
-                            {gradedEssay.essay_content && (
-                                <div className="mb-6 pb-4 border-b">
-                                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Graded Essay with Highlights</h3>
+                        <Tabs defaultValue="summary" className="flex-1 flex flex-col">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="summary">Summary</TabsTrigger>
+                            <TabsTrigger value="highlighted-essay">Highlighted Essay</TabsTrigger>
+                          </TabsList>
+                          
+                          {/* Summary Tab */}
+                          <TabsContent value="summary" className="flex-1 overflow-hidden">
+                            <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
+                                <ScoreBadge score={gradedEssay.score} />
+                                {renderFeedback(gradedEssay.feedback)}
+                                {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
+                                    <div className="mt-6 pt-4 border-t">
+                                        <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
+                                        <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                                            {gradedEssay.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                            </ScrollArea>
+                          </TabsContent>
+                          
+                          {/* Highlighted Essay Tab */}
+                          <TabsContent value="highlighted-essay" className="flex-1 overflow-hidden">
+                            <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
+                                {gradedEssay.essay_content ? (
                                     <TooltipProvider>
-                                        <div className="max-h-60 overflow-y-auto rounded-md border bg-muted/50">
+                                        <div className="rounded-md border bg-muted/50">
                                             {renderHighlightedEssay(gradedEssay.essay_content, gradedEssay.feedback)}
                                         </div>
                                     </TooltipProvider>
-                                </div>
-                            )}
-                            
-                            {/* --- MODIFIED: Render new feedback structure --- */}
-                            {renderFeedback(gradedEssay.feedback)}
-
-                            {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
-                                <div className="mt-6 pt-4 border-t">
-                                    <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
-                                    <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                                        {gradedEssay.suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                                    </ul>
-                                </div>
-                            )}
-                        </ScrollArea>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">Could not load essay text for highlighting.</p>
+                                )}
+                            </ScrollArea>
+                          </TabsContent>
+                        </Tabs>
                     )}
-                     {/* (Empty/Error states remain unchanged, but check for gradedEssay) */}
                      {!isLoading && !gradedEssay && !error && ( 
-                         <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground">
+                         <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
                             <FileSignature className="w-12 h-12 mb-4" />
                             <p>Submit your essay to receive feedback.</p>
                         </div>
                     )}
                     {!isLoading && !gradedEssay && error && (
-                         <div className="flex flex-col items-center justify-center pt-10 text-destructive">
+                         <div className="flex flex-col items-center justify-center pt-10 text-destructive flex-1">
                             <AlertCircle className="w-12 h-12 mb-4" />
                             <p>Could not generate feedback.</p>
                             <p className="text-xs mt-2 text-center">({error})</p>
@@ -553,7 +591,7 @@ export default function EssayGraderPage() {
            </Card>
         </div>
         
-        {/* --- NEW: Right Column (History) --- */}
+        {/* --- Right Column (History) --- */}
          <div className="lg:col-span-1 space-y-6">
             <Card className="min-h-[400px]">
                 <CardHeader>
@@ -593,7 +631,12 @@ export default function EssayGraderPage() {
                                             </p>
                                         </div>
                                         {item.score !== null && (
-                                            <span className="font-bold text-lg text-primary ml-2">
+                                            <span className={cn(
+                                                "font-bold text-lg ml-2",
+                                                item.score >= 90 ? 'text-green-600' :
+                                                item.score >= 80 ? 'text-blue-600' :
+                                                item.score >= 70 ? 'text-yellow-600' : 'text-red-600'
+                                            )}>
                                                 {item.score}
                                             </span>
                                         )}
