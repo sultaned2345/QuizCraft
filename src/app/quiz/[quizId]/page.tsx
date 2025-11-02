@@ -79,9 +79,21 @@ export default function QuizPage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // ... (rest of the state variables) ...
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [viewMode, setViewMode] = useState<'quiz' | 'results' | 'review'>(
+    'quiz'
+  );
+  const [error, setError] = useState('');
+  const [fillInBlankAnswer, setFillInBlankAnswer] = useState('');
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [matchingAnswers, setMatchingAnswers] = useState<string[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+
+  // --- THIS IS THE FIX ---
+  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
+  // --- END OF FIX ---
 
   const { user, loading: authLoading, session } = useAuth();
   const router = useRouter();
