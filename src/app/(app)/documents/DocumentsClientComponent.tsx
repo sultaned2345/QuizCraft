@@ -4,7 +4,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiResponse, DocumentMetadata, GeneratedDeckInfo, RelatedItem } from '@/types/database'; // --- MODIFIED: Imported RelatedItem ---
+// --- MODIFIED: Import RelatedItem ---
+import { ApiResponse, DocumentMetadata, GeneratedDeckInfo, RelatedItem } from '@/types/database'; 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,11 +20,8 @@ import NextLink from 'next/link';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/contexts/PageContext';
 
-// Types
-// --- MODIFIED: DocumentMetadata is now imported ---
-// interface DocumentMetadata { id: string; file_name: string; file_type: string; file_size: number; created_at: string; storage_path: string; ai_summary?: string | null; }
-// --- MODIFIED: RelatedItem is now imported ---
-// interface RelatedItem { content_id: string; content_type: 'note' | 'document'; content_title: string; content_chunk: string; } // --- MODIFIED: Added content_chunk ---
+// --- REMOVED: Local Type Definitions ---
+
 interface PaginatedDocumentsData { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
 interface ViewingContentState { title: string; text: string | null; pdfUrl: string | null; }
 
@@ -31,7 +29,7 @@ interface DocumentsClientComponentProps {
   initialData: PaginatedDocumentsData;
 }
 
-// --- MODIFIED: Updated props and JSX ---
+// (RelatedContentWidget function remains the same, but now uses the imported RelatedItem type)
 function RelatedContentWidget({ items, isLoading, onLinkClick }: { items: RelatedItem[], isLoading: boolean, onLinkClick: () => void }) {
     return (
         <div className="w-full lg:w-64 lg:border-l lg:pl-4 overflow-y-auto">
@@ -60,7 +58,6 @@ function RelatedContentWidget({ items, isLoading, onLinkClick }: { items: Relate
                                     <span className="truncate text-xs font-semibold">{item.content_title}</span>
                                 </NextLink>
                             </Button>
-                            {/* --- ADDED: Display related chunk --- */}
                             {item.content_chunk && (
                                 <p className="text-xs text-muted-foreground italic p-2 bg-muted/50 border-t truncate">
                                     "...{item.content_chunk}..."
@@ -73,7 +70,6 @@ function RelatedContentWidget({ items, isLoading, onLinkClick }: { items: Relate
         </div>
     );
 }
-// --- END MODIFICATION ---
 
 
 export function DocumentsClientComponent({ initialData }: DocumentsClientComponentProps) {
@@ -118,8 +114,8 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
      const file = e.target.files?.[0]; if (file) { setUploadError(''); const maxSize = 3 * 1024 * 1024; const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some(ext => file.name.toLowerCase().endsWith(ext)); if (!isValidType) { setUploadError("PDF, TXT, DOCX, or PPTX only."); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } if (file.size > maxSize) { setUploadError(`Max 3MB (${formatFileSize(file.size)}).`); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } setSelectedFile(file); } else { setSelectedFile(null); }
    };
    
-  // --- MODIFIED: Auto-open viewer on success ---
   const handleUpload = async () => {
+     // ... (function remains the same from previous step)
      if (!selectedFile || !session) return; 
      setIsUploading(true); 
      setUploadError(''); 
@@ -134,11 +130,8 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); 
        setSelectedFile(null); 
        if(fileInputRef.current) fileInputRef.current.value = ''; 
-       
-       // Refresh list AND auto-open the new document
-       await refreshFirstPage(); // Wait for refresh
-       handleViewContent(result.data); // --- ADDED: Auto-open viewer ---
-
+       await refreshFirstPage(); 
+       handleViewContent(result.data); 
      } catch (error: any) { 
        setUploadError(error.message || 'Upload error.'); 
        toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); 
@@ -146,7 +139,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        setIsUploading(false); 
      }
    };
-   // --- END MODIFICATION ---
    
   const handleDeleteDocument = async (docId: string, docName: string) => { 
     // ... (function remains the same)
@@ -181,50 +173,37 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
     if(!session) return; setIsGenerating({type:'flashcards', docId}); toast({title:'Generating Flashcards...'}); try { const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); const result: ApiResponse<GeneratedDeckInfo> = await response.json(); if(!response.ok || !result.success || !result.data) throw new Error(result.error||'Failed generate.'); toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); router.push(`/flashcards/${result.data.id}`); } catch(e:any){ toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } 
   };
 
-  // --- MODIFIED: Now fetches related content ---
   const handleViewContent = async (doc: DocumentMetadata) => {
+    // ... (function remains the same from previous step)
     if (!session) return;
-    
     setPageContext({ type: 'document', id: doc.id }); 
-    
     setIsViewerOpen(true);
     setIsLoadingContent(true);
-    setIsLoadingRelated(true); // --- ADDED ---
+    setIsLoadingRelated(true); 
     setViewingContent({ title: doc.file_name, text: null, pdfUrl: null });
-    setRelatedItems([]); // --- ADDED ---
+    setRelatedItems([]); 
 
     try {
-      // Fetch text content (and URL if PDF) in parallel
       const contentPromise = fetch(`/api/documents/${doc.id}/content`, {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
-      
       const urlPromise = (doc.file_type === 'application/pdf' || doc.file_name.toLowerCase().endsWith('.pdf'))
         ? fetch(`/api/documents/${doc.id}/url`, { headers: { Authorization: `Bearer ${session.access_token}` } })
         : Promise.resolve(null);
-
       const [contentResponse, urlResponse] = await Promise.all([contentPromise, urlPromise]);
-
-      // Handle Content
       const textResult: ApiResponse<{ extracted_text: string | null; file_name: string }> = await contentResponse.json();
       if (!textResult.success || !textResult.data) {
         throw new Error(textResult.error || 'Failed to fetch document content.');
       }
       const docText = textResult.data.extracted_text;
       setViewingContent(prev => ({ ...prev, title: textResult.data.file_name, text: docText }));
-      
-      // Handle PDF URL
       if (urlResponse) {
         const urlResult: ApiResponse<{ signedUrl: string }> = await urlResponse.json();
         if (urlResult.success && urlResult.data) {
           setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
         }
-        // Don't throw error if only URL fails, text viewer is fine
       }
-      
-      setIsLoadingContent(false); // Content is loaded
-
-      // --- ADDED: Fetch related content *after* text is loaded ---
+      setIsLoadingContent(false); 
       if (docText && docText.length > 50) {
         try {
             const relatedResponse = await fetch('/api/content/find-related', {
@@ -248,16 +227,13 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
         }
       }
       setIsLoadingRelated(false);
-      // --- END ADDED ---
-
     } catch (error: any) {
       toast({ title: 'Error Fetching Content', description: error.message, variant: 'destructive' });
       setViewingContent({ title: doc.file_name, text: `Error: ${error.message}`, pdfUrl: null });
-      setIsLoadingContent(false); // Stop loading on error
-      setIsLoadingRelated(false); // Stop loading on error
+      setIsLoadingContent(false); 
+      setIsLoadingRelated(false); 
     }
   };
-  // --- END MODIFICATION ---
   
   const handleViewerOpenChange = (open: boolean) => {
     // ... (function remains the same)
@@ -269,7 +245,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
 
   return (
     <>
-      {/* (Header remains the same) */}
+      {/* (Header and Upload Card remain the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Documents</h1>
@@ -301,7 +277,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
         </Card>
       </div>
 
-      {/* --- MODIFIED: Document List & Load More --- */}
+      {/* (Document List - ai_summary rendering was already added in previous step's file) */}
         {documents.length === 0 ? (
             <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
         ) : (
@@ -318,13 +294,11 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                         <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
                       </Button>
                     </CardHeader>
-                    {/* --- ADDED: AI Summary --- */}
                     <CardContent className="flex-grow">
                         <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
                             {doc.ai_summary || 'No summary available.'}
                         </p>
                     </CardContent>
-                    {/* --- END ADDED --- */}
                     <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
                       <Button variant="outline" size="sm" onClick={() => handleViewContent(doc)} disabled={isGenerating?.docId === doc.id}><Eye className="w-4 h-4 mr-2" /> View & Chat</Button>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -340,10 +314,9 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
         {totalPages > currentPage && (
             <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
         )}
-      {/* --- END MODIFICATION --- */}
 
 
-      {/* --- MODIFIED: Dialog now includes RelatedContentWidget --- */}
+      {/* (Dialog viewer remains the same from previous step) */}
       <Dialog open={isViewerOpen} onOpenChange={handleViewerOpenChange}>
         <DialogContent className="sm:max-w-4xl md:max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
@@ -351,7 +324,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
           </DialogHeader>
           
           <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden py-4">
-            {/* --- Main Content Viewer --- */}
             <div className="flex-1 overflow-hidden">
                 {isLoadingContent ? (
                   <div className="flex justify-center items-center h-full min-h-[60vh]">
@@ -371,8 +343,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                   </ScrollArea>
                 )}
             </div>
-
-            {/* --- Related Content Sidebar --- */}
             <RelatedContentWidget 
                 items={relatedItems} 
                 isLoading={isLoadingRelated}
@@ -387,7 +357,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* --- END MODIFICATION --- */}
     </>
   );
 }

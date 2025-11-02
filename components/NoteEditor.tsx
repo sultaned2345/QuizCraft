@@ -15,19 +15,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Eye, Pencil, Link, FileText, StickyNote } from 'lucide-react'; // Added Link icons
-import { Note, ApiResponse } from '@/types/database';
+import { Note, ApiResponse, RelatedItem } from '@/types/database'; // --- MODIFIED: Import RelatedItem ---
 import { Skeleton } from '@/components/ui/skeleton';
 import { MarkdownViewer } from '@/components/MarkdownViewer';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 import NextLink from 'next/link'; // Import NextLink
 
-// --- NEW: Related Item Types ---
-interface RelatedItem {
-  content_id: string;
-  content_type: 'note' | 'document';
-  content_title: string;
-}
+// --- REMOVED: Local RelatedItem Type ---
 
 interface NoteEditorProps {
   note: Note | null;
@@ -42,7 +37,7 @@ interface NoteEditorProps {
   isFetching?: boolean;
 }
 
-// --- NEW: Related Content Widget ---
+// --- MODIFIED: Related Content Widget (Props and JSX) ---
 function RelatedContentWidget({ note, onLinkClick }: { note: Note | null, onLinkClick: () => void }) {
     const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -95,16 +90,25 @@ function RelatedContentWidget({ note, onLinkClick }: { note: Note | null, onLink
             {!isLoading && relatedItems.length > 0 && (
                 <div className="space-y-2">
                     {relatedItems.map((item) => (
-                        <Button key={item.content_id} variant="outline" size="sm" asChild className="w-full justify-start h-auto py-2">
-                            <NextLink 
-                                href={item.content_type === 'note' ? '/notes' : '/documents'} 
-                                title={item.content_title}
-                                onClick={onLinkClick} // Close current dialog
-                            >
-                                {item.content_type === 'note' ? <StickyNote className="w-4 h-4 mr-2 shrink-0" /> : <FileText className="w-4 h-4 mr-2 shrink-0" />}
-                                <span className="truncate text-xs">{item.content_title}</span>
-                            </NextLink>
-                        </Button>
+                        // --- MODIFIED: Added chunk display ---
+                        <div key={item.content_id} className="border rounded-md">
+                            <Button variant="outline" size="sm" asChild className="w-full justify-start h-auto py-2 rounded-b-none border-0 border-b rounded-b-none">
+                                <NextLink 
+                                    href={item.content_type === 'note' ? '/notes' : '/documents'} 
+                                    title={item.content_title}
+                                    onClick={onLinkClick} // Close current dialog
+                                >
+                                    {item.content_type === 'note' ? <StickyNote className="w-4 h-4 mr-2 shrink-0" /> : <FileText className="w-4 h-4 mr-2 shrink-0" />}
+                                    <span className="truncate text-xs font-semibold">{item.content_title}</span>
+                                </NextLink>
+                            </Button>
+                            {item.content_chunk && (
+                                <p className="text-xs text-muted-foreground italic p-2 bg-muted/50 border-t truncate">
+                                    "...{item.content_chunk}..."
+                                </p>
+                            )}
+                        </div>
+                        // --- END MODIFICATION ---
                     ))}
                 </div>
             )}
@@ -155,7 +159,7 @@ export function NoteEditor({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* --- MODIFIED: Increased width and layout --- */}
+      {/* (DialogContent and layout remains the same as previous step) */}
       <DialogContent className="sm:max-w-4xl md:max-w-5xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
@@ -166,7 +170,6 @@ export function NoteEditor({
           </DialogDescription>
         </DialogHeader>
 
-        {/* --- MODIFIED: Main content area with flex layout --- */}
         <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
           {/* --- Main Editor Area --- */}
           <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
@@ -212,9 +215,8 @@ export function NoteEditor({
             )}
           </div>
 
-          {/* --- NEW: Related Content Sidebar --- */}
+          {/* --- Related Content Sidebar --- */}
           <div className="w-full lg:w-64 lg:border-l lg:pl-4 overflow-y-auto">
-            {/* Only show related content when editing an existing note and it's not fetching */}
             {!isFetching && note && (
                 <RelatedContentWidget note={note} onLinkClick={onClose} />
             )}

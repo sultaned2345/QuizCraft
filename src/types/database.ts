@@ -223,6 +223,16 @@ export interface GeneratedDeckInfo {
 }
 // --- END NEW ---
 
+// --- NEW: Add RelatedItem type ---
+export interface RelatedItem {
+  content_id: string;
+  content_type: 'note' | 'document';
+  content_title: string;
+  content_chunk: string; // The best matching text snippet
+  similarity: number;
+}
+// --- END NEW ---
+
 // For Paginated Decks List
 export interface PaginatedDecksResponse {
   decks: FlashcardDeck[]; // Assuming full deck needed for list, adjust if not

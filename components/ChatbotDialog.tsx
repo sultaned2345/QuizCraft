@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // <-- 1. IMPORT
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -16,20 +16,16 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
-import { Bot, Loader2, Send, Sparkles, User as UserIcon, FileText, StickyNote, FileQuestion, Layers } from 'lucide-react'; // <-- 2. ADDED ICONS
+import { Bot, Loader2, Send, Sparkles, User as UserIcon, FileText, StickyNote, FileQuestion, Layers, MessageSquareQuestion } from 'lucide-react'; // --- MODIFIED: Added icon
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/contexts/PageContext'; 
-import { ApiResponse, GeneratedDeckInfo } from '@/types/database'; // <-- 3. IMPORT GeneratedDeckInfo
+import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database'; // --- MODIFIED: Added RelatedItem
 import { Skeleton } from '@/components/ui/skeleton'; 
-import { useToast } from '@/hooks/use-toast'; // <-- 4. IMPORT
+import { useToast } from '@/hooks/use-toast';
 
-// ... (Source, Message, ChatbotDialogProps, getSourceHref, getSourceIcon functions remain unchanged) ...
-interface Source {
-  content_id: string;
-  content_type: 'note' | 'document';
-  content_title: string;
-  citation: number;
-}
+// --- MODIFIED: Import Source from RelatedItem ---
+type Source = Pick<RelatedItem, 'content_id' | 'content_type' | 'content_title' | 'citation'>;
+
 interface Message {
   role: 'user' | 'model';
   text: string;
@@ -68,13 +64,18 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { pageContext } = usePageContext(); 
   const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
-  const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null); // <-- 5. ADD STATE
-  const [isActionLoading, setIsActionLoading] = useState(false); // <-- 6. ADD STATE
+  const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   
-  const router = useRouter(); // <-- 7. ADD HOOK
-  const { toast } = useToast(); // <-- 8. ADD HOOK
+  // --- NEW: State for suggested questions ---
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[] | null>(null);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  // --- END NEW ---
 
-  // --- 9. NEW: Action Handlers ---
+  const router = useRouter();
+  const { toast } = useToast();
+
+  // --- (Action Handlers remain unchanged) ---
   const handleGenerateQuizFromContext = () => {
     if (pageContext?.type !== 'document' || !pageContext.id) return;
     setIsActionLoading(true);
@@ -100,7 +101,7 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           text: cResult.data.extracted_text,
-          sourceDocumentId: pageContext.id
+          // sourceDocumentId: pageContext.id // Your API doesn't use this, but could be added
         })
       });
       const gResult: ApiResponse = await gRes.json();
@@ -138,32 +139,54 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
       setIsActionLoading(false);
     }
   };
-  // --- END NEW ---
+  // --- END Action Handlers ---
 
 
-  // --- 10. MODIFIED: Effect for proactive prompts AND history loading ---
+  // --- MODIFIED: Effect hook to fetch history AND suggestions ---
   useEffect(() => {
     if (isOpen) {
       // Reset actions first
       setProactiveActions(null); 
+      setSuggestedQuestions(null); // --- ADDED ---
+      let historyFetchUrl = '/api/chat/history'; // Default
       
-      if (pageContext?.type === 'quiz') {
+      if (pageContext?.type === 'quiz' && pageContext.id) {
         // Context: Quiz
-        setMessages([]); // Clear history for context-specific chat
+        setMessages([]); 
         setIsHistoryLoading(false);
         setProactivePrompt("I see you're looking at a quiz. Need help refining a question or adding a new one? (e.g., \"Make question 2 harder\" or \"Add a true/false question about...\")");
-      } else if (pageContext?.type === 'essay') {
+        historyFetchUrl = `/api/chat/history?context_id=${pageContext.id}`; // Load context history
+      } else if (pageContext?.type === 'essay' && pageContext.id) {
          // Context: Essay
-        setMessages([]); // Clear history for context-specific chat
+        setMessages([]); 
         setIsHistoryLoading(false);
         setProactivePrompt("I see you just got feedback on your essay. Have any follow-up questions? (e.g., \"Can you give me an example of a better thesis for this essay?\")");
+        historyFetchUrl = `/api/chat/history?context_id=${pageContext.id}`; // Load context history
       
-      // --- NEW BRANCH ---
-      } else if (pageContext?.type === 'document') {
+      } else if (pageContext?.type === 'document' && pageContext.id) {
         // Context: Document
-        setMessages([]); // Clear history for context-specific chat
+        setMessages([]); 
         setIsHistoryLoading(false);
-        setProactivePrompt("I see you're viewing a document. What would you like to do with it?");
+        setProactivePrompt("I see you're viewing a document. What would you like to do?");
+        historyFetchUrl = `/api/chat/history?context_id=${pageContext.id}`; // Load context history
+        
+        // --- ADDED: Fetch suggested questions ---
+        setIsSuggestionsLoading(true);
+        fetch(`/api/documents/${pageContext.id}/suggest-questions`, {
+            headers: { 'Authorization': `Bearer ${session?.access_token}` },
+        })
+        .then(res => res.json())
+        .then((data: ApiResponse<string[]>) => {
+            if (data.success && data.data && data.data.length > 0) {
+                setSuggestedQuestions(data.data);
+            } else {
+                setSuggestedQuestions([]); // Set to empty array to hide loader
+            }
+        })
+        .catch(() => setSuggestedQuestions([])) // Set to empty array on error
+        .finally(() => setIsSuggestionsLoading(false));
+        // --- END ADDED ---
+        
         setProactiveActions(
           <div className="flex flex-col sm:flex-row gap-2 mt-2">
             <Button size="sm" variant="secondary" onClick={handleGenerateQuizFromContext} disabled={isActionLoading}>
@@ -180,20 +203,30 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
             </Button>
           </div>
         );
-      // --- END NEW BRANCH ---
 
       } else {
-        // Context: General (load history)
+        // Context: General (load general history)
         setProactivePrompt(null);
-        if (session) {
+        historyFetchUrl = '/api/chat/history'; // Load general (null context) history
+      }
+
+      // --- MODIFIED: Centralized history loading ---
+      if (session && !isHistoryLoading && messages.length === 0) {
             setIsHistoryLoading(true);
-            fetch('/api/chat/history', {
+            fetch(historyFetchUrl, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` },
             })
             .then(res => res.json())
             .then((data: ApiResponse<Message[]>) => {
                 if (data.success && data.data) {
-                    setMessages(data.data);
+                    // If history is empty but we have prompts, don't set model message
+                    if (data.data.length > 0) {
+                        setMessages(data.data);
+                    } else if (!proactivePrompt && !proactiveActions) {
+                         setMessages([{ role: 'model', text: 'Hi! How can I help you with your study materials?' }]);
+                    } else {
+                        setMessages([]); // Start fresh if there's no history but there are prompts
+                    }
                 } else {
                     setMessages([{ role: 'model', text: 'Hi! How can I help you with your study materials?' }]);
                 }
@@ -205,18 +238,22 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
                 setIsHistoryLoading(false);
             });
         }
-      }
+      // --- END MODIFICATION ---
+
     } else if (!isOpen) {
       // Clear messages when dialog is closed
       setMessages([]);
       setProactivePrompt(null);
       setProactiveActions(null);
       setIsActionLoading(false);
+      setSuggestedQuestions(null); // --- ADDED ---
+      setIsSuggestionsLoading(false); // --- ADDED ---
     }
-  }, [isOpen, pageContext, session]); // <-- Removed action handlers from dep array
+  }, [isOpen, pageContext, session]); 
   // --- END MODIFICATION ---
 
   useEffect(() => {
+    // ... (scroll effect remains the same) ...
     if (scrollAreaRef.current) {
       const scrollableViewport = scrollAreaRef.current.querySelector('div');
       if (scrollableViewport) {
@@ -229,9 +266,10 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
     e.preventDefault();
     if (!input.trim() || !session) return;
 
-    // Clear proactive prompt if user sends a message
+    // Clear proactive prompts if user sends a message
     setProactivePrompt(null); 
-    setProactiveActions(null); // <-- 11. Clear actions
+    setProactiveActions(null);
+    setSuggestedQuestions(null); // --- ADDED ---
     
     const userMessage: Message = { role: 'user', text: input };
     const history = [...messages, userMessage];
@@ -314,7 +352,6 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
         <div className="flex-1 my-4 pr-1 overflow-hidden">
              <ScrollArea className="h-full pr-3" ref={scrollAreaRef as any}>
                 <div className="space-y-4">
-                {/* --- ADDED: History Loading Skeleton --- */}
                 {isHistoryLoading ? (
                     <div className="space-y-4">
                         <div className="flex items-start gap-3">
@@ -328,14 +365,41 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
                     </div>
                 ) : (
                     <>
-                        {/* --- 12. MODIFIED: Proactive prompt/action render --- */}
-                        {messages.length === 0 && (proactivePrompt || proactiveActions) && (
+                        {/* --- MODIFIED: Render proactive prompts, actions, AND suggestions --- */}
+                        {messages.length === 0 && (proactivePrompt || proactiveActions || isSuggestionsLoading || suggestedQuestions) && (
                         <div className="flex items-start gap-3">
                             <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
                             <Bot className="w-5 h-5" />
                             </div>
-                            <div className="rounded-lg p-3 bg-secondary w-full">
+                            <div className="rounded-lg p-3 bg-secondary w-full space-y-3">
                               {proactivePrompt && <p className="text-sm">{proactivePrompt}</p>}
+                              
+                              {/* --- ADDED: Suggested Questions --- */}
+                              {isSuggestionsLoading && (
+                                <div className="space-y-2">
+                                  <Skeleton className="h-7 w-full rounded-md" />
+                                  <Skeleton className="h-7 w-2/3 rounded-md" />
+                                </div>
+                              )}
+                              {suggestedQuestions && suggestedQuestions.length > 0 && (
+                                <div className="space-y-2">
+                                  <h4 className="text-xs font-semibold text-muted-foreground">Suggested Questions:</h4>
+                                  {suggestedQuestions.map((q, i) => (
+                                    <Button
+                                      key={i}
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-auto text-xs w-full justify-start text-left bg-background"
+                                      onClick={() => setInput(q)}
+                                    >
+                                      <MessageSquareQuestion className="w-3 h-3 mr-2 shrink-0" />
+                                      {q}
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* --- END ADDED --- */}
+
                               {proactiveActions}
                             </div>
                         </div>
@@ -399,9 +463,9 @@ export function ChatbotDialog({ isOpen, onClose }: ChatbotDialogProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your question..."
-              disabled={isLoading || isHistoryLoading || isActionLoading}
+              disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading}
             />
-            <Button type="submit" disabled={isLoading || isHistoryLoading || isActionLoading || !input.trim()}>
+            <Button type="submit" disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading || !input.trim()}>
               <Send className="w-4 h-4" />
             </Button>
           </form>
