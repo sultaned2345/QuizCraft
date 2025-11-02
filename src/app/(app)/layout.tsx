@@ -1,3 +1,4 @@
+// src/app/(app)/layout.tsx
 'use client';
 
 import Link from 'next/link';
@@ -14,13 +15,15 @@ import {
   Layers,
   FileSignature,
   MessageSquare,
-  FileText, // Import FileText icon for Documents
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { ChatbotDialog } from '@/components/ChatbotDialog';
+import { PageProvider } from '@/contexts/PageContext'; // <-- 1. IMPORT
 
-// Reusable Header for the authenticated layout
+// ... (AppHeader and SidebarNav components remain unchanged) ...
 const AppHeader = () => {
+  /* ... (no changes) ... */
   const { signOut } = useAuth();
   const router = useRouter();
 
@@ -41,15 +44,14 @@ const AppHeader = () => {
     </header>
   );
 };
-
-// Sidebar Navigation Component
 const SidebarNav = () => {
+  /* ... (no changes) ... */
   const pathname = usePathname();
   const navItems = [
     { href: '/dashboard', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
-    { href: '/documents', label: 'Documents', icon: FileText }, // Added Documents link
+    { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
   ];
 
@@ -61,7 +63,6 @@ const SidebarNav = () => {
           href={item.href}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-            // Handle highlighting for nested routes if needed in the future
             (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
           )}
         >
@@ -73,41 +74,47 @@ const SidebarNav = () => {
   );
 };
 
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
-        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            <Sparkles className="h-6 w-6 text-primary" />
-            <span className="">QuizCraft</span>
-          </Link>
+    // <-- 2. WRAP WITH PROVIDER -->
+    <PageProvider>
+      <div className="flex min-h-screen w-full flex-col bg-muted/40">
+        <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
+          {/* ... (Sidebar content remains the same) ... */}
+          <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+            <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+              <Sparkles className="h-6 w-6 text-primary" />
+              <span className="">QuizCraft</span>
+            </Link>
+          </div>
+          <div className="flex-1 overflow-auto py-4">
+            <SidebarNav />
+          </div>
+        </aside>
+        <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-60">
+          <AppHeader />
+          <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
         </div>
-        <div className="flex-1 overflow-auto py-4">
-          <SidebarNav />
+
+        {/* Chatbot Trigger Button */}
+        <div className="fixed bottom-6 right-6 z-40">
+          <Button
+            size="icon"
+            className="rounded-full h-14 w-14 shadow-lg"
+            onClick={() => setIsChatbotOpen(true)}
+          >
+            <MessageSquare className="h-6 w-6" />
+            <span className="sr-only">Open AI Tutor</span>
+          </Button>
         </div>
-      </aside>
-      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-60">
-        <AppHeader />
-        <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
-      </div>
 
-      {/* Chatbot Trigger Button */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <Button
-          size="icon"
-          className="rounded-full h-14 w-14 shadow-lg"
-          onClick={() => setIsChatbotOpen(true)}
-        >
-          <MessageSquare className="h-6 w-6" />
-          <span className="sr-only">Open AI Tutor</span>
-        </Button>
+        {/* Chatbot Dialog Component (now inside provider) */}
+        <ChatbotDialog isOpen={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
       </div>
-
-      {/* Chatbot Dialog Component */}
-      <ChatbotDialog isOpen={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
-    </div>
+    </PageProvider>
+    // <-- 3. END WRAPPER -->
   );
 }

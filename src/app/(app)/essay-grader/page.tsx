@@ -1,19 +1,21 @@
+// src/app/(app)/essay-grader/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react'; // Added useEffect
-import Link from 'next/link'; // Added Link
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info } from 'lucide-react'; // Added Info icon
+import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info } from 'lucide-react';
 import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback } from '@/types/database';
 import { Input } from '@/components/ui/input';
 import { formatFileSize } from '@/lib/file-parser';
+import { usePageContext } from '@/contexts/PageContext'; // <-- 1. IMPORT CONTEXT HOOK
 
-// Interface for the AI Usage API response data
+// ... (AIUsageStatus interface remains the same) ...
 interface AIUsageStatus {
     currentCount: number | undefined;
     limit: number | typeof Infinity;
@@ -29,19 +31,34 @@ export default function EssayGraderPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<GradeEssayResponseData | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // --- State for AI Usage ---
+  
   const [aiUsage, setAiUsage] = useState<AIUsageStatus | null>(null);
   const [isUsageLoading, setIsUsageLoading] = useState(true);
 
   const { session } = useAuth();
   const { toast } = useToast();
+  const { setPageContext } = usePageContext(); // <-- 2. USE CONTEXT
+
+  // 3. SET CONTEXT BASED ON PAGE STATE
+  useEffect(() => {
+    if (feedback?.id) {
+      // After grading, set the context to the specific essay ID
+      setPageContext({ type: 'essay', id: feedback.id });
+    } else {
+      // On initial load, set a generic page context
+      setPageContext({ type: 'page', name: 'essay-grader' });
+    }
+    
+    // Clear context on unmount
+    return () => setPageContext(null);
+  }, [feedback, setPageContext]);
 
   // --- Fetch AI Usage on Load ---
   useEffect(() => {
     const fetchUsage = async () => {
+      // ... (no changes in this useEffect) ...
       if (!session) {
-          setIsUsageLoading(false); // Stop loading if no session
+          setIsUsageLoading(false); 
           return;
       };
       setIsUsageLoading(true);
@@ -54,19 +71,20 @@ export default function EssayGraderPage() {
           setAiUsage(result.data);
         } else {
           console.error("Failed to fetch AI usage:", result.error);
-          setAiUsage(null); // Set to null on fetch error
+          setAiUsage(null); 
         }
       } catch (err) {
         console.error("Error fetching AI usage:", err);
-        setAiUsage(null); // Set to null on exception
+        setAiUsage(null); 
       } finally {
         setIsUsageLoading(false);
       }
     };
 
     fetchUsage();
-  }, [session]); // Refetch when session changes
+  }, [session]); 
 
+  // ... (handleFileChange remains unchanged) ...
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -93,8 +111,10 @@ export default function EssayGraderPage() {
      }
    };
 
-  // --- UNCOMMENTED handleSubmit LOGIC ---
+  // --- handleSubmit ---
   const handleSubmit = async () => {
+    // ... (no changes in this function) ...
+    // ... (logic remains the same, setFeedback(result.data) will trigger the useEffect) ...
     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
       setError('Please provide an essay by pasting text or uploading a file.');
       return;
@@ -132,18 +152,16 @@ export default function EssayGraderPage() {
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
-      setFeedback(result.data);
+      setFeedback(result.data); // <-- This sets the ID, triggering the context change
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
-      // --- Refresh usage count after successful grading ---
       if (aiUsage && aiUsage.currentCount !== undefined && aiUsage.limit !== Infinity) {
         setAiUsage(prev => {
-             if (!prev) return null; // Should not happen but typescript check
+             if (!prev) return null;
              const newCount = (prev.currentCount ?? 0) + 1;
              const newRemaining = Math.max(0, prev.limit - newCount);
              return { ...prev, currentCount: newCount, remaining: newRemaining };
          });
       }
-      // --- End Refresh ---
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred during grading.');
       toast({ title: "Grading Failed", description: err.message, variant: "destructive" });
@@ -152,21 +170,20 @@ export default function EssayGraderPage() {
     }
   };
 
-  // --- UNCOMMENTED renderFeedback LOGIC ---
+  // ... (renderFeedback and isOverLimit remain unchanged) ...
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     if (!fb) return null;
-    const categories = ['clarity', 'argument', 'grammar', 'summary']; // Define desired order
+    const categories = ['clarity', 'argument', 'grammar', 'summary']; 
     return (
       <>
         {categories.map((key) => (
-          fb[key] && ( // Only render if feedback exists for this category
+          fb[key] && ( 
             <div key={key} className="mb-4">
               <h4 className="font-semibold capitalize text-base mb-1">{key.replace(/_/g, ' ')}</h4>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb[key]}</p>
             </div>
           )
         ))}
-        {/* Render any extra categories AI might provide */}
         {Object.entries(fb).filter(([key]) => !categories.includes(key)).map(([key, value]) => (
            value && (
              <div key={key} className="mb-4">
@@ -178,15 +195,13 @@ export default function EssayGraderPage() {
       </>
     );
   };
-
-  // Determine if submit button should be disabled based on usage
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
 
   return (
+    // ... (rest of the render function is unchanged) ...
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
-          {/* Display AI Usage Info */}
           <div className="text-sm text-muted-foreground">
               {isUsageLoading ? (
                   <span className="flex items-center gap-1"><Loader2 className="h-4 w-4 animate-spin" /> Checking AI usage...</span>
@@ -197,7 +212,6 @@ export default function EssayGraderPage() {
                       <span>
                           AI Generations this month: <span className="font-medium text-foreground">{aiUsage.currentCount ?? '?'} / {aiUsage.limit}</span> used.
                           (<span className="font-medium text-foreground">{aiUsage.remaining}</span> remaining)
-                          {/* <Link href="/pricing" className="ml-2 text-primary font-medium hover:underline">Upgrade</Link> */}
                       </span>
                   )
               ) : (
@@ -205,10 +219,7 @@ export default function EssayGraderPage() {
               )}
           </div>
       </div>
-
-      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Input Column */}
         <div className="space-y-6">
            <Card>
                 <CardHeader>
@@ -216,13 +227,10 @@ export default function EssayGraderPage() {
                     <CardDescription>Paste your essay text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Input Mode Toggle */}
                     <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
                         <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
                         <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setError(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
                     </div>
-
-                    {/* Text Input */}
                     {inputMode === 'text' && (
                         <Textarea
                             placeholder="Paste your essay here..."
@@ -232,15 +240,13 @@ export default function EssayGraderPage() {
                             disabled={isLoading}
                         />
                     )}
-
-                    {/* File Input */}
                     {inputMode === 'file' && (
                         <div className="space-y-2">
                              <Label htmlFor="file-upload" className="sr-only">Upload Essay File</Label>
                              <Input
                                 id="file-upload"
                                 type="file"
-                                accept=".pdf,.txt,application/pdf,text/plain" // Be more explicit with accept
+                                accept=".pdf,.txt,application/pdf,text/plain" 
                                 onChange={handleFileChange}
                                 disabled={isLoading}
                                 className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border rounded-md"
@@ -250,7 +256,6 @@ export default function EssayGraderPage() {
                     )}
                 </CardContent>
            </Card>
-
             <Card>
                 <CardHeader>
                     <CardTitle>Grading Criteria (Optional)</CardTitle>
@@ -266,14 +271,12 @@ export default function EssayGraderPage() {
                     />
                 </CardContent>
             </Card>
-
              {error && (
                 <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                     <AlertCircle className="h-5 w-5 flex-shrink-0" />
                     <span>{error}</span>
                 </div>
               )}
-
              <Button
                 size="lg"
                 onClick={handleSubmit}
@@ -287,22 +290,20 @@ export default function EssayGraderPage() {
                  <p className="text-xs text-destructive text-center mt-1">You have used all your free AI generations for this month.</p>
              )}
         </div>
-
-        {/* Feedback Column */}
         <div className="space-y-6">
-           <Card className="min-h-[400px]"> {/* Ensure feedback card has min height */}
+           <Card className="min-h-[400px]"> 
                 <CardHeader>
                     <CardTitle>AI Feedback</CardTitle>
                     <CardDescription>Results will appear here after grading.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading && ( /* Show loading state */
+                    {isLoading && ( 
                         <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground">
                             <Loader2 className="w-8 h-8 animate-spin mb-4" />
                             <p>Analyzing your essay...</p>
                         </div>
                     )}
-                    {!isLoading && feedback && ( /* Show feedback */
+                    {!isLoading && feedback && ( 
                         <div>
                             {feedback.score !== null && (
                                 <div className="mb-6 pb-4 border-b">
@@ -311,7 +312,6 @@ export default function EssayGraderPage() {
                                 </div>
                             )}
                             {renderFeedback(feedback.feedback)}
-
                             {feedback.suggestions && feedback.suggestions.length > 0 && (
                                 <div className="mt-6 pt-4 border-t">
                                     <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
@@ -320,16 +320,14 @@ export default function EssayGraderPage() {
                                     </ul>
                                 </div>
                             )}
-                            {/* TODO: Add "Generate Study Material" Buttons here later */}
                         </div>
                     )}
-                     {!isLoading && !feedback && !error && ( /* Initial empty state */
+                     {!isLoading && !feedback && !error && ( 
                          <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground">
                             <FileSignature className="w-12 h-12 mb-4" />
                             <p>Submit your essay to receive feedback.</p>
                         </div>
                     )}
-                    {/* Error state (only if not loading and no feedback exists) */}
                     {!isLoading && !feedback && error && (
                          <div className="flex flex-col items-center justify-center pt-10 text-destructive">
                             <AlertCircle className="w-12 h-12 mb-4" />
