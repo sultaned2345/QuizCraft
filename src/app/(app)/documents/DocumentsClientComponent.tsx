@@ -1,4 +1,4 @@
-// src/app/(app)/documents/DocumentsClientComponent.tsx
+// file: src/app/(app)/documents/DocumentsClientComponent.tsx
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
@@ -12,28 +12,67 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle, Link } from 'lucide-react'; // Added Link
 import { formatFileSize } from '@/lib/file-parser';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import NextLink from 'next/link'; // Import NextLink
+import { cn } from '@/lib/utils'; // Import cn
 
 // Types
 interface DocumentMetadata { id: string; file_name: string; file_type: string; file_size: number; created_at: string; storage_path: string; }
 interface GeneratedDeckInfo { id: string; title: string; }
 interface PaginatedDocumentsData { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
+interface ViewingContentState { title: string; text: string | null; pdfUrl: string | null; }
 
-// --- MODIFIED: State for viewer content ---
-interface ViewingContentState {
-  title: string;
-  text: string | null;
-  pdfUrl: string | null; // <-- NEW
+// --- NEW: Related Item Types ---
+interface RelatedItem {
+  content_id: string;
+  content_type: 'note' | 'document';
+  content_title: string;
 }
-// ---
 
 interface DocumentsClientComponentProps {
   initialData: PaginatedDocumentsData;
 }
 
+// --- NEW: Related Content Widget (Internal) ---
+function RelatedContentWidget({ items, isLoading, onLinkClick }: { items: RelatedItem[], isLoading: boolean, onLinkClick: () => void }) {
+    return (
+        <div className="w-full lg:w-64 lg:border-l lg:pl-4 overflow-y-auto">
+            <h4 className="text-sm font-semibold text-muted-foreground mb-3">Related Materials</h4>
+            {isLoading && (
+                <div className="space-y-2">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                </div>
+            )}
+            {!isLoading && items.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No related content found.</p>
+            )}
+            {!isLoading && items.length > 0 && (
+                <div className="space-y-2">
+                    {items.map((item) => (
+                        <Button key={item.content_id} variant="outline" size="sm" asChild className="w-full justify-start h-auto py-2">
+                            <NextLink 
+                                href={item.content_type === 'note' ? '/notes' : '/documents'} 
+                                title={item.content_title}
+                                onClick={onLinkClick} // Close current dialog
+                            >
+                                {item.content_type === 'note' ? <StickyNote className="w-4 h-4 mr-2 shrink-0" /> : <FileText className="w-4 h-4 mr-2 shrink-0" />}
+                                <span className="truncate text-xs">{item.content_title}</span>
+                            </NextLink>
+                        </Button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+
 export function DocumentsClientComponent({ initialData }: DocumentsClientComponentProps) {
-  // (State setup remains mostly the same)
+  // (State setup...)
   const [documents, setDocuments] = useState<DocumentMetadata[]>(initialData.documents);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number | undefined; limit: number | typeof Infinity | undefined }>({ count: initialData.count, limit: initialData.limit });
@@ -41,134 +80,117 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  
-  // --- MODIFIED: Use new state interface ---
   const [viewingContent, setViewingContent] = useState<ViewingContentState>({ title: '', text: null, pdfUrl: null });
-  // ---
-  
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [isGenerating, setIsGenerating] = useState<{ type: 'quiz' | 'notes' | 'flashcards'; docId: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const documentsPerPage = 9;
 
+  // --- NEW: State for related items ---
+  const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  // ---
+
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // (fetchMoreDocuments and refreshFirstPage remain the same)
+  // (fetchMoreDocuments, refreshFirstPage, handleFileChange, handleUpload, handleDeleteDocument, handleGenerate* functions... all remain the same)
   const fetchMoreDocuments = useCallback(async (page: number) => {
-    if (!session || isLoadingMore || page > totalPages) return;
-    setIsLoadingMore(true);
-    try {
-      const response = await fetch(`/api/documents?page=${page}&limit=${documentsPerPage}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-      const data: ApiResponse<PaginatedDocumentsData> = await response.json();
-      if (!data.success || !data.data) throw new Error(data.error || 'Failed load more.');
-      setDocuments(prev => [...prev, ...data.data!.documents]);
-      setCurrentPage(data.data.currentPage);
-      setTotalPages(data.data.totalPages);
-      setUsage({ count: data.data.count, limit: data.data.limit });
-    } catch (error: any) { toast({ title: 'Error Loading More', description: error.message, variant: 'destructive' }); }
-    finally { setIsLoadingMore(false); }
+    if (!session || isLoadingMore || page > totalPages) return; setIsLoadingMore(true); try { const response = await fetch(`/api/documents?page=${page}&limit=${documentsPerPage}`, { headers: { Authorization: `Bearer ${session.access_token}` } }); const data: ApiResponse<PaginatedDocumentsData> = await response.json(); if (!data.success || !data.data) throw new Error(data.error || 'Failed load more.'); setDocuments(prev => [...prev, ...data.data!.documents]); setCurrentPage(data.data.currentPage); setTotalPages(data.data.totalPages); setUsage({ count: data.data.count, limit: data.data.limit }); } catch (error: any) { toast({ title: 'Error Loading More', description: error.message, variant: 'destructive' }); } finally { setIsLoadingMore(false); }
   }, [session, toast, documentsPerPage, isLoadingMore, totalPages]);
-
-  const handleLoadMore = () => {
-    fetchMoreDocuments(currentPage + 1);
-  };
-
+  const handleLoadMore = () => { fetchMoreDocuments(currentPage + 1); };
   const refreshFirstPage = useCallback(async () => {
-    if (!session) return;
-    try {
-        const response = await fetch(`/api/documents?page=1&limit=${documentsPerPage}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-        const data: ApiResponse<PaginatedDocumentsData> = await response.json();
-        if (!data.success || !data.data) throw new Error(data.error || 'Failed refresh.');
-        setDocuments(data.data.documents);
-        setCurrentPage(data.data.currentPage);
-        setTotalPages(data.data.totalPages);
-        setUsage({ count: data.data.count, limit: data.data.limit });
-    } catch (error: any) { toast({ title: "Error Refreshing", description: error.message, variant: "destructive" }); }
+    if (!session) return; try { const response = await fetch(`/api/documents?page=1&limit=${documentsPerPage}`, { headers: { Authorization: `Bearer ${session.access_token}` } }); const data: ApiResponse<PaginatedDocumentsData> = await response.json(); if (!data.success || !data.data) throw new Error(data.error || 'Failed refresh.'); setDocuments(data.data.documents); setCurrentPage(data.data.currentPage); setTotalPages(data.data.totalPages); setUsage({ count: data.data.count, limit: data.data.limit }); } catch (error: any) { toast({ title: "Error Refreshing", description: error.message, variant: "destructive" }); }
   }, [session, toast, documentsPerPage]);
-
-
-  // --- MODIFIED: handleFileChange to include new types ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-     const file = e.target.files?.[0]; 
-     if (file) { 
-       setUploadError(''); 
-       const maxSize = 3 * 1024 * 1024; // 3MB
-       // Updated extension list
-       const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some(ext => file.name.toLowerCase().endsWith(ext)); 
-       
-       if (!isValidType) { 
-         setUploadError("PDF, TXT, DOCX, or PPTX only."); // Updated error message
-         setSelectedFile(null); 
-         if(fileInputRef.current) fileInputRef.current.value = ''; 
-         return; 
-       } 
-       if (file.size > maxSize) { 
-         setUploadError(`Max 3MB (${formatFileSize(file.size)}).`); 
-         setSelectedFile(null); 
-         if(fileInputRef.current) fileInputRef.current.value = ''; 
-         return; 
-       } 
-       setSelectedFile(file); 
-     } else { 
-       setSelectedFile(null); 
-     }
+     const file = e.target.files?.[0]; if (file) { setUploadError(''); const maxSize = 3 * 1024 * 1024; const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some(ext => file.name.toLowerCase().endsWith(ext)); if (!isValidType) { setUploadError("PDF, TXT, DOCX, or PPTX only."); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } if (file.size > maxSize) { setUploadError(`Max 3MB (${formatFileSize(file.size)}).`); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } setSelectedFile(file); } else { setSelectedFile(null); }
    };
-  // ---
-
-  // (handleUpload remains the same)
   const handleUpload = async () => {
      if (!selectedFile || !session) return; setIsUploading(true); setUploadError(''); const formData = new FormData(); formData.append('file', selectedFile); try { const response = await fetch('/api/documents', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }); const result: ApiResponse<DocumentMetadata> = await response.json(); if (!response.ok || !result.success || !result.data) throw new Error(result.error || `Upload failed ${response.status}`); toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; refreshFirstPage(); } catch (error: any) { setUploadError(error.message || 'Upload error.'); toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); } finally { setIsUploading(false); }
    };
-
-  // --- MODIFIED: handleViewContent to route to PDF or Text ---
-  const handleViewContent = async (doc: DocumentMetadata) => {
-     if (!session) return;
-     setIsViewerOpen(true);
-     setIsLoadingContent(true);
-     setViewingContent({ title: doc.file_name, text: null, pdfUrl: null }); // Reset
-
-     try {
-        // Check file type
-        if (doc.file_type === 'application/pdf' || doc.file_name.toLowerCase().endsWith('.pdf')) {
-            // Fetch Signed URL for PDF
-            const response = await fetch(`/api/documents/${doc.id}/url`, { 
-                headers: { Authorization: `Bearer ${session.access_token}` } 
-            });
-            const result: ApiResponse<{ signedUrl: string }> = await response.json();
-            if (!result.success || !result.data) throw new Error(result.error || 'Failed to get PDF URL.');
-            setViewingContent({ title: doc.file_name, text: null, pdfUrl: result.data.signedUrl });
-        } else {
-            // Fetch extracted text for other types
-            const response = await fetch(`/api/documents/${doc.id}/content`, { 
-                headers: { Authorization: `Bearer ${session.access_token}` } 
-            });
-            const result: ApiResponse<{ extracted_text: string | null; file_name: string }> = await response.json();
-            if (!result.success || !result.data) throw new Error(result.error || 'Failed to fetch content.');
-            setViewingContent({ title: result.data.file_name, text: result.data.extracted_text, pdfUrl: null });
-        }
-     } catch (error: any) { 
-         toast({ title: 'Error Fetching Content', description: error.message, variant: 'destructive' }); 
-         setViewingContent({ title: doc.file_name, text: `Error: ${error.message}`, pdfUrl: null }); 
-     } finally { 
-         setIsLoadingContent(false); 
-     }
-   };
-  // ---
-
-  // (handleDeleteDocument, handleGenerateQuiz, handleGenerateNotes, handleGenerateFlashcards remain the same)
   const handleDeleteDocument = async (docId: string, docName: string) => { if (!session || !confirm(`Delete "${docName}"?`)) return; try { const response = await fetch(`/api/documents/${docId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } }); const result: ApiResponse = await response.json(); if (!result.success) throw new Error(result.error || 'Delete failed.'); toast({ title: 'Deleted', description: `"${docName}" removed.` }); refreshFirstPage(); } catch (error: any) { toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' }); } };
   const handleGenerateQuiz = async (docId: string) => { if(!session) return; setIsGenerating({type:'quiz', docId}); toast({title:'Preparing Quiz...'}); try{ router.push(`/create?docId=${docId}`); } catch(e:any){ toast({title:'Failed Prep', description:e.message, variant:'destructive'}); setIsGenerating(null); } };
   const handleGenerateNotes = async (docId: string) => { if(!session) return; setIsGenerating({type:'notes', docId}); toast({title:'Generating Notes...'}); try { const cRes = await fetch(`/api/documents/${docId}/content`, {headers:{Authorization:`Bearer ${session.access_token}`}}); const cResult: ApiResponse<{extracted_text:string|null}> = await cRes.json(); if(!cResult.success || !cResult.data?.extracted_text) throw new Error(cResult.error||'Failed content fetch.'); const gRes = await fetch(`/api/generate-notes`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({text: cResult.data.extracted_text})}); const gResult: ApiResponse = await gRes.json(); if(!gRes.ok || !gResult.success) throw new Error(gResult.error||'Failed generate.'); toast({title:'Notes Generated!'}); router.push('/notes'); } catch(e:any){ toast({title:'Note Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } };
   const handleGenerateFlashcards = async (docId: string) => { if(!session) return; setIsGenerating({type:'flashcards', docId}); toast({title:'Generating Flashcards...'}); try { const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); const result: ApiResponse<GeneratedDeckInfo> = await response.json(); if(!response.ok || !result.success || !result.data) throw new Error(result.error||'Failed generate.'); toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); router.push(`/flashcards/${result.data.id}`); } catch(e:any){ toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } };
 
 
+  // --- MODIFIED: handleViewContent to fetch text, URL (if PDF), and related content ---
+  const handleViewContent = async (doc: DocumentMetadata) => {
+    if (!session) return;
+    setIsViewerOpen(true);
+    setIsLoadingContent(true);
+    setIsLoadingRelated(true); // Start loading related
+    setViewingContent({ title: doc.file_name, text: null, pdfUrl: null });
+    setRelatedItems([]); // Clear previous
+
+    try {
+      // --- Fetch Text Content (for related items) ---
+      const textResponse = await fetch(`/api/documents/${doc.id}/content`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const textResult: ApiResponse<{ extracted_text: string | null; file_name: string }> = await textResponse.json();
+      
+      if (!textResult.success || !textResult.data) {
+        throw new Error(textResult.error || 'Failed to fetch document content.');
+      }
+      
+      const docText = textResult.data.extracted_text;
+      setViewingContent(prev => ({ ...prev, title: textResult.data.file_name, text: docText }));
+
+      // --- Fetch Related Content (using the text) ---
+      if (docText && docText.length > 50) {
+        try {
+            const relatedResponse = await fetch('/api/content/find-related', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    contentId: doc.id,
+                    contentType: 'document',
+                    textContent: docText,
+                }),
+            });
+            const relatedResult: ApiResponse<RelatedItem[]> = await relatedResponse.json();
+            if (relatedResult.success && relatedResult.data) {
+                setRelatedItems(relatedResult.data);
+            }
+        } catch (relatedError) {
+            console.error("Failed to fetch related content:", relatedError);
+            // Don't fail the whole view, just log it
+        }
+      }
+      setIsLoadingRelated(false); // Stop loading related
+
+      // --- Fetch PDF URL (if applicable) ---
+      if (doc.file_type === 'application/pdf' || doc.file_name.toLowerCase().endsWith('.pdf')) {
+        const urlResponse = await fetch(`/api/documents/${doc.id}/url`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const urlResult: ApiResponse<{ signedUrl: string }> = await urlResponse.json();
+        if (urlResult.success && urlResult.data) {
+          setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
+        } else {
+          throw new Error(urlResult.error || 'Failed to get PDF URL.');
+        }
+      }
+
+    } catch (error: any) {
+      toast({ title: 'Error Fetching Content', description: error.message, variant: 'destructive' });
+      setViewingContent({ title: doc.file_name, text: `Error: ${error.message}`, pdfUrl: null });
+      setIsLoadingRelated(false);
+    } finally {
+      setIsLoadingContent(false);
+    }
+  };
+
   return (
     <>
-      {/* Header & Upload Section */}
+      {/* (Header & Upload Section remains the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Documents</h1>
@@ -179,7 +201,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
           <CardContent>
             <div className="flex flex-col gap-2">
               <Label htmlFor="file-upload" className="sr-only">Choose</Label>
-              {/* --- MODIFIED: accept attribute --- */}
               <Input 
                 id="file-upload" 
                 type="file" 
@@ -189,7 +210,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                 disabled={isUploading} 
                 className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
               />
-              {/* --- */}
               {selectedFile && <p className="text-xs text-muted-foreground truncate">Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})</p>}
               {uploadError && <div className="flex items-start gap-2 text-xs text-destructive"><AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /><span>{uploadError}</span></div>}
               <Button onClick={handleUpload} disabled={!selectedFile || isUploading || (usage.limit !== Infinity && (usage.count ?? 0) >= (usage.limit ?? Infinity))} className="mt-2 w-full sm:w-auto" size="sm">
@@ -202,7 +222,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
         </Card>
       </div>
 
-       {/* (Document List & Load More remain the same) */}
+      {/* (Document List & Load More remain the same) */}
         {documents.length === 0 ? (
             <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
         ) : (
@@ -211,44 +231,48 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
             </div>
         )}
         {totalPages > currentPage && (
-            <div className="mt-8 text-center">
-                <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
-                    {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents
-                </Button>
-                 <p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p>
-            </div>
+            <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
         )}
 
-      {/* --- MODIFIED: Content Viewer Dialog --- */}
+      {/* --- MODIFIED: Content Viewer Dialog with Related Content --- */}
       <Dialog open={isViewerOpen} onOpenChange={setIsViewerOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogContent className="sm:max-w-4xl md:max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="truncate">Content: {viewingContent.title}</DialogTitle>
-            <DialogDescription>
-              {viewingContent.pdfUrl ? 'Embedded PDF View' : 'Extracted text content'}
-            </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            {isLoadingContent ? (
-              <div className="flex justify-center items-center h-full min-h-[60vh]">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : viewingContent.pdfUrl ? (
-              // Render PDF
-              <iframe
-                src={viewingContent.pdfUrl}
-                className="w-full h-[65vh] border rounded-md"
-                title={`PDF Viewer for ${viewingContent.title}`}
-              />
-            ) : (
-              // Render Text
-              <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
-                <pre className="text-sm whitespace-pre-wrap break-words">
-                  {viewingContent.text || "No text extracted or file is empty."}
-                </pre>
-              </ScrollArea>
-            )}
+          
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden py-4">
+            {/* --- Main Content Viewer --- */}
+            <div className="flex-1 overflow-hidden">
+                {isLoadingContent ? (
+                  <div className="flex justify-center items-center h-full min-h-[60vh]">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : viewingContent.pdfUrl ? (
+                  // Render PDF
+                  <iframe
+                    src={viewingContent.pdfUrl}
+                    className="w-full h-full min-h-[65vh] border rounded-md"
+                    title={`PDF Viewer for ${viewingContent.title}`}
+                  />
+                ) : (
+                  // Render Text
+                  <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
+                    <pre className="text-sm whitespace-pre-wrap break-words">
+                      {viewingContent.text || "No text extracted or file is empty."}
+                    </pre>
+                  </ScrollArea>
+                )}
+            </div>
+
+            {/* --- Related Content Sidebar --- */}
+            <RelatedContentWidget 
+                items={relatedItems} 
+                isLoading={isLoadingRelated}
+                onLinkClick={() => setIsViewerOpen(false)} // Close dialog on link click
+            />
           </div>
+
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="secondary">Close</Button>
