@@ -1,5 +1,4 @@
 // src/types/database.ts
-
 // --- Base Types ---
 export interface User {
   id: string;
@@ -8,7 +7,11 @@ export interface User {
   created_at: string;
 }
 
-export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'FILL_IN_THE_BLANK' | 'MATCHING';
+export type QuestionType =
+  | 'MULTIPLE_CHOICE'
+  | 'TRUE_FALSE'
+  | 'FILL_IN_THE_BLANK'
+  | 'MATCHING';
 
 // --- Quiz Types ---
 export interface Quiz {
@@ -19,7 +22,7 @@ export interface Quiz {
   created_at: string; // Changed from createdAt to match schema/API
   is_public: boolean;
   immediate_feedback: boolean;
-  time_limit_minutes: number | null; // --- MODIFIED: Added Quiz Timer ---
+  time_limit_minutes: number | null; // Added for timer feature
   questions?: Question[]; // Relation
 }
 
@@ -49,28 +52,27 @@ export interface Note {
 // src/types/database.ts
 
 export interface Flashcard {
-    id: string;
-    deck_id: string;
-    front_content: string;
-    back_content: string;
-    created_at: string;
-    updated_at: string;
-    review_at?: string | null;
-    ease_factor?: number | null;
+  id: string;
+  deck_id: string;
+  front_content: string;
+  back_content: string;
+  created_at: string;
+  updated_at: string;
+  review_at?: string | null;
+  ease_factor?: number | null;
 }
 
 // --- Document Types ---
 export interface DocumentMetadata {
-    id: string;
-    user_id: string; // Added user_id if needed client-side
-    file_name: string;
-    file_type: string;
-    file_size: number;
-    storage_path: string;
-    extracted_text?: string | null; // Optional, might not be needed in all contexts
-    created_at: string;
+  id: string;
+  user_id: string; // Added user_id if needed client-side
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  storage_path: string;
+  extracted_text?: string | null; // Optional, might not be needed in all contexts
+  created_at: string;
 }
-
 
 // --- Graded Essay Types (NEW) ---
 export interface GradedEssayFeedback {
@@ -82,13 +84,25 @@ export interface GradedEssayFeedback {
   [key: string]: string | undefined; // Allow flexible categories
 }
 
+// --- MODIFICATION: Replaced PrismaJsonValue ---
+export type GenericJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: GenericJsonValue }
+  | GenericJsonValue[];
+// --- END MODIFICATION ---
+
 export interface GradedEssay {
   id: string;
   user_id: string;
   essay_title: string | null;
   essay_content: string; // May not always be needed on frontend lists
   rubric_or_criteria: string | null;
-  feedback: GradedEssayFeedback | PrismaJsonValue | null; // Allow PrismaJsonValue for flexibility from DB
+  // --- MODIFICATION: Replaced PrismaJsonValue ---
+  feedback: GradedEssayFeedback | GenericJsonValue | null;
+  // ---
   score: number | null;
   graded_at: string; // Keep as string (ISO format) for consistency
 }
@@ -142,22 +156,22 @@ export interface UpdateNoteData {
 }
 
 export interface CreateDeckData {
-    title: string;
+  title: string;
 }
 
 export interface UpdateDeckData {
-    title?: string;
+  title?: string;
 }
 
 export interface CreateFlashcardData {
-    deck_id: string;
-    front_content: string;
-    back_content: string;
+  deck_id: string;
+  front_content: string;
+  back_content: string;
 }
 
 export interface UpdateFlashcardData {
-    front_content?: string;
-    back_content?: string;
+  front_content?: string;
+  back_content?: string;
 }
 
 // --- API Response Types ---
@@ -188,64 +202,112 @@ export interface PaginatedNotesResponse {
 
 // For Paginated Decks List
 export interface PaginatedDecksResponse {
-    decks: FlashcardDeck[]; // Assuming full deck needed for list, adjust if not
-    count: number;
-    limit: number | typeof Infinity;
-    totalPages: number;
-    currentPage: number;
+  decks: FlashcardDeck[]; // Assuming full deck needed for list, adjust if not
+  count: number;
+  limit: number | typeof Infinity;
+  totalPages: number;
+  currentPage: number;
 }
 
 // For Single Deck View
 export interface DeckWithCardsResponse extends FlashcardDeck {
-    flashcards: Flashcard[];
-    cardCount: number;
-    cardLimit: number | typeof Infinity;
+  flashcards: Flashcard[];
+  cardCount: number;
+  cardLimit: number | typeof Infinity;
 }
 
 // For Paginated Documents List
 export interface PaginatedDocumentsResponse {
-    documents: DocumentMetadata[];
-    count: number;
-    limit: number | typeof Infinity;
-    totalPages: number;
-    currentPage: number;
+  documents: DocumentMetadata[];
+  count: number;
+  limit: number | typeof Infinity;
+  totalPages: number;
+  currentPage: number;
 }
 
 // For Listing Graded Essays (Example)
 export interface GradedEssaysListResponse {
-    essays: Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>[];
-    // Add pagination fields if needed (count, totalPages, currentPage, limit)
+  essays: Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>[];
+  // Add pagination fields if needed (count, totalPages, currentPage, limit)
 }
 
-
 // --- Utility Types ---
-// Type helper for Prisma's JsonValue
-import { Prisma } from '@prisma/client';
-export type PrismaJsonValue = Prisma.JsonValue;
-
+// --- REMOVED PRISMA IMPORT ---
+// import { Prisma } from '@prisma/client'; // <-- REMOVED
+// export type PrismaJsonValue = Prisma.JsonValue; // <-- REMOVED
 
 // --- Original Supabase Types ---
 // Can be kept for reference or if using Supabase client directly elsewhere
 export interface Database {
   public: {
     Tables: {
-      profiles: { Row: User; Insert: Omit<User, 'id' | 'created_at'>; Update: Partial<Omit<User, 'id' | 'created_at'>>; };
-      quizzes: { Row: Quiz; Insert: Omit<Quiz, 'id' | 'created_at' | 'questions'>; Update: Partial<Omit<Quiz, 'id' | 'created_at' | 'user_id' | 'questions'>>; };
-      questions: { Row: Question; Insert: Omit<Question, 'id' | 'created_at'>; Update: Partial<Omit<Question, 'id' | 'quiz_id' | 'created_at'>>; };
-      notes: { Row: Note; Insert: Omit<Note, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Omit<Note, 'id' | 'user_id' | 'created_at'>>; };
-      flashcard_decks: { Row: FlashcardDeck; Insert: Omit<FlashcardDeck, 'id' | 'created_at' | 'updated_at' | 'flashcards'>; Update: Partial<Omit<FlashcardDeck, 'id' | 'user_id' | 'created_at' | 'flashcards'>>; };
-      flashcards: { Row: Flashcard; Insert: Omit<Flashcard, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Omit<Flashcard, 'id' | 'deck_id' | 'created_at'>>; };
-      documents: { Row: DocumentMetadata; Insert: Omit<DocumentMetadata, 'id' | 'created_at'>; Update: Partial<Omit<DocumentMetadata, 'id' | 'user_id' | 'created_at'>>; };
+      profiles: {
+        Row: User;
+        Insert: Omit<User, 'id' | 'created_at'>;
+        Update: Partial<Omit<User, 'id' | 'created_at'>>;
+      };
+      quizzes: {
+        Row: Quiz;
+        Insert: Omit<Quiz, 'id' | 'created_at' | 'questions'>;
+        Update: Partial<
+          Omit<Quiz, 'id' | 'created_at' | 'user_id' | 'questions'>
+        >;
+      };
+      questions: {
+        Row: Question;
+        Insert: Omit<Question, 'id' | 'created_at'>;
+        Update: Partial<Omit<Question, 'id' | 'quiz_id' | 'created_at'>>;
+      };
+      notes: {
+        Row: Note;
+        Insert: Omit<Note, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<Note, 'id' | 'user_id' | 'created_at'>>;
+      };
+      flashcard_decks: {
+        Row: FlashcardDeck;
+        Insert: Omit<
+          FlashcardDeck,
+          'id' | 'created_at' | 'updated_at' | 'flashcards'
+        >;
+        Update: Partial<
+          Omit<FlashcardDeck, 'id' | 'user_id' | 'created_at' | 'flashcards'>
+        >;
+      };
+      flashcards: {
+        Row: Flashcard;
+        Insert: Omit<Flashcard, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<Flashcard, 'id' | 'deck_id' | 'created_at'>>;
+      };
+      documents: {
+        Row: DocumentMetadata;
+        Insert: Omit<DocumentMetadata, 'id' | 'created_at'>;
+        Update: Partial<
+          Omit<DocumentMetadata, 'id' | 'user_id' | 'created_at'>
+        >;
+      };
       // Add graded_essays if needed for direct Supabase client usage
-      graded_essays: { Row: GradedEssay; Insert: Omit<GradedEssay, 'id' | 'graded_at'>; Update: Partial<Omit<GradedEssay, 'id' | 'user_id' | 'graded_at'>>; };
+      graded_essays: {
+        Row: GradedEssay;
+        Insert: Omit<GradedEssay, 'id' | 'graded_at'>;
+        Update: Partial<Omit<GradedEssay, 'id' | 'user_id' | 'graded_at'>>;
+      };
     };
-    Functions: { // Add Supabase RPC functions if defined and used directly
-        increment_ai_usage: { Args: { p_user_id: string, p_usage_month: string, p_increment_by: number }; Returns: void };
-        // Add other functions if needed
+    Functions: {
+      // Add Supabase RPC functions if defined and used directly
+      increment_ai_usage: {
+        Args: {
+          p_user_id: string;
+          p_usage_month: string;
+          p_increment_by: number;
+        };
+        Returns: void;
+      };
+      // Add other functions if needed
     };
-     Enums: { // Add Supabase Enums if defined and used directly
-       // Example: user_plan_enum: 'free' | 'pro'
-     };
+    Enums: {
+      // Add Supabase Enums if defined and used directly
+      // Example: user_plan_enum: 'free' | 'pro'
+    };
   };
   // Add other schemas like 'auth' if needed for direct client usage
 }
