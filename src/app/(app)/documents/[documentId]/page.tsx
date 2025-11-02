@@ -75,17 +75,13 @@ export default function DocumentViewPage() {
       setIsHistoryLoading(true);
 
       try {
-        // Fetch Content, URL, and History in parallel
-        const [contentRes, urlRes, historyRes] = await Promise.all([
+        // --- FIX: Fetch content and history first ---
+        const [contentRes, historyRes] = await Promise.all([
           // 1. Fetch content
           fetch(`/api/documents/${documentId}/content`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
           }),
-          // 2. Fetch PDF URL (will be checked later if it's a PDF)
-          fetch(`/api/documents/${documentId}/url`, {
-            headers: { Authorization: `Bearer ${session.access_token}` }
-          }),
-          // 3. Fetch chat history
+          // 2. Fetch chat history
           fetch(`/api/chat/history?context_id=${documentId}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
           })
@@ -93,37 +89,53 @@ export default function DocumentViewPage() {
 
         // Process Content
         const contentResult: ApiResponse<{ extracted_text: string | null; file_name: string }> = await contentRes.json();
-        if (!contentResult.success || !contentResult.data) {
+        if (!contentRes.ok || !contentResult.success || !contentResult.data) {
           throw new Error(contentResult.error || 'Failed to fetch document content.');
         }
         const docText = contentResult.data.extracted_text;
-        setViewingContent(prev => ({ ...prev, title: contentResult.data.file_name, text: docText }));
-
-        // Process PDF URL
-        const urlResult: ApiResponse<{ signedUrl: string }> = await urlRes.json();
-        if (urlResult.success && urlResult.data) {
-          setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
-        }
+        const docFileName = contentResult.data.file_name;
+        
+        // Set content state
+        setViewingContent(prev => ({ ...prev, title: docFileName, text: docText, pdfUrl: null }));
+        setIsLoadingContent(false); // <-- Content is loaded
 
         // Process History
         const historyResult: ApiResponse<Message[]> = await historyRes.json();
         if (historyResult.success && historyResult.data) {
           setChatHistory(historyResult.data);
         }
+        setIsHistoryLoading(false); // <-- History is loaded
+
+        // --- 3. NEW: Conditionally fetch PDF URL ---
+        const isPdf = docFileName.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+          console.log("Document is a PDF, fetching signed URL...");
+          const urlRes = await fetch(`/api/documents/${documentId}/url`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          
+          const urlResult: ApiResponse<{ signedUrl: string }> = await urlRes.json();
+          if (urlRes.ok && urlResult.success && urlResult.data) {
+            // We set pdfUrl here in a separate state update
+            setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
+          } else {
+             // Log an error but don't fail the page, just fall back to text view
+             console.warn("Failed to fetch PDF signed URL:", urlResult.error);
+             toast({ title: "Could not load PDF view", description: "Falling back to text view.", variant: "destructive" });
+          }
+        }
+        // --- END FIX ---
 
       } catch (error: any) {
         toast({ title: 'Error Loading Document', description: error.message, variant: 'destructive' });
         router.push('/documents'); // Go back if loading fails
-      } finally {
-        setIsLoadingContent(false);
-        setIsHistoryLoading(false);
       }
     };
 
     fetchData();
   }, [documentId, session, authLoading, user, router, toast]);
 
-  if (authLoading) {
+  if (authLoading || (!isLoadingContent && !viewingContent.title)) {
     return (
       <div className="flex h-[calc(100vh-8rem)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -142,7 +154,7 @@ export default function DocumentViewPage() {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Documents
         </Button>
-        <h1 className="text-xl font-semibold truncate text-right">
+        <h1 className="text-xl font-semibold truncate text-right" title={viewingContent.title}>
           {isLoadingContent ? "Loading..." : viewingContent.title}
         </h1>
       </div>
