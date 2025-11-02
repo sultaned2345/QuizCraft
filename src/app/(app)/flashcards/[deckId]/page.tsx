@@ -22,7 +22,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical, Layers, Check, Zap } from 'lucide-react'; // --- MODIFIED: Added Layers, Check, Zap
+import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical, Layers, Check, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // --- Flashcard Display Component (Unchanged) ---
@@ -31,8 +31,8 @@ interface FlashcardViewerProps {
   isFlipped: boolean;
   onFlip: () => void;
 }
-
 function FlashcardViewer({ card, isFlipped, onFlip }: FlashcardViewerProps) {
+    // ... (component remains the same)
     return (
         <div
             className="w-full h-64 border bg-card rounded-lg flex items-center justify-center p-6 text-center cursor-pointer perspective preserve-3d transition-transform duration-700 relative"
@@ -60,8 +60,8 @@ interface FlashcardEditorDialogProps {
     onOpenChange: (open: boolean) => void;
     onSaveSuccess: (savedCard: Flashcard) => void; 
 }
-
 function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSaveSuccess }: FlashcardEditorDialogProps) {
+    // ... (component remains the same)
     const [front, setFront] = useState('');
     const [back, setBack] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -106,8 +106,8 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
                 throw new Error(result.error || `Failed to ${isEditing ? 'update' : 'create'} flashcard.`);
             }
             toast({ title: `Flashcard ${isEditing ? 'Updated' : 'Created'}!`, description: `"${result.data.front_content}" saved.` });
-            onSaveSuccess(result.data); // Pass saved card back
-            onOpenChange(false); // Close dialog on success
+            onSaveSuccess(result.data);
+            onOpenChange(false);
         } catch (error: any) {
             toast({ title: 'Save Failed', description: error.message, variant: 'destructive' });
         } finally {
@@ -151,14 +151,14 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
 // --- Main Deck View Page Component ---
 export default function DeckViewPage() {
     const [deck, setDeck] = useState<DeckWithCardsResponse | null>(null);
-    const [studyCards, setStudyCards] = useState<Flashcard[]>([]); // --- NEW: State for study session cards
+    const [studyCards, setStudyCards] = useState<Flashcard[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [cardToEdit, setCardToEdit] = useState<Flashcard | null>(null);
-    const [isReviewing, setIsReviewing] = useState(false); // --- NEW: State for review API call
+    const [isReviewing, setIsReviewing] = useState(false);
 
     const { user, session, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -166,13 +166,12 @@ export default function DeckViewPage() {
     const { toast } = useToast();
     const deckId = params.deckId as string;
 
-    // --- MODIFIED: Fetch study session data ---
     const fetchDeckData = async () => {
+        // ... (function remains the same)
         if (!session || !deckId) return;
         setIsLoading(true);
         setError('');
         try {
-            // Fetch from the new /study endpoint
             const response = await fetch(`/api/decks/${deckId}/study`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
@@ -180,8 +179,8 @@ export default function DeckViewPage() {
             if (!data.success || !data.data) {
                 throw new Error(data.error || 'Failed to load deck study session.');
             }
-            setDeck(data.data); // This contains deck info + total card count
-            setStudyCards(data.data.flashcards); // These are just the cards to study now
+            setDeck(data.data);
+            setStudyCards(data.data.flashcards);
             setCurrentCardIndex(0); 
             setIsFlipped(false);
         } catch (err: any) {
@@ -193,6 +192,7 @@ export default function DeckViewPage() {
     };
 
     useEffect(() => {
+        // ... (function remains the same)
         if (!authLoading && !user) {
             router.push('/login');
             return;
@@ -202,8 +202,8 @@ export default function DeckViewPage() {
         }
     }, [user, authLoading, deckId, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // --- NEW: Handle review button clicks ---
     const handleReview = async (quality: 'again' | 'good' | 'easy') => {
+        // ... (function remains the same)
         const card = currentCard;
         if (!card || !session || isReviewing) return;
 
@@ -221,7 +221,6 @@ export default function DeckViewPage() {
             if (!result.success) {
                 throw new Error(result.error || 'Failed to save review.');
             }
-            // Success, move to next card
             goToNextCard();
         } catch (error: any) {
             toast({ title: 'Review Failed', description: error.message, variant: 'destructive' });
@@ -230,22 +229,35 @@ export default function DeckViewPage() {
         }
     };
 
-    // --- MODIFIED: Go to next card in study session ---
     const goToNextCard = () => {
+        // ... (function remains the same)
         if (studyCards.length === 0) return;
-        // This will automatically move to the "session complete" state if it's the last card
         setCurrentCardIndex((prev) => prev + 1);
         setIsFlipped(false);
     };
 
-    // --- We don't need a "previous" button in study mode ---
-
+    // --- MODIFIED: Optimistic Deletion ---
     const handleDeleteCard = async (cardId: string) => {
         if (!session) return;
-        const cardToDelete = studyCards.find(c => c.id === cardId) || deck?.flashcards.find(c => c.id === cardId);
+        const cardToDelete = studyCards.find(c => c.id === cardId);
+        
         if (!cardToDelete || !confirm(`Delete card "${cardToDelete.front_content.substring(0, 20)}..."? This will remove it permanently.`)) return;
 
+        // 1. Optimistic Update
+        const originalStudyCards = [...studyCards];
+        const originalDeck = deck ? { ...deck } : null;
+        
+        setStudyCards(prev => prev.filter(c => c.id !== cardId));
+        if (deck) {
+            setDeck(prev => prev ? ({ ...prev, cardCount: prev.cardCount - 1 }) : null);
+        }
+        // Move to next card immediately
+        setIsFlipped(false);
+        // Note: The index `currentCardIndex` now points to the *next* card in the 
+        // filtered `studyCards` array, which is the desired behavior.
+
         try {
+            // 2. API Call
             const response = await fetch(`/api/flashcards/${cardId}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${session.access_token}` },
@@ -253,20 +265,27 @@ export default function DeckViewPage() {
             const result: ApiResponse = await response.json();
             if (!result.success) throw new Error(result.error || 'Failed to delete card.');
 
+            // 3. Success
             toast({ title: 'Card Deleted' });
-            // Refresh study session
-            fetchDeckData(); 
+            // No fetchDeckData() needed.
+            
         } catch (error: any) {
+            // 4. Rollback
             toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
+            setStudyCards(originalStudyCards);
+            setDeck(originalDeck);
+            // Index is implicitly reset by state rollback
         }
     };
 
 
     if (authLoading || isLoading) {
+        // ... (render remains the same)
         return <div className="flex h-[calc(100vh-8rem)] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
 
     if (error) {
+        // ... (render remains the same)
         return (
              <div className="flex flex-col h-[calc(100vh-8rem)] items-center justify-center text-center">
                 <Layers className="mx-auto h-16 w-16 text-destructive" />
@@ -279,12 +298,13 @@ export default function DeckViewPage() {
         );
     }
 
-    const currentCard = studyCards[currentCardIndex]; // Get card from study session array
+    const currentCard = studyCards[currentCardIndex];
     const totalCardsInDeck = deck?.cardCount ?? 0;
     const sessionComplete = currentCardIndex >= studyCards.length;
 
     return (
         <>
+            {/* (Rest of JSX remains the same) */}
             <div className="flex items-center justify-between mb-6">
                 <Button variant="ghost" onClick={() => router.push('/flashcards')}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
@@ -305,7 +325,6 @@ export default function DeckViewPage() {
              </p>
 
             <div className="max-w-xl mx-auto">
-                {/* --- MODIFIED: Handle session complete state --- */}
                 {sessionComplete ? (
                     <div className="w-full h-64 border bg-card rounded-lg flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
                         <Check className="w-16 h-16 text-green-500 mb-4" />
@@ -335,7 +354,6 @@ export default function DeckViewPage() {
                     </div>
                 )}
 
-                {/* --- MODIFIED: Show review buttons only when flipped --- */}
                 {!sessionComplete && currentCard && (
                     <div className="flex justify-between items-center mt-6">
                         {isFlipped ? (
@@ -352,7 +370,6 @@ export default function DeckViewPage() {
                             </div>
                         ) : (
                             <div className="w-full grid grid-cols-3 gap-4">
-                                 {/* --- Management buttons (Edit/Delete) shown before flip --- */}
                                 <Button variant="ghost" size="sm" onClick={() => { setCardToEdit(currentCard); setIsEditorOpen(true); }} disabled={!currentCard || isReviewing}>
                                     <Edit className="w-4 h-4 mr-2" /> Edit Card
                                 </Button>
@@ -370,22 +387,18 @@ export default function DeckViewPage() {
                 )}
             </div>
 
-             {/* Add/Edit Dialog (Unchanged) */}
              <FlashcardEditorDialog
                 deckId={deckId}
                 cardToEdit={cardToEdit}
                 isOpen={isEditorOpen}
                 onOpenChange={setIsEditorOpen}
                 onSaveSuccess={(savedCard) => {
-                    // Refresh data after save
-                    fetchDeckData();
-                    // We just reset to the start of the study session
+                    fetchDeckData(); 
                     setCurrentCardIndex(0);
                     setIsFlipped(false);
                 }}
              />
 
-             {/* CSS for flip animation (Unchanged) */}
              <style jsx global>{`
                 .perspective { perspective: 1000px; }
                 .preserve-3d { transform-style: preserve-3d; }

@@ -9,8 +9,6 @@ import { FlashcardDeck, ApiResponse } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-// --- THIS IS THE FIX ---
-// Added CardDescription to the import list
 import {
   Card,
   CardContent,
@@ -19,21 +17,19 @@ import {
   CardFooter,
   CardDescription,
 } from '@/components/ui/card';
-// --- END OF FIX ---
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription as DialogDesc, // Renamed to avoid conflict with CardDescription
+  DialogDescription as DialogDesc,
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-react'; // Added Play
+import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-react';
 
-// ... (PaginatedDecksData interface remains the same) ...
 interface PaginatedDecksData {
   decks: FlashcardDeck[];
   count: number;
@@ -42,7 +38,6 @@ interface PaginatedDecksData {
   currentPage: number;
 }
 
-// --- MODIFIED: New interface for all initial data ---
 interface FlashcardsPageData extends PaginatedDecksData {
   dueCount: number;
   firstDueDeckId: string | null;
@@ -52,7 +47,6 @@ interface FlashcardsClientComponentProps {
   initialData: FlashcardsPageData;
 }
 
-// --- NEW: Study Queue Widget (internal component) ---
 function StudyQueueCard({
   dueCount,
   firstDueDeckId,
@@ -60,18 +54,17 @@ function StudyQueueCard({
   dueCount: number;
   firstDueDeckId: string | null;
 }) {
+  // ... (function remains the same)
   const router = useRouter();
 
   if (dueCount === 0) {
-    return null; // Don't render anything if no cards are due
+    return null;
   }
 
   const handleStudyClick = () => {
     if (firstDueDeckId) {
-      // Go directly to the deck with the oldest card
       router.push(`/flashcards/${firstDueDeckId}`);
     } else {
-      // This case shouldn't happen if dueCount > 0, but as a fallback:
       router.push('/flashcards');
     }
   };
@@ -83,7 +76,6 @@ function StudyQueueCard({
           <Layers className="w-5 h-5 text-primary" />
           <span>Study Queue</span>
         </CardTitle>
-        {/* This component was causing the error */}
         <CardDescription>
           You have <strong>{dueCount} flashcard{dueCount > 1 ? 's' : ''}</strong> due for
           review.
@@ -98,7 +90,6 @@ function StudyQueueCard({
     </Card>
   );
 }
-// --- END NEW ---
 
 export function FlashcardsClientComponent({ initialData }: FlashcardsClientComponentProps) {
   const [decks, setDecks] = useState<FlashcardDeck[]>(initialData.decks);
@@ -114,10 +105,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const decksPerPage = 9;
 
-  // --- NEW STATE FOR STUDY QUEUE ---
   const [dueCount, setDueCount] = useState(initialData.dueCount);
   const [firstDueDeckId, setFirstDueDeckId] = useState(initialData.firstDueDeckId);
-  // --- END NEW STATE ---
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingDeck, setEditingDeck] = useState<FlashcardDeck | null>(null);
@@ -127,8 +116,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const router = useRouter();
   const { toast } = useToast();
 
-  // (fetchMoreDecks remains the same)
   const fetchMoreDecks = useCallback(async (page: number) => {
+    // ... (function remains the same)
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
     try {
@@ -154,11 +143,10 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     fetchMoreDecks(currentPage + 1);
   };
 
-  // --- MODIFIED: refreshFirstPage to also refresh study queue ---
   const refreshFirstPage = useCallback(async () => {
+    // ... (function remains the same)
     if (!session) return;
     try {
-      // Fetch both decks and study queue data in parallel
       const [decksResponse, queueResponse] = await Promise.all([
         fetch(`/api/decks?page=1&limit=${decksPerPage}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
@@ -187,10 +175,9 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Error Refreshing Decks', description: error.message, variant: 'destructive' });
     }
   }, [session, toast, decksPerPage]);
-  // --- END MODIFICATION ---
 
-  // (handleCreateDeck, handleOpenEditDialog, handleEditDeck, handleDeleteDeck remain the same)
   const handleCreateDeck = async (e: React.FormEvent) => {
+    // ... (function remains the same)
     e.preventDefault();
     if (!newDeckTitle.trim() || !session) return;
     setIsSaving(true);
@@ -212,12 +199,16 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       setIsSaving(false);
     }
   };
+
   const handleOpenEditDialog = (deck: FlashcardDeck) => {
+    // ... (function remains the same)
     setEditingDeck(deck);
     setEditDeckTitle(deck.title);
     setIsEditDialogOpen(true);
   };
+
   const handleEditDeck = async (e: React.FormEvent) => {
+    // ... (function remains the same)
     e.preventDefault();
     if (!editDeckTitle.trim() || !session || !editingDeck) return;
     setIsSaving(true);
@@ -240,24 +231,44 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       setIsSaving(false);
     }
   };
+
+  // --- MODIFIED: Optimistic Deletion ---
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
     if (!session || !confirm(`Delete "${deckTitle}"? All cards within will be deleted.`)) return;
+
+    // 1. Optimistic Update
+    const originalDecks = [...decks];
+    setDecks((prevDecks) => prevDecks.filter((d) => d.id !== deckId));
+    setUsage(prev => ({ ...prev, count: prev.count - 1 }));
+
     try {
+      // 2. API Call
       const response = await fetch(`/api/decks/${deckId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const result: ApiResponse = await response.json();
-      if (!result.success) throw new Error(result.error || 'Failed delete.');
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed delete.');
+      }
+
+      // 3. Success
       toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
-      refreshFirstPage();
+      // No refreshFirstPage() needed
+
     } catch (error: any) {
+      // 4. Rollback
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
+      setDecks(originalDecks);
+      setUsage(prev => ({ ...prev, count: prev.count + 1 }));
     }
   };
 
   return (
     <>
+      {/* (Rest of JSX remains the same) */}
+      
       {/* --- NEW: Render Study Queue Card --- */}
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
       {/* --- END NEW --- */}

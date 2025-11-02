@@ -121,7 +121,7 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- FUNCTIONS (Most are unchanged) ---
+  // --- FUNCTIONS ---
 
   const refreshDashboard = () => {
     // router.refresh() will refetch all server data
@@ -155,25 +155,57 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
     toast({ title: "Link copied!", description: "Share link copied." });
   };
 
+  // --- MODIFIED: Optimistic UI for Delete ---
   const handleDeleteQuiz = async (quizId: string) => {
-    // ... (existing logic) ...
-    if (!session) { toast({ title: "Error", description: "Not authenticated.", variant: "destructive" }); return; }
-    setIsDeleting(true);
+    if (!session) { 
+      toast({ title: "Error", description: "Not authenticated.", variant: "destructive" }); 
+      return; 
+    }
+    
+    // Find the quiz to be removed
+    const quizToDelete = quizzes.find(q => q.id === quizId);
+    if (!quizToDelete) return;
+
+    // 1. Optimistic Update - remove from UI immediately
+    const originalQuizzes = [...quizzes];
+    setQuizzes(prevQuizzes => prevQuizzes.filter(q => q.id !== quizId));
+    setTotalQuizzes(prev => prev - 1); // Also update count
+    setIsDeleting(true); // Disable delete button in dialog
+
     try {
+        // 2. Send API Request
         const response = await fetch(`/api/quiz/${quizId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${session.access_token}` },
         });
+        
         const result: ApiResponse = await response.json();
-        if (!result.success) throw new Error(result.error || "Failed to delete via API");
-      toast({ title: "Quiz deleted" });
-      refreshDashboard();
+        
+        if (!result.success) {
+          // 3. Rollback on failure
+          throw new Error(result.error || "Failed to delete via API");
+        }
+        
+        // 4. Success - show toast
+        toast({ title: "Quiz deleted", description: `"${quizToDelete.title}" was removed.` });
+        
+        // If we were selecting the quiz we just deleted, unselect it
+        if (selectedQuizIds.includes(quizId)) {
+          setSelectedQuizIds(prev => prev.filter(id => id !== quizId));
+        }
+
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete quiz.", variant: "destructive" });
+      toast({ title: "Delete Failed", description: error.message || "Failed to delete quiz.", variant: "destructive" });
+      
+      // 3. Rollback on failure
+      setQuizzes(originalQuizzes);
+      setTotalQuizzes(prev => prev + 1); // Add count back
+      
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(false); // Re-enable dialog buttons
     }
   };
+  // --- END MODIFICATION ---
 
   const formatDate = (dateString: string) => {
     // ... (existing logic) ...
@@ -214,8 +246,9 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
         title: "Quizzes Combined!",
         description: `Successfully created "${result.data.title}".`,
       });
-      refreshDashboard();
-    } catch (error: any) {
+      refreshDashboard(); // Full refresh after combine
+    } catch (error: any)
+{
       toast({ title: "Combine Failed", description: error.message, variant: "destructive" });
       setIsCombining(false);
     }
