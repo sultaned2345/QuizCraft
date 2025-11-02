@@ -1,7 +1,7 @@
 // src/app/(app)/essay-grader/page.tsx
 'use client';
 
-import { useState, useEffect, Fragment } from 'react'; // --- ADDED Fragment ---
+import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle } from 'lucide-react'; // --- ADDED History, Eye, CheckCircle ---
-import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory, GradedEssay } from '@/types/database'; // --- UPDATED IMPORTS ---
+import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle } from 'lucide-react';
+import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory, GradedEssay } from '@/types/database';
 import { Input } from '@/components/ui/input';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
-import { ScrollArea } from '@/components/ui/scroll-area'; // --- ADDED ScrollArea ---
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"; // --- ADDED Tooltip ---
-import { cn } from '@/lib/utils'; // --- ADDED cn ---
+} from "@/components/ui/tooltip";
+import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton'; // --- THIS IS THE FIX ---
 
 // Type for history list
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
@@ -118,7 +119,6 @@ export default function EssayGraderPage() {
   }, [session]); 
   // --- END MODIFICATION ---
 
-  // (handleFileChange remains unchanged)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -191,7 +191,6 @@ export default function EssayGraderPage() {
 
   // --- MODIFIED: handleSubmit ---
   const handleSubmit = async () => {
-    // ... (Validation remains the same) ...
     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
       setError('Please provide an essay by pasting text or uploading a file.');
       return;
