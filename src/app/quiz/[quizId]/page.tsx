@@ -1,7 +1,7 @@
 // src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // <-- MODIFICATION: Added useCallback
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +15,13 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'; // <-- ADDED
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -27,7 +34,7 @@ import {
   Eye,
   Sparkles,
   LogOut,
-  Timer, // --- MODIFIED: Added Timer icon
+  Timer,
 } from 'lucide-react';
 import { Quiz, Question } from '@/types/database';
 import { cn } from '@/lib/utils';
@@ -36,7 +43,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 // Define a type for storing user answers
 type UserAnswer = {
   questionId: string;
-  selectedAnswer: string;
+  selectedAnswer: string; // For MATCHING, this will be a stringified array
   isCorrect: boolean;
 };
 
@@ -83,65 +90,65 @@ export default function QuizPage() {
     'quiz'
   );
 
-  // --- MODIFIED: Added timer state ---
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // --- MODIFICATION: Get 'session' from useAuth ---
+  // --- MODIFICATION: Added state for MATCHING questions ---
+  const [matchingAnswers, setMatchingAnswers] = useState<string[]>([]);
+  const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+  // --- END MODIFICATION ---
+
   const { user, loading: authLoading, session } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
   const quizId = params.quizId as string;
 
-  // --- FIX: saveAttempt MOVED HERE and wrapped in useCallback ---
-  const saveAttempt = useCallback(async (score: number, total: number) => {
-    if (!session || !quizId) {
-      console.warn('No session or quizId, cannot save attempt.');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/quiz/attempt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          quizId: quizId,
-          score: score,
-          total: total,
-        }),
-      });
-
-      if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.error || 'Failed to save attempt');
+  const saveAttempt = useCallback(
+    async (score: number, total: number) => {
+      if (!session || !quizId) {
+        console.warn('No session or quizId, cannot save attempt.');
+        return;
       }
 
-      console.log('Quiz attempt saved successfully.');
-    } catch (error) {
-      console.error('Error saving quiz attempt:', error);
-      // We won't show a toast for this, as it's a background task.
-    }
-  }, [session, quizId]); // Dependencies for saveAttempt
+      try {
+        const response = await fetch('/api/quiz/attempt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            quizId: quizId,
+            score: score,
+            total: total,
+          }),
+        });
 
-  // --- MODIFIED: New function to handle ending the quiz ---
-  // This function is now defined *after* saveAttempt
+        if (!response.ok) {
+          const result = await response.json();
+          throw new Error(result.error || 'Failed to save attempt');
+        }
+
+        console.log('Quiz attempt saved successfully.');
+      } catch (error) {
+        console.error('Error saving quiz attempt:', error);
+      }
+    },
+    [session, quizId]
+  );
+
   const handleQuizEnd = useCallback(() => {
-    // Check if already ended to prevent double submissions
-    if (viewMode === 'results') return; 
+    if (viewMode === 'results') return;
 
     const finalScore = userAnswers.filter((a) => a.isCorrect).length;
     if (questions.length > 0) {
       saveAttempt(finalScore, questions.length);
     }
     setViewMode('results');
-  }, [userAnswers, questions, saveAttempt, viewMode]); // saveAttempt dependency is now valid
+  }, [userAnswers, questions, saveAttempt, viewMode]);
 
-  // Define loadQuizData using useCallback to avoid redefining it on every render
   const loadQuizData = useCallback(async () => {
-    if (!user || !quizId) return; // Guard against missing user or quizId
+    if (!user || !quizId) return;
 
     setIsLoading(true);
     setError('');
@@ -176,11 +183,9 @@ export default function QuizPage() {
         );
         setQuiz(quizData);
         setQuestions(quizData.questions);
-        // --- MODIFIED: Set timer state ---
         if (quizData.time_limit_minutes) {
           setTimeLeft(quizData.time_limit_minutes * 60);
         }
-        // ---
       }
     } catch (err: any) {
       console.error('[QuizPage loadQuizData] Error caught during fetch:', err);
@@ -193,45 +198,18 @@ export default function QuizPage() {
       console.log('[QuizPage loadQuizData] Setting isLoading to false.');
       setIsLoading(false);
     }
-  }, [user, quizId]); // Dependencies for useCallback
+  }, [user, quizId]);
 
-  // This useEffect handles authentication check and triggers data loading
   useEffect(() => {
-    // Log initial state when effect runs
-    console.log(
-      '[QuizPage useEffect] Start. authLoading:',
-      authLoading,
-      'User ID:',
-      user?.id
-    );
-
     if (!authLoading && !user) {
-      console.log(
-        '[QuizPage useEffect] User not found after loading, redirecting to login.'
-      );
       router.push('/login');
-      return; // Stop execution
+      return;
     }
-
-    // Only proceed if loading is finished, user exists, and quizId is present
     if (!authLoading && user && quizId) {
-      console.log(
-        `[QuizPage useEffect] Conditions met: User (${user.id}), quizId (${quizId}). Calling loadQuizData.`
-      );
       loadQuizData();
-    } else {
-      // Log why we might not be fetching yet
-      console.log(
-        '[QuizPage useEffect] Conditions not met yet. Waiting for user/authLoading/quizId.'
-      );
-      if (authLoading)
-        console.log('[QuizPage useEffect] Reason: authLoading is true.');
-      if (!user) console.log('[QuizPage useEffect] Reason: user is null.');
-      if (!quizId) console.log('[QuizPage useEffect] Reason: quizId is missing.');
     }
-  }, [user, authLoading, quizId, router, loadQuizData]); // Added loadQuizData to dependencies
+  }, [user, authLoading, quizId, router, loadQuizData]);
 
-  // --- MODIFIED: Added Timer Countdown Effect ---
   useEffect(() => {
     if (timeLeft === null || timeLeft === 0 || viewMode !== 'quiz') return;
 
@@ -239,13 +217,12 @@ export default function QuizPage() {
       setTimeLeft((prev) => {
         if (prev === null || prev <= 1) {
           clearInterval(interval);
-          // Time's up!
           toast({
             title: "Time's Up!",
             description: 'Your quiz is being submitted automatically.',
             variant: 'destructive',
           });
-          handleQuizEnd(); // Force submit
+          handleQuizEnd();
           return 0;
         }
         return prev - 1;
@@ -253,54 +230,128 @@ export default function QuizPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [timeLeft, viewMode, toast, handleQuizEnd]);
-  // ---
 
-  // --- saveAttempt function was moved *before* handleQuizEnd ---
-
-  const handleAnswerSelect = (answer: string) => {
-    if (isAnswered) return;
+  // --- MODIFICATION: Reset state on question change ---
+  useEffect(() => {
     const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return; // Add guard clause
-    const isCorrect =
-      answer.toLowerCase().trim() ===
-      (currentQuestion.correct_answer || '').toLowerCase().trim();
-
-    setSelectedAnswer(answer);
-    setIsAnswered(true);
-    setUserAnswers([
-      ...userAnswers,
-      { questionId: currentQuestion.id, selectedAnswer: answer, isCorrect },
-    ]);
-  };
-
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setIsAnswered(false);
-      setSelectedAnswer(null);
-      setFillInBlankAnswer('');
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    if (currentQuestion?.question_type === 'MATCHING') {
+      const prompts = currentQuestion.prompts;
+      setMatchingAnswers(
+        Array(Array.isArray(prompts) ? prompts.length : 0).fill('')
+      );
+      // Shuffle options for display
+      const options = Array.isArray(currentQuestion.options)
+        ? currentQuestion.options
+        : [];
+      setShuffledOptions([...options].sort(() => Math.random() - 0.5));
     } else {
-      // --- MODIFICATION: Call handleQuizEnd ---
-      handleQuizEnd();
-      // --- End Modification ---
+      setMatchingAnswers([]);
+      setShuffledOptions([]);
     }
-  };
-
-  const handleRestartQuiz = () => {
-    setCurrentQuestionIndex(0);
-    setUserAnswers([]);
+    // Reset other answer states
     setSelectedAnswer(null);
     setFillInBlankAnswer('');
     setIsAnswered(false);
-    // --- MODIFIED: Reset timer ---
+  }, [currentQuestionIndex, questions]);
+  // --- END MODIFICATION ---
+
+  // --- MODIFICATION: Updated answer selection logic ---
+  const handleAnswerSelect = (answer: string) => {
+    if (isAnswered) return;
+    const currentQuestion = questions[currentQuestionIndex];
+    if (!currentQuestion) return;
+
+    let isCorrect = false;
+    let selectedAnswerForStorage = answer;
+
+    switch (currentQuestion.question_type) {
+      case 'MULTIPLE_CHOICE':
+      case 'TRUE_FALSE':
+        isCorrect =
+          answer.toLowerCase().trim() ===
+          (currentQuestion.correct_answer || '').toLowerCase().trim();
+        break;
+
+      case 'FILL_IN_THE_BLANK':
+        const validAnswers = Array.isArray(currentQuestion.options)
+          ? currentQuestion.options
+          : [];
+        isCorrect = validAnswers.some(
+          (opt) => opt.toLowerCase().trim() === answer.toLowerCase().trim()
+        );
+        selectedAnswerForStorage = answer.trim(); // Store the user's typed answer
+        break;
+
+      case 'MATCHING':
+        try {
+          const userAnswersArray = JSON.parse(answer) as string[];
+          const correctAnswersArray = Array.isArray(currentQuestion.options)
+            ? currentQuestion.options
+            : [];
+          isCorrect =
+            userAnswersArray.length === correctAnswersArray.length &&
+            userAnswersArray.every((ans, i) => ans === correctAnswersArray[i]);
+          selectedAnswerForStorage = answer; // Store the stringified array
+        } catch (e) {
+          console.error('Failed to parse matching answers', e);
+          isCorrect = false;
+        }
+        break;
+
+      default:
+        isCorrect =
+          answer.toLowerCase().trim() ===
+          (currentQuestion.correct_answer || '').toLowerCase().trim();
+    }
+
+    setSelectedAnswer(selectedAnswerForStorage);
+    setIsAnswered(true);
+    setUserAnswers([
+      ...userAnswers,
+      {
+        questionId: currentQuestion.id,
+        selectedAnswer: selectedAnswerForStorage,
+        isCorrect,
+      },
+    ]);
+  };
+  // --- END MODIFICATION ---
+
+  // --- MODIFICATION: Simplified next question logic ---
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    } else {
+      handleQuizEnd();
+    }
+  };
+  // --- END MODIFICATION ---
+
+  // --- MODIFICATION: Simplified restart logic ---
+  const handleRestartQuiz = () => {
+    setCurrentQuestionIndex(0);
+    setUserAnswers([]);
     if (quiz?.time_limit_minutes) {
       setTimeLeft(quiz.time_limit_minutes * 60);
     } else {
       setTimeLeft(null);
     }
-    // ---
     setViewMode('quiz');
+    // useEffect on currentQuestionIndex will handle resetting answer states
   };
+  // --- END MODIFICATION ---
+
+  // --- NEW: Handler for MATCHING dropdowns ---
+  const handleMatchingAnswerChange = (
+    promptIndex: number,
+    selectedAnswer: string
+  ) => {
+    if (isAnswered) return;
+    const newAnswers = [...matchingAnswers];
+    newAnswers[promptIndex] = selectedAnswer;
+    setMatchingAnswers(newAnswers);
+  };
+  // --- END NEW ---
 
   const renderQuestion = () => {
     if (!questions[currentQuestionIndex]) {
@@ -313,7 +364,6 @@ export default function QuizPage() {
     const question = questions[currentQuestionIndex];
     switch (question.question_type) {
       case 'MULTIPLE_CHOICE':
-        // Ensure options is an array before mapping
         const options = Array.isArray(question.options) ? question.options : [];
         if (options.length === 0)
           console.warn(
@@ -373,7 +423,6 @@ export default function QuizPage() {
       case 'FILL_IN_THE_BLANK':
         return (
           <div className="space-y-4">
-            {/* Question text for FITB is now handled outside renderQuestion */}
             <div className="flex gap-2">
               <Input
                 value={fillInBlankAnswer}
@@ -396,27 +445,56 @@ export default function QuizPage() {
             </div>
           </div>
         );
-      // --- MODIFIED: Added MATCHING placeholder ---
+      // --- MODIFICATION: Added MATCHING UI ---
       case 'MATCHING':
+        const prompts = Array.isArray(question.prompts) ? question.prompts : [];
+        if (prompts.length === 0) {
+          console.warn(
+            `[renderQuestion] MATCHING question (ID: ${question.id}) has no prompts.`
+          );
+          return <p>Error: This matching question is set up incorrectly.</p>;
+        }
         return (
-          <div className="text-center text-muted-foreground p-4 border rounded-md">
-            <p>
-              Quiz-taking for "Matching" questions is not yet supported.
-            </p>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              {prompts.map((prompt, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col sm:flex-row items-center gap-2"
+                >
+                  <div className="p-3 border rounded-md bg-muted w-full sm:w-1/2 break-words">
+                    {prompt}
+                  </div>
+                  <Select
+                    value={matchingAnswers[index] || ''}
+                    onValueChange={(value) =>
+                      handleMatchingAnswerChange(index, value)
+                    }
+                    disabled={isAnswered}
+                  >
+                    <SelectTrigger className="w-full sm:w-1/2">
+                      <SelectValue placeholder="Select an answer..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {shuffledOptions.map((option, optIndex) => (
+                        <SelectItem key={optIndex} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
             <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => {
-                // Mock a correct answer to allow progression
-                handleAnswerSelect(question.correct_answer);
-              }}
+              onClick={() => handleAnswerSelect(JSON.stringify(matchingAnswers))} // Pass answers as string
+              disabled={isAnswered || matchingAnswers.some((a) => a === '')}
             >
-              (Skip Question)
+              Submit
             </Button>
           </div>
         );
-      // ---
+      // --- END MODIFICATION ---
       default:
         console.error(
           `[renderQuestion] Unsupported question type encountered: ${question.question_type} for question ID: ${question.id}`
@@ -425,7 +503,6 @@ export default function QuizPage() {
     }
   };
 
-  // --- RENDER LOGIC ---
   if (isLoading || authLoading) {
     console.log(
       '[QuizPage Render] Showing loading spinner (isLoading || authLoading).'
@@ -437,7 +514,6 @@ export default function QuizPage() {
     );
   }
 
-  // Render error message if 'error' state is set
   if (error) {
     console.log(`[QuizPage Render] Showing error message: "${error}"`);
     return (
@@ -458,7 +534,6 @@ export default function QuizPage() {
     );
   }
 
-  // If no error, but quiz is still null (failsafe)
   if (!quiz) {
     console.error(
       '[QuizPage Render] Reached render return, but quiz is null and no error is set. This should not happen.'
@@ -468,7 +543,6 @@ export default function QuizPage() {
         <p className="text-destructive">
           An unexpected error occurred. Could not load quiz data.
         </p>
-        {/* Optionally add a back button here too */}
       </div>
     );
   }
@@ -478,7 +552,7 @@ export default function QuizPage() {
   );
 
   const score = userAnswers.filter((a) => a.isCorrect).length;
-  const currentQuestion = questions[currentQuestionIndex]; // Get current question AFTER checking quiz/questions exist
+  const currentQuestion = questions[currentQuestionIndex];
   const minutes = timeLeft ? Math.floor(timeLeft / 60) : 0;
   const seconds = timeLeft ? timeLeft % 60 : 0;
 
@@ -504,7 +578,6 @@ export default function QuizPage() {
                     Question {currentQuestionIndex + 1} of{' '}
                     {questions.length > 0 ? questions.length : 0}
                   </CardDescription>
-                  {/* --- MODIFIED: Added Timer Display --- */}
                   {quiz.time_limit_minutes && timeLeft !== null && (
                     <CardDescription
                       className={cn(
@@ -532,12 +605,6 @@ export default function QuizPage() {
             {/* Handle quiz view */}
             {viewMode === 'quiz' && questions.length > 0 && currentQuestion && (
               <div>
-                {/* *******************
-                  --- FIX IS HERE ---
-                  *******************
-                  This block now uses a ternary operator to render one of two
-                  different <div>s, avoiding the children + dangerouslySetInnerHTML conflict.
-                */}
                 {currentQuestion.question_type === 'FILL_IN_THE_BLANK' ? (
                   <div
                     className="text-lg font-semibold mb-4"
@@ -553,46 +620,67 @@ export default function QuizPage() {
                     {currentQuestion.question_text}
                   </div>
                 )}
-                {/* --- END OF FIX --- */}
 
                 {renderQuestion()}
-                {isAnswered &&
-                  currentQuestion && ( // Ensure currentQuestion exists for feedback
-                    <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                      {userAnswers.find(
-                        (a) => a.questionId === currentQuestion.id
-                      )?.isCorrect ? (
-                        <div className="flex items-center text-green-600 dark:text-green-400">
-                          <CheckCircle className="w-5 h-5 mr-2" />
-                          <p className="font-semibold">Correct!</p>
+
+                {/* --- MODIFICATION: Updated Feedback Block --- */}
+                {isAnswered && currentQuestion && (
+                  <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                    {userAnswers.find(
+                      (a) => a.questionId === currentQuestion.id
+                    )?.isCorrect ? (
+                      <div className="flex items-center text-green-600 dark:text-green-400">
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        <p className="font-semibold">Correct!</p>
+                      </div>
+                    ) : (
+                      <div className="text-red-600 dark:text-red-400">
+                        <div className="flex items-center font-semibold">
+                          <XCircle className="w-5 h-5 mr-2" />
+                          <p>Incorrect.</p>
                         </div>
-                      ) : (
-                        <div className="text-red-600 dark:text-red-400">
-                          <div className="flex items-center font-semibold">
-                            <XCircle className="w-5 h-5 mr-2" />
-                            <p>Incorrect.</p>
-                          </div>
+                        {currentQuestion.question_type ===
+                          'FILL_IN_THE_BLANK' && (
+                          <p className="text-sm mt-1">
+                            Accepted answers:{' '}
+                            {(Array.isArray(currentQuestion.options)
+                              ? currentQuestion.options
+                              : []
+                            ).join(', ')}
+                          </p>
+                        )}
+                        {currentQuestion.question_type === 'MATCHING' && (
+                          <p className="text-sm mt-1">
+                            Check the review section at the end for correct
+                            pairs.
+                          </p>
+                        )}
+                        {(currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
+                          currentQuestion.question_type === 'TRUE_FALSE') && (
                           <p className="text-sm mt-1">
                             Correct answer: {currentQuestion.correct_answer}
                           </p>
-                        </div>
-                      )}
-                      {/* Only show explanation if it's not empty */}
-                      {currentQuestion.explanation && (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {currentQuestion.explanation}
-                        </p>
-                      )}
-                      <Button
-                        className="mt-4 w-full"
-                        onClick={handleNextQuestion}
-                      >
-                        {currentQuestionIndex < questions.length - 1
-                          ? 'Next Question'
-                          : 'Finish Quiz'}
-                      </Button>
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    )}
+
+                    {currentQuestion.explanation && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {currentQuestion.explanation}
+                      </p>
+                    )}
+
+                    <Button
+                      className="mt-4 w-full"
+                      onClick={handleNextQuestion}
+                    >
+                      {currentQuestionIndex < questions.length - 1
+                        ? 'Next Question'
+                        : 'Finish Quiz'}
+                    </Button>
+                  </div>
+                )}
+                {/* --- END MODIFICATION --- */}
               </div>
             )}
 
@@ -634,7 +722,7 @@ export default function QuizPage() {
               </div>
             )}
 
-            {/* Handle review view */}
+            {/* --- MODIFICATION: Updated Review View --- */}
             {viewMode === 'review' && (
               <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-center">
@@ -645,6 +733,7 @@ export default function QuizPage() {
                     (a) => a.questionId === q.id
                   );
                   const isCorrect = userAnswer?.isCorrect;
+
                   return (
                     <div
                       key={q.id}
@@ -655,34 +744,80 @@ export default function QuizPage() {
                           : 'border-destructive/50 bg-destructive/5'
                       )}
                     >
-                      {/* Display FITB with correct answer in brackets */}
                       <p
                         className="font-semibold"
                         dangerouslySetInnerHTML={{
                           __html: `${index + 1}. ${q.question_text.replace(
                             /____/g,
-                            `<strong>[${q.correct_answer || '?'}]</strong>`
+                            `<strong>[BLANK]</strong>` // Show blank in review
                           )}`,
                         }}
                       ></p>
-                      <p
-                        className={cn(
-                          'mt-2 text-sm',
-                          isCorrect
-                            ? 'text-green-700 dark:text-green-400'
-                            : 'text-destructive'
-                        )}
-                      >
-                        Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
-                      </p>
-                      {/* Only show correct answer explicitly if wrong AND not FITB (already shown above) */}
-                      {!isCorrect &&
-                        q.question_type !== 'FILL_IN_THE_BLANK' && (
-                          <p className="mt-1 text-sm text-green-700 dark:text-green-400">
-                            Correct answer: {q.correct_answer}
+
+                      {q.question_type === 'MATCHING' ? (
+                        <div className="mt-2 text-sm">
+                          <p
+                            className={cn(
+                              isCorrect
+                                ? 'text-green-700 dark:text-green-400'
+                                : 'text-destructive'
+                            )}
+                          >
+                            Your submission was {isCorrect ? 'Correct' : 'Incorrect'}.
                           </p>
-                        )}
-                      {q.explanation && ( // Conditionally render explanation
+                          <div className="mt-2 space-y-1">
+                            <h4 className="font-medium">Correct Pairs:</h4>
+                            {(Array.isArray(q.prompts) ? q.prompts : []).map(
+                              (prompt, i) => (
+                                <p key={i} className="text-muted-foreground">
+                                  {prompt} &rarr;{' '}
+                                  {Array.isArray(q.options) ? q.options[i] : 'N/A'}
+                                </p>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      ) : q.question_type === 'FILL_IN_THE_BLANK' ? (
+                        <div className="mt-2 text-sm">
+                          <p
+                            className={cn(
+                              isCorrect
+                                ? 'text-green-700 dark:text-green-400'
+                                : 'text-destructive'
+                            )}
+                          >
+                            Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
+                          </p>
+                          {!isCorrect && (
+                            <p className="mt-1 text-green-700 dark:text-green-400">
+                              Accepted answers:{' '}
+                              {(Array.isArray(q.options) ? q.options : []).join(
+                                ', '
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        // MC and T/F
+                        <div className="mt-2 text-sm">
+                          <p
+                            className={cn(
+                              isCorrect
+                                ? 'text-green-700 dark:text-green-400'
+                               : 'text-destructive'
+                            )}
+                          >
+                            Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
+                          </p>
+                          {!isCorrect && (
+                            <p className="mt-1 text-green-700 dark:text-green-400">
+                              Correct answer: {q.correct_answer}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {q.explanation && (
                         <p className="mt-2 text-xs text-muted-foreground border-t pt-2">
                           {q.explanation}
                         </p>
@@ -696,6 +831,7 @@ export default function QuizPage() {
                 </Button>
               </div>
             )}
+            {/* --- END MODIFICATION --- */}
           </CardContent>
         </Card>
       </main>

@@ -14,9 +14,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Trash2, GripVertical, Plus, ArrowRight } from 'lucide-react'; // --- MODIFIED: Added Plus, ArrowRight
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // We need RadioGroup
-import { cn } from '@/lib/utils'; // --- MODIFIED: Added cn
+import { Trash2, GripVertical, Plus, ArrowRight } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { cn } from '@/lib/utils';
 
 interface QuestionEditorProps {
   question: Question;
@@ -32,7 +32,10 @@ export function QuestionEditor({
   onRemoveQuestion,
 }: QuestionEditorProps) {
   // Generic handler for any text-based field
-  const handleChange = (field: keyof Question, value: string) => {
+  const handleChange = (
+    field: keyof Question,
+    value: string | string[] | null // Allow string array for options
+  ) => {
     onQuestionChange(index, { ...question, [field]: value });
   };
 
@@ -49,13 +52,14 @@ export function QuestionEditor({
       newQuestion.prompts = null; // Clear prompts
       newQuestion.correct_answer = 'True';
     } else if (value === 'FILL_IN_THE_BLANK') {
-      newQuestion.options = null;
+      // --- MODIFICATION: Use 'options' for answers ---
+      newQuestion.options = ['Answer']; // Store answers as an array
       newQuestion.prompts = null; // Clear prompts
-      newQuestion.correct_answer = 'Answer';
+      newQuestion.correct_answer = 'N/A'; // Correct answer is now in options
+      // --- END MODIFICATION ---
     } else if (value === 'MATCHING') {
-      // --- MODIFIED: Added MATCHING ---
       newQuestion.prompts = ['Prompt 1'];
-      newQuestion.options = ['Answer 1'];
+      newQuestion.options = ['Answer 1']; // 'options' stores the correct answers in order
       newQuestion.correct_answer = 'N/A';
     }
     onQuestionChange(index, newQuestion);
@@ -66,11 +70,12 @@ export function QuestionEditor({
     const newOptions = [
       ...(Array.isArray(question.options) ? question.options : []),
     ];
+    const oldOptionValue = newOptions[optionIndex]; // Get old value before changing
     newOptions[optionIndex] = value;
 
     // If the changed option was the correct answer, update the correct answer string as well
     const newCorrectAnswer =
-      question.correct_answer === question.options[optionIndex]
+      question.correct_answer === oldOptionValue
         ? value
         : question.correct_answer;
 
@@ -86,7 +91,15 @@ export function QuestionEditor({
     onQuestionChange(index, { ...question, correct_answer: value });
   };
 
-  // --- MODIFIED: Handlers for MATCHING type ---
+  // --- NEW: Handler for FILL_IN_THE_BLANK answers ---
+  const handleFillInTheBlankChange = (value: string) => {
+    // Split by comma, trim whitespace, and filter out empty strings
+    const answers = value.split(',').map((s) => s.trim()).filter(Boolean);
+    handleChange('options', answers);
+  };
+  // --- END NEW ---
+
+  // --- Handlers for MATCHING type (Unchanged) ---
   const handleMatchingChange = (
     type: 'prompt' | 'option',
     pairIndex: number,
@@ -143,7 +156,7 @@ export function QuestionEditor({
       options: newOptions,
     });
   };
-  // --- END MODIFICATION ---
+  // --- END MATCHING Handlers ---
 
   return (
     <Card className="relative overflow-hidden">
@@ -175,7 +188,6 @@ export function QuestionEditor({
               <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
               <SelectItem value="TRUE_FALSE">True/False</SelectItem>
               <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
-              {/* --- MODIFIED: Added MATCHING --- */}
               <SelectItem value="MATCHING">Matching</SelectItem>
             </SelectContent>
           </Select>
@@ -242,40 +254,39 @@ export function QuestionEditor({
           </div>
         )}
 
+        {/* --- MODIFICATION: Updated FILL_IN_THE_BLANK UI --- */}
         {question.question_type === 'FILL_IN_THE_BLANK' && (
           <div className="space-y-2">
-            <Label htmlFor={`q-${index}-answer`}>Correct Answer</Label>
+            <Label htmlFor={`q-${index}-answer`}>
+              Correct Answers (comma-separated)
+            </Label>
             <Input
               id={`q-${index}-answer`}
-              value={question.correct_answer}
-              onChange={(e) => handleChange('correct_answer', e.target.value)}
-              placeholder="Enter the exact answer"
+              value={
+                Array.isArray(question.options) ? question.options.join(', ') : ''
+              }
+              onChange={(e) => handleFillInTheBlankChange(e.target.value)}
+              placeholder="Enter one or more exact answers"
             />
             <p className="text-xs text-muted-foreground">
-              Tip: Use "____" in the question text to show where the blank is.
+              Tip: Use "____" in the question text. Grading is
+              case-insensitive.
             </p>
           </div>
         )}
+        {/* --- END MODIFICATION --- */}
 
-        {/* --- MODIFIED: Added MATCHING UI --- */}
         {question.question_type === 'MATCHING' && (
           <div className="space-y-3">
-            <Label>Matching Pairs</Label>
+            <Label>Matching Pairs (Prompt &rarr; Correct Answer)</Label>
             <div className="space-y-2">
               {Array.isArray(question.prompts) &&
                 question.prompts.map((prompt, pairIndex) => (
-                  <div
-                    key={pairIndex}
-                    className="flex items-center gap-2"
-                  >
+                  <div key={pairIndex} className="flex items-center gap-2">
                     <Input
                       value={prompt}
                       onChange={(e) =>
-                        handleMatchingChange(
-                          'prompt',
-                          pairIndex,
-                          e.target.value
-                        )
+                        handleMatchingChange('prompt', pairIndex, e.target.value)
                       }
                       placeholder={`Prompt ${pairIndex + 1}`}
                       className="flex-1"
@@ -288,11 +299,7 @@ export function QuestionEditor({
                         ''
                       }
                       onChange={(e) =>
-                        handleMatchingChange(
-                          'option',
-                          pairIndex,
-                          e.target.value
-                        )
+                        handleMatchingChange('option', pairIndex, e.target.value)
                       }
                       placeholder={`Answer ${pairIndex + 1}`}
                       className="flex-1"
@@ -325,7 +332,6 @@ export function QuestionEditor({
             </Button>
           </div>
         )}
-        {/* --- END MODIFICATION --- */}
 
         {/* Explanation Field */}
         <div className="space-y-2">
