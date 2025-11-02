@@ -532,7 +532,7 @@ model sso_domains {
 model sso_providers {
   id             String           @id @db.Uuid
   resource_id    String?
-  created_at     DateTime?        @db.Timestamamptz(6) // --- FIX IS HERE ---
+  created_at     DateTime?        @db.Timestamptz(6) // --- FIX IS HERE ---
   updated_at     DateTime? @db.Timestamptz(6)
   disabled       Boolean? @default(false)
   saml_providers saml_providers[]
