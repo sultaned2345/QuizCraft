@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -53,18 +54,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string) => {
     try {
       console.log('Starting sign up process for:', email);
-      if (!email || !password) { /* ...validation... */ return { error: { message: 'Email and password are required' } }; }
-      if (password.length < 6) { /* ...validation... */ return { error: { message: 'Password must be at least 6 characters' } }; }
+      if (!email || !password) {
+        /* ...validation... */ return { error: { message: 'Email and password are required' } };
+      }
+      if (password.length < 6) {
+        /* ...validation... */ return { error: { message: 'Password must be at least 6 characters' } };
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          // --- THIS IS THE CHANGE ---
+          emailRedirectTo: `${window.location.origin}/documents`,
+          // --- END OF CHANGE ---
         },
       });
-      
-      console.log('Sign up result:', { user: data.user?.id, session: !!data.session, error: error?.message });
+
+      console.log('Sign up result:', {
+        user: data.user?.id,
+        session: !!data.session,
+        error: error?.message,
+      });
       return { data, error };
     } catch (err: any) {
       console.error('Sign up error:', err);
@@ -75,14 +86,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       console.log('Starting sign in process for:', email);
-      if (!email || !password) { /* ...validation... */ return { error: { message: 'Email and password are required' } }; }
+      if (!email || !password) {
+        /* ...validation... */ return { error: { message: 'Email and password are required' } };
+      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
-      
-      console.log('Sign in result:', { user: data.user?.id, session: !!data.session, error: error?.message });
+
+      console.log('Sign in result:', {
+        user: data.user?.id,
+        session: !!data.session,
+        error: error?.message,
+      });
       return { data, error };
     } catch (err: any) {
       console.error('Sign in error:', err);
@@ -94,9 +111,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Starting sign out process');
       const { error } = await supabase.auth.signOut();
-      
-      if (error) { console.error('Sign out error:', error); return { error }; }
-      
+
+      if (error) {
+        console.error('Sign out error:', error);
+        return { error };
+      }
+
       console.log('Sign out successful');
       return { error: null };
     } catch (err: any) {
@@ -108,12 +128,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetPassword = async (email: string) => {
     try {
       console.log('Starting password reset for:', email);
-      if (!email) { /* ...validation... */ return { error: { message: 'Email is required' } }; }
+      if (!email) {
+        /* ...validation... */ return { error: { message: 'Email is required' } };
+      }
 
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
-      
+
       console.log('Password reset result:', { error: error?.message });
       return { error };
     } catch (err: any) {
