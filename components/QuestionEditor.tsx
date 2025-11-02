@@ -1,15 +1,22 @@
 // components/QuestionEditor.tsx
 'use client';
 
-import { Question, QuestionType } from "@/types/database";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Trash2, GripVertical } from "lucide-react";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // We need RadioGroup
+import { Question, QuestionType } from '@/types/database';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Trash2, GripVertical, Plus, ArrowRight } from 'lucide-react'; // --- MODIFIED: Added Plus, ArrowRight
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // We need RadioGroup
+import { cn } from '@/lib/utils'; // --- MODIFIED: Added cn
 
 interface QuestionEditorProps {
   question: Question;
@@ -24,12 +31,8 @@ export function QuestionEditor({
   onQuestionChange,
   onRemoveQuestion,
 }: QuestionEditorProps) {
-
   // Generic handler for any text-based field
-  const handleChange = (
-    field: keyof Question,
-    value: string
-  ) => {
+  const handleChange = (field: keyof Question, value: string) => {
     onQuestionChange(index, { ...question, [field]: value });
   };
 
@@ -38,33 +41,43 @@ export function QuestionEditor({
     const newQuestion: Question = { ...question, question_type: value };
     // Reset options/answers when type changes
     if (value === 'MULTIPLE_CHOICE') {
-      newQuestion.options = ["Option 1", "Option 2", "Option 3", "Option 4"];
-      newQuestion.correct_answer = "Option 1";
+      newQuestion.options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+      newQuestion.prompts = null; // Clear prompts
+      newQuestion.correct_answer = 'Option 1';
     } else if (value === 'TRUE_FALSE') {
-      newQuestion.options = ["True", "False"];
-      newQuestion.correct_answer = "True";
+      newQuestion.options = ['True', 'False'];
+      newQuestion.prompts = null; // Clear prompts
+      newQuestion.correct_answer = 'True';
     } else if (value === 'FILL_IN_THE_BLANK') {
       newQuestion.options = null;
-      newQuestion.correct_answer = "Answer";
+      newQuestion.prompts = null; // Clear prompts
+      newQuestion.correct_answer = 'Answer';
+    } else if (value === 'MATCHING') {
+      // --- MODIFIED: Added MATCHING ---
+      newQuestion.prompts = ['Prompt 1'];
+      newQuestion.options = ['Answer 1'];
+      newQuestion.correct_answer = 'N/A';
     }
     onQuestionChange(index, newQuestion);
   };
 
   // Handler for multiple-choice option text
   const handleOptionChange = (optionIndex: number, value: string) => {
-    const newOptions = [...(Array.isArray(question.options) ? question.options : [])];
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+    ];
     newOptions[optionIndex] = value;
-    
+
     // If the changed option was the correct answer, update the correct answer string as well
     const newCorrectAnswer =
       question.correct_answer === question.options[optionIndex]
         ? value
         : question.correct_answer;
 
-    onQuestionChange(index, { 
-      ...question, 
+    onQuestionChange(index, {
+      ...question,
       options: newOptions,
-      correct_answer: newCorrectAnswer
+      correct_answer: newCorrectAnswer,
     });
   };
 
@@ -73,6 +86,64 @@ export function QuestionEditor({
     onQuestionChange(index, { ...question, correct_answer: value });
   };
 
+  // --- MODIFIED: Handlers for MATCHING type ---
+  const handleMatchingChange = (
+    type: 'prompt' | 'option',
+    pairIndex: number,
+    value: string
+  ) => {
+    const newPrompts = [
+      ...(Array.isArray(question.prompts) ? question.prompts : []),
+    ];
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+    ];
+
+    if (type === 'prompt') {
+      newPrompts[pairIndex] = value;
+    } else {
+      newOptions[pairIndex] = value;
+    }
+
+    onQuestionChange(index, {
+      ...question,
+      prompts: newPrompts,
+      options: newOptions,
+    });
+  };
+
+  const addMatchingPair = () => {
+    const newPrompts = [
+      ...(Array.isArray(question.prompts) ? question.prompts : []),
+      `Prompt ${question.prompts.length + 1}`,
+    ];
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+      `Answer ${question.options.length + 1}`,
+    ];
+    onQuestionChange(index, {
+      ...question,
+      prompts: newPrompts,
+      options: newOptions,
+    });
+  };
+
+  const removeMatchingPair = (pairIndex: number) => {
+    const newPrompts = [
+      ...(Array.isArray(question.prompts) ? question.prompts : []),
+    ];
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+    ];
+    newPrompts.splice(pairIndex, 1);
+    newOptions.splice(pairIndex, 1);
+    onQuestionChange(index, {
+      ...question,
+      prompts: newPrompts,
+      options: newOptions,
+    });
+  };
+  // --- END MODIFICATION ---
 
   return (
     <Card className="relative overflow-hidden">
@@ -104,6 +175,8 @@ export function QuestionEditor({
               <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
               <SelectItem value="TRUE_FALSE">True/False</SelectItem>
               <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
+              {/* --- MODIFIED: Added MATCHING --- */}
+              <SelectItem value="MATCHING">Matching</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -129,19 +202,22 @@ export function QuestionEditor({
               onValueChange={handleCorrectAnswerChange}
               className="space-y-2"
             >
-              {Array.isArray(question.options) && question.options.map((option, optIndex) => (
-                <div key={optIndex} className="flex items-center gap-2">
-                  <RadioGroupItem
-                    value={option}
-                    id={`q-${index}-opt-${optIndex}`}
-                  />
-                  <Input
-                    value={option}
-                    onChange={(e) => handleOptionChange(optIndex, e.target.value)}
-                    placeholder={`Option ${optIndex + 1}`}
-                  />
-                </div>
-              ))}
+              {Array.isArray(question.options) &&
+                question.options.map((option, optIndex) => (
+                  <div key={optIndex} className="flex items-center gap-2">
+                    <RadioGroupItem
+                      value={option}
+                      id={`q-${index}-opt-${optIndex}`}
+                    />
+                    <Input
+                      value={option}
+                      onChange={(e) =>
+                        handleOptionChange(optIndex, e.target.value)
+                      }
+                      placeholder={`Option ${optIndex + 1}`}
+                    />
+                  </div>
+                ))}
             </RadioGroup>
           </div>
         )}
@@ -175,15 +251,87 @@ export function QuestionEditor({
               onChange={(e) => handleChange('correct_answer', e.target.value)}
               placeholder="Enter the exact answer"
             />
-             <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Tip: Use "____" in the question text to show where the blank is.
             </p>
           </div>
         )}
-        
+
+        {/* --- MODIFIED: Added MATCHING UI --- */}
+        {question.question_type === 'MATCHING' && (
+          <div className="space-y-3">
+            <Label>Matching Pairs</Label>
+            <div className="space-y-2">
+              {Array.isArray(question.prompts) &&
+                question.prompts.map((prompt, pairIndex) => (
+                  <div
+                    key={pairIndex}
+                    className="flex items-center gap-2"
+                  >
+                    <Input
+                      value={prompt}
+                      onChange={(e) =>
+                        handleMatchingChange(
+                          'prompt',
+                          pairIndex,
+                          e.target.value
+                        )
+                      }
+                      placeholder={`Prompt ${pairIndex + 1}`}
+                      className="flex-1"
+                    />
+                    <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <Input
+                      value={
+                        (Array.isArray(question.options) &&
+                          question.options[pairIndex]) ||
+                        ''
+                      }
+                      onChange={(e) =>
+                        handleMatchingChange(
+                          'option',
+                          pairIndex,
+                          e.target.value
+                        )
+                      }
+                      placeholder={`Answer ${pairIndex + 1}`}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        'h-9 w-9 shrink-0',
+                        question.prompts.length > 1
+                          ? 'text-destructive'
+                          : 'text-muted-foreground opacity-50 cursor-not-allowed'
+                      )}
+                      onClick={() => removeMatchingPair(pairIndex)}
+                      disabled={question.prompts.length <= 1}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addMatchingPair}
+              className="mt-2"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Pair
+            </Button>
+          </div>
+        )}
+        {/* --- END MODIFICATION --- */}
+
         {/* Explanation Field */}
         <div className="space-y-2">
-          <Label htmlFor={`q-${index}-explanation`}>Explanation (Optional)</Label>
+          <Label htmlFor={`q-${index}-explanation`}>
+            Explanation (Optional)
+          </Label>
           <Input
             id={`q-${index}-explanation`}
             value={question.explanation || ''}
@@ -195,8 +343,3 @@ export function QuestionEditor({
     </Card>
   );
 }
-
-// We need to add RadioGroup to the UI components
-// If you don't have `components/ui/radio-group.tsx`, create it with:
-// npx shadcn-ui@latest add radio-group
-// Or, if you can't run that, let me know and I'll provide the code.

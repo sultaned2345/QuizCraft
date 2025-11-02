@@ -19,6 +19,7 @@ export interface Quiz {
   created_at: string; // Changed from createdAt to match schema/API
   is_public: boolean;
   immediate_feedback: boolean;
+  time_limit_minutes: number | null; // --- MODIFIED: Added Quiz Timer ---
   questions?: Question[]; // Relation
 }
 
