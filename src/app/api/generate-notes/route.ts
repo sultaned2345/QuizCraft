@@ -101,10 +101,7 @@ async function updateAIUsage(userId: string, month: Date, count: number = 1) {
 export async function POST(request: NextRequest) {
   console.log("DEBUG: POST /api/generate-notes starting...");
   try {
-    // *** TEMPORARY DEBUG LOGGING - REMOVE LATER ***
-    console.log("DEBUG: Using DATABASE_URL:", process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 40) + "..." : "DATABASE_URL is NOT SET");
-
-    const user = await requireAuth(request); // Requires DB connection implicitly via Supabase client? Check requireAuth implementation.
+    const user = await requireAuth(request);
     console.log("DEBUG: Authentication successful, user ID:", user.id);
 
     const body = await request.json();
@@ -112,9 +109,43 @@ export async function POST(request: NextRequest) {
 
     // 1. Validate request and get source content
     if (!url && !text) { return NextResponse.json<ApiResponse>({ success: false, error: "Either text or a URL is required." }, { status: 400 }); }
+    
     let sourceContent = text;
-    if (url) { try { const response = await fetch(url); if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`); const html = await response.text(); sourceContent = extractTextFromHtml(html); } catch (e: any) { return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 }); } }
-    if (!sourceContent || sourceContent.trim().length < MIN_CONTENT_LENGTH) { return NextResponse.json<ApiResponse>({ success: false, error: `Source content too short (minimum ${MIN_CONTENT_LENGTH} chars).` }, { status: 400 }); }
+
+    // --- FIX: Add User-Agent to fetch and improve logging ---
+    if (url) { 
+        console.log(`DEBUG: Attempting to fetch URL: ${url}`);
+        try { 
+            const response = await fetch(url, {
+                headers: {
+                    // Set a common User-Agent to avoid simple bot blockers
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+
+            console.log(`DEBUG: Fetch response status for ${url}: ${response.status}`);
+            
+            if (!response.ok) {
+                throw new Error(`Fetch failed with status: ${response.status} ${response.statusText}`); 
+            }
+            
+            const html = await response.text();
+            console.log(`DEBUG: Fetched HTML (first 500 chars): ${html.substring(0, 500)}...`);
+            
+            sourceContent = extractTextFromHtml(html); 
+            console.log(`DEBUG: Extracted text (first 500 chars): ${sourceContent.substring(0, 500)}...`);
+
+        } catch (e: any) { 
+            console.error(`DEBUG: URL process error for ${url}:`, e.message);
+            return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 }); 
+        } 
+    }
+    // --- END FIX ---
+    
+    if (!sourceContent || sourceContent.trim().length < MIN_CONTENT_LENGTH) { 
+        console.warn(`DEBUG: Source content too short after processing. Length: ${sourceContent?.trim().length || 0}`);
+        return NextResponse.json<ApiResponse>({ success: false, error: `Source content too short (minimum ${MIN_CONTENT_LENGTH} chars). The URL might be a web app or have anti-scraping measures.` }, { status: 400 }); 
+    }
     console.log("DEBUG: Source content prepared.");
 
     // 2. Check usage limits
@@ -125,11 +156,9 @@ export async function POST(request: NextRequest) {
         console.log("DEBUG: Usage limit check result:", usage);
     } catch (dbError: any) {
         console.error("DEBUG: Error during checkAIGenerationUsageLimit:", dbError);
-        // Rethrow specifically if it's the connection error
         if (dbError instanceof Prisma.PrismaClientInitializationError || (dbError.message && dbError.message.includes("Can't reach database server"))) {
             throw dbError; // Let the main catch block handle it
         }
-        // Handle other errors during usage check if necessary
         throw new Error(`Failed to check usage limits: ${dbError.message}`);
     }
 
@@ -155,11 +184,9 @@ export async function POST(request: NextRequest) {
         console.log(`DEBUG: Saved ${savedNotesResult.count} note(s).`);
     } catch (dbError: any) {
         console.error("DEBUG: Error during prisma.notes.createMany:", dbError);
-        // Rethrow specifically if it's the connection error
         if (dbError instanceof Prisma.PrismaClientInitializationError || (dbError.message && dbError.message.includes("Can't reach database server"))) {
             throw dbError; // Let the main catch block handle it
         }
-        // Handle other potential Prisma errors during save
         throw new Error(`Failed to save notes to database: ${dbError.message}`);
     }
 
@@ -170,9 +197,7 @@ export async function POST(request: NextRequest) {
         await updateAIUsage(user.id, new Date(), actualGeneratedCount);
         console.log("DEBUG: Updated AI usage count.");
     } catch (usageError: any) {
-        // Log critically but don't fail the request if saving succeeded
         console.error("CRITICAL DEBUG: Failed to update AI usage count AFTER saving note:", usageError);
-        // Maybe add logic here to flag this user for manual review or retry later
     }
 
 
@@ -191,17 +216,14 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error in /api/generate-notes POST handler:", error);
 
-    // Specific error checks
     if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid") || error.message?.includes("Invalid JSON")) {
         return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 });
     }
-    // Check specifically for Prisma connection errors (thrown from the try blocks above)
     if (error instanceof Prisma.PrismaClientInitializationError || (error.message && error.message.includes("Can't reach database server"))) {
          console.error("Database connection error confirmed:", error.message);
          return NextResponse.json<ApiResponse>({ success: false, error: `Database connection error: ${error.message}` }, { status: 503 }); // 503 Service Unavailable
     }
 
-    // Default internal server error
     return NextResponse.json<ApiResponse>({ success: false, error: error.message || "Internal server error during note generation." }, { status: 500 });
   }
 }
