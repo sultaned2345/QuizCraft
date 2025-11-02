@@ -1,30 +1,8 @@
 // src/app/(app)/flashcards/loading.tsx
-// UPDATED FILE
+// UPDATED FILE (Motion removed)
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { DeckCardSkeleton } from "@/components/skeletons/DeckCardSkeleton"; // <-- Use specific skeleton
-import { motion } from 'framer-motion'; // <-- Import motion
-
-// --- Animation Variants (copied from FlashcardsClientComponent) ---
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
-    y: 0,
-    transition: { type: 'spring', stiffness: 100 }
-  },
-};
-// ---
+import { DeckCardSkeleton } from "@/components/skeletons/DeckCardSkeleton";
 
 export default function FlashcardsLoading() {
   return (
@@ -38,19 +16,12 @@ export default function FlashcardsLoading() {
         <Skeleton className="h-10 w-32 rounded-md" /> {/* New Button */}
       </div>
 
-      {/* Grid Skeleton --- WRAPPED IN MOTION --- */}
-      <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
+      {/* Grid Skeleton (No motion) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[...Array(6)].map((_, i) => (
-          <motion.div key={i} variants={itemVariants}>
-            <DeckCardSkeleton />
-          </motion.div>
+          <DeckCardSkeleton key={i} />
         ))}
-      </motion.div>
+      </div>
     </>
   );
 }

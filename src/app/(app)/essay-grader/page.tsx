@@ -4,6 +4,9 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
+// --- THIS IS THE FIX ---
+import { useRouter } from 'next/navigation';
+// --- END FIX ---
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,7 +25,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-// --- NEW IMPORTS ---
 import {
   Tabs,
   TabsContent,
@@ -35,11 +37,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-// ---
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// (Keep all existing interfaces: GradedEssayListItem, rubricPresets, AIUsageStatus)
+// (All interfaces, components, and state remain the same)
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 const rubricPresets = {
     general: {
@@ -61,8 +62,6 @@ interface AIUsageStatus {
     remaining: number | typeof Infinity;
     isPro: boolean;
 }
-
-// --- NEW: Score Badge Component ---
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -72,7 +71,6 @@ function ScoreBadge({ score }: { score: number | null }) {
       </div>
     );
   }
-
   let colorClass = 'text-gray-600 dark:text-gray-400';
   if (score >= 90) colorClass = 'text-green-600 dark:text-green-500';
   else if (score >= 80) colorClass = 'text-blue-600 dark:text-blue-500';
@@ -89,10 +87,8 @@ function ScoreBadge({ score }: { score: number | null }) {
     </div>
   );
 }
-// ---
 
 export default function EssayGraderPage() {
-  // (Keep all existing state hooks: essayText, rubricText, selectedFile, etc.)
   const [essayText, setEssayText] = useState('');
   const [rubricText, setRubricText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -108,9 +104,9 @@ export default function EssayGraderPage() {
   const { session } = useAuth();
   const { toast } = useToast();
   const { setPageContext } = usePageContext();
-  const router = useRouter(); // Added router for history push
+  const router = useRouter(); // This now works because of the import
 
-  // (Keep all existing useEffect hooks for context and data fetching)
+  // (All functions and useEffects remain unchanged)
   useEffect(() => {
     if (gradedEssay?.id) {
       setPageContext({ type: 'essay', id: gradedEssay.id });
@@ -156,7 +152,6 @@ export default function EssayGraderPage() {
     fetchHistory();
   }, [session]); 
 
-  // (Keep handleFileChange, handleViewHistoryItem, and handleSubmit)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -178,7 +173,7 @@ export default function EssayGraderPage() {
        }
        setSelectedFile(file);
        setEssayText('');
-       setGradedEssay(null); // Clear old results
+       setGradedEssay(null);
      } else {
        setSelectedFile(null);
      }
@@ -291,17 +286,14 @@ export default function EssayGraderPage() {
     }
   };
   
-  // (Keep renderHighlightedEssay function)
   const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     let parts: (string | React.ReactNode)[] = [text];
-
     const colors = {
         clarity: 'bg-blue-200 dark:bg-blue-900/50',
         argument: 'bg-yellow-200 dark:bg-yellow-900/50',
         grammar: 'bg-red-200 dark:bg-red-900/50',
     };
-
     categories.forEach(cat => {
         const categoryData = feedback[cat];
         if (typeof categoryData === 'object' && categoryData.highlights) {
@@ -312,7 +304,6 @@ export default function EssayGraderPage() {
                         newParts.push(part);
                         return;
                     }
-                    
                     const splitText = part.split(highlight.text);
                     if (splitText.length > 1) {
                         for (let i = 0; i < splitText.length - 1; i++) {
@@ -342,32 +333,25 @@ export default function EssayGraderPage() {
             });
         }
     });
-
     return <pre className="text-sm whitespace-pre-wrap break-words p-4">{parts.map((part, i) => <Fragment key={i}>{part}</Fragment>)}</pre>;
   };
 
-  // --- REFACTORED: renderFeedback now uses Accordion ---
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     if (!fb) return null;
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     
     return (
       <div className="space-y-4">
-        {/* Overall Summary first */}
         {fb.summary && (
           <div className="mb-4">
             <h4 className="font-semibold text-base mb-1">Overall Summary</h4>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb.summary}</p>
           </div>
         )}
-
-        {/* Accordion for categories */}
         <Accordion type="multiple" defaultValue={['clarity', 'argument', 'grammar']} className="w-full">
           {categories.map((key) => {
             const data = fb[key];
             if (!data) return null;
-
-            // Handle new structured categories
             if (typeof data === 'object' && data.summary) {
               return (
                 <AccordionItem value={key} key={key}>
@@ -388,10 +372,8 @@ export default function EssayGraderPage() {
                 </AccordionItem>
               );
             }
-            
-            // Fallback for old string format
             if (typeof data === 'string') {
-              return (
+               return (
                  <AccordionItem value={key} key={key}>
                     <AccordionTrigger className="text-base font-semibold capitalize">{key.replace(/_/g, ' ')}</AccordionTrigger>
                     <AccordionContent>
@@ -400,15 +382,14 @@ export default function EssayGraderPage() {
                  </AccordionItem>
                );
             }
-            
             return null;
           })}
         </Accordion>
       </div>
     );
   };
-  // --- END REFACTOR ---
-
+  
+  // (Rest of the component JSX remains the same)
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
 
   return (
@@ -435,9 +416,7 @@ export default function EssayGraderPage() {
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* --- Left Column (Input) --- */}
         <div className="lg:col-span-1 space-y-6">
-           {/* (Input Card - Unchanged) */}
            <Card>
                 <CardHeader>
                     <CardTitle>Your Essay</CardTitle>
@@ -473,7 +452,6 @@ export default function EssayGraderPage() {
                     )}
                 </CardContent>
            </Card>
-           {/* (Criteria Card - Unchanged) */}
             <Card>
                 <CardHeader>
                     <CardTitle>Grading Criteria (Optional)</CardTitle>
@@ -500,7 +478,6 @@ export default function EssayGraderPage() {
                     </div>
                 </CardContent>
             </Card>
-            {/* (Error & Submit Button - Unchanged) */}
              {error && (
                 <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                     <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -521,7 +498,6 @@ export default function EssayGraderPage() {
              )}
         </div>
         
-        {/* --- MODIFIED: Middle Column (Feedback) --- */}
         <div className="lg:col-span-1 space-y-6">
            <Card className="min-h-[400px] flex flex-col"> 
                 <CardHeader>
@@ -542,7 +518,6 @@ export default function EssayGraderPage() {
                             <TabsTrigger value="highlighted-essay">Highlighted Essay</TabsTrigger>
                           </TabsList>
                           
-                          {/* Summary Tab */}
                           <TabsContent value="summary" className="flex-1 overflow-hidden">
                             <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
                                 <ScoreBadge score={gradedEssay.score} />
@@ -558,7 +533,6 @@ export default function EssayGraderPage() {
                             </ScrollArea>
                           </TabsContent>
                           
-                          {/* Highlighted Essay Tab */}
                           <TabsContent value="highlighted-essay" className="flex-1 overflow-hidden">
                             <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
                                 {gradedEssay.essay_content ? (
@@ -591,7 +565,6 @@ export default function EssayGraderPage() {
            </Card>
         </div>
         
-        {/* --- Right Column (History) --- */}
          <div className="lg:col-span-1 space-y-6">
             <Card className="min-h-[400px]">
                 <CardHeader>
@@ -648,7 +621,6 @@ export default function EssayGraderPage() {
                 </CardContent>
             </Card>
          </div>
-
       </div>
     </>
   );

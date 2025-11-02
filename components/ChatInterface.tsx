@@ -1,5 +1,5 @@
 // components/ChatInterface.tsx
-'use client';
+// UPDATED FILE
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -8,44 +8,48 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
-import { Bot, Loader2, Send, Sparkles, User as UserIcon, FileText, StickyNote, FileQuestion, Layers, MessageSquareQuestion } from 'lucide-react';
+// --- THIS IS THE FIX ---
+import {
+  Bot,
+  Loader2,
+  Send,
+  Sparkles,
+  User as UserIcon,
+  FileText,
+  StickyNote,
+  FileQuestion,
+  Layers,
+  MessageSquareText, // Changed from MessageSquareQuestion
+} from 'lucide-react';
+// --- END FIX ---
 import { cn } from '@/lib/utils';
-import { PageContextType } from '@/contexts/PageContext'; // Import the type
+import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 
-// Types
+// (Types and helper functions remain the same)
 type Source = Pick<RelatedItem, 'content_id' | 'content_type' | 'content_title' | 'citation'>;
-
 interface Message {
   role: 'user' | 'model';
   text: string;
   sources?: Source[];
 }
-
 interface ChatInterfaceProps {
-  // The context (e.g., doc, quiz, or null) for the chat
   context: PageContextType;
-  // Optional pre-loaded messages (e.g., from history)
   initialMessages?: Message[];
-  // Optional flag if history is being loaded by parent
   isLoadingHistory?: boolean;
-  // Optional class name to style the container
-  className?: string; 
+  className?: string;
 }
-
-// Helper functions
 function getSourceHref(source: Source): string {
     if (source.content_type === 'note') {
         return `/notes`; 
     }
     if (source.content_type === 'document') {
-        return `/documents`; // Future: could be /documents/${source.content_id}
+        return `/documents`;
     }
     return '#';
 }
-
 function getSourceIcon(source: Source) {
     if (source.content_type === 'note') {
         return <StickyNote className="w-3 h-3" />;
@@ -63,32 +67,28 @@ export function ChatInterface({
   isLoadingHistory: isHistoryLoadingProp = false,
   className
 }: ChatInterfaceProps) {
+  // (All state and hooks remain the same)
   const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(isHistoryLoadingProp);
   const { session } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  
   const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
   const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  
-  // --- NEW: State for suggested questions ---
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[] | null>(null);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
-  // ---
-
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- (Action Handlers from original file) ---
+  // (All action handlers and useEffects remain the same)
   const handleGenerateQuizFromContext = () => {
     if (context?.type !== 'document' || !context.id) return;
     setIsActionLoading(true);
     toast({ title: 'Preparing Quiz...' });
     router.push(`/create?docId=${context.id}`);
-    setIsActionLoading(false); // Will this run? Maybe. Better to leave it.
+    setIsActionLoading(false);
   };
   
   const handleGenerateNotesFromContext = async () => {
@@ -142,24 +142,18 @@ export function ChatInterface({
       setIsActionLoading(false);
     }
   };
-  // --- END Action Handlers ---
 
-
-  // Effect to load history OR use initialMessages
   useEffect(() => {
-    // If initial messages are provided, use them.
     if (initialMessages && initialMessages.length > 0) {
       setMessages(initialMessages);
-      setIsHistoryLoading(isHistoryLoadingProp); // Respect parent's loading state
+      setIsHistoryLoading(isHistoryLoadingProp);
     } else if (isHistoryLoadingProp) {
-        // Parent is loading, but hasn't passed messages yet
         setMessages([]);
         setIsHistoryLoading(true);
     } else if (session) {
-      // No initial messages, fetch history ourselves
       setIsHistoryLoading(true);
       setProactiveActions(null); 
-      setSuggestedQuestions(null); // <-- Reset suggestions
+      setSuggestedQuestions(null);
       
       let historyFetchUrl = '/api/chat/history';
       
@@ -173,7 +167,6 @@ export function ChatInterface({
         setProactivePrompt("I see you're viewing this document. What would you like to do?");
         historyFetchUrl = `/api/chat/history?context_id=${context.id}`;
         
-        // --- NEW: Fetch suggested questions ---
         setIsSuggestionsLoading(true);
         fetch(`/api/documents/${context.id}/suggest-questions`, {
             headers: { 'Authorization': `Bearer ${session?.access_token}` },
@@ -183,12 +176,11 @@ export function ChatInterface({
             if (data.success && data.data && data.data.length > 0) {
                 setSuggestedQuestions(data.data);
             } else {
-                setSuggestedQuestions([]); // Set to empty array to stop loading
+                setSuggestedQuestions([]);
             }
         })
-        .catch(() => setSuggestedQuestions([])) // Set to empty on error
+        .catch(() => setSuggestedQuestions([]))
         .finally(() => setIsSuggestionsLoading(false));
-        // ---
         
         setProactiveActions(
           <div className="flex flex-col sm:flex-row gap-2 mt-2">
@@ -207,9 +199,8 @@ export function ChatInterface({
           </div>
         );
       } else {
-        // General context (null)
         setProactivePrompt(null);
-        historyFetchUrl = '/api/chat/history'; // Fetches general history
+        historyFetchUrl = '/api/chat/history';
       }
 
       fetch(historyFetchUrl, {
@@ -236,9 +227,8 @@ export function ChatInterface({
           setIsHistoryLoading(false);
       });
     }
-  }, [context, session, initialMessages, isHistoryLoadingProp]); // Rerun if context changes
+  }, [context, session, initialMessages, isHistoryLoadingProp]);
 
-  // Update messages if parent's initialMessages/loading state updates
   useEffect(() => {
     if (initialMessages) {
       setMessages(initialMessages);
@@ -250,7 +240,6 @@ export function ChatInterface({
   }, [isHistoryLoadingProp]);
 
 
-  // Scroll to bottom effect
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollableViewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
@@ -258,9 +247,8 @@ export function ChatInterface({
         scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
       }
     }
-  }, [messages, isHistoryLoading]); // Also trigger on history load end
+  }, [messages, isHistoryLoading]);
 
-  // --- NEW: Helper function to send message (used by form and suggestions) ---
   const sendMessage = async (messageText: string) => {
     if (!messageText || !session || isLoading) return;
 
@@ -282,8 +270,8 @@ export function ChatInterface({
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          history: messages, // Send history *before* the new message
-          message: messageText, // Send new message separately
+          history: messages,
+          message: messageText,
           context: context,
         }),
       });
@@ -321,11 +309,9 @@ export function ChatInterface({
       setMessages((prev) => {
         const newMessages = [...prev];
         if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model' && newMessages[newMessages.length - 1].text === '') {
-          // If we already added a blank model message, update it
           newMessages[newMessages.length - 1].text = errorMessage;
           return newMessages;
         }
-        // Otherwise, add a new error message
         return [...prev, { role: 'model', text: errorMessage }];
       });
       console.error('Chat error:', error);
@@ -334,13 +320,11 @@ export function ChatInterface({
     }
   };
 
-  // Form submit handler
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sendMessage(input.trim());
   };
   
-  // Suggestion click handler
   const sendSuggestedQuestion = (question: string) => {
     sendMessage(question);
   };
@@ -362,7 +346,6 @@ export function ChatInterface({
             </div>
           ) : (
             <>
-              {/* --- MODIFIED: Proactive/Suggestions Block --- */}
               {messages.length === 0 && (proactivePrompt || proactiveActions || isSuggestionsLoading || (suggestedQuestions && suggestedQuestions.length > 0)) && (
                 <div className="flex items-start gap-3">
                   <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
@@ -373,7 +356,6 @@ export function ChatInterface({
                     
                     {proactiveActions}
 
-                    {/* --- NEW: Suggestions Display --- */}
                     {isSuggestionsLoading && (
                       <div className="space-y-2 pt-2">
                         <Skeleton className="h-7 w-full rounded-md" />
@@ -392,13 +374,14 @@ export function ChatInterface({
                             onClick={() => sendSuggestedQuestion(q)}
                             disabled={isLoading}
                           >
-                            <MessageSquareQuestion className="w-3 h-3 mr-2 shrink-0" />
+                            {/* --- THIS IS THE FIX --- */}
+                            <MessageSquareText className="w-3 h-3 mr-2 shrink-0" />
+                            {/* --- END FIX --- */}
                             {q}
                           </Button>
                         ))}
                       </div>
                     )}
-                    {/* --- END NEW --- */}
                   </div>
                 </div>
               )}
