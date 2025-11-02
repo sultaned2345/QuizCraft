@@ -1,4 +1,4 @@
-// src/app/(app)/dashboard/DashboardClientComponent.tsx
+// src/app/(app)/quizzes/QuizzesClientComponent.tsx
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -54,12 +54,13 @@ interface DashboardData {
   recentAttempts: QuizAttempt[];
 }
 
-interface DashboardClientComponentProps {
+interface QuizzesClientComponentProps { // --- MODIFICATION: Renamed ---
   initialData: DashboardData;
 }
 
 // --- NEW Study Queue Widget Component ---
 function StudyQueueWidget({ dueCount }: { dueCount: number }) {
+  // ... (component unchanged) ...
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -82,8 +83,6 @@ function StudyQueueWidget({ dueCount }: { dueCount: number }) {
           className="w-full"
           disabled={dueCount === 0}
         >
-          {/* This links to the main flashcards page. A future improvement
-              could be a dedicated /flashcards/study-all page. */}
           <Link href="/flashcards">
             <Play className="w-4 h-4 mr-2" />
             Start Review
@@ -95,7 +94,7 @@ function StudyQueueWidget({ dueCount }: { dueCount: number }) {
 }
 
 // --- Main Dashboard Client Component ---
-export function DashboardClientComponent({ initialData }: DashboardClientComponentProps) {
+export function QuizzesClientComponent({ initialData }: QuizzesClientComponentProps) { // --- MODIFICATION: Renamed ---
   // --- STATE ---
   const [quizzes, setQuizzes] = useState<DashboardQuiz[]>(initialData.quizzes);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -142,7 +141,7 @@ export function DashboardClientComponent({ initialData }: DashboardClientCompone
   }, [user, session, toast, quizzesPerPage, isLoadingMore, totalPages]);
 
   const handleLoadMore = () => {
-    console.log("Load More clicked. Requires /api/dashboard/quizzes endpoint.");
+    console.log("Load More clicked. Requires /api/quizzes endpoint.");
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
     // fetchMoreQuizzes(currentPage + 1);
   };

@@ -28,7 +28,7 @@ const DashboardHeader = () => {
 
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <Link href="/dashboard" className="flex items-center gap-2">
+      <Link href="/quizzes" className="flex items-center gap-2"> {/* <-- MODIFIED */}
         <Sparkles className="w-6 h-6 text-primary" />
         <span className="text-xl font-bold">QuizCraft</span>
       </Link>
@@ -80,7 +80,7 @@ export default function EditQuizPage() {
           if (quiz.user_id !== user.id) { 
           // --- END OF FIX ---
             toast({ title: "Access Denied", description: "You don't have permission to edit this quiz.", variant: "destructive" });
-            router.push('/dashboard');
+            router.push('/quizzes'); // <-- MODIFIED
             return;
           }
           
@@ -98,7 +98,7 @@ export default function EditQuizPage() {
         })
         .catch((err) => {
           toast({ title: "Error", description: err.message || "Quiz not found.", variant: "destructive" });
-          router.push('/dashboard');
+          router.push('/quizzes'); // <-- MODIFIED
         });
     }
   }, [user, authLoading, quizId, router, toast]);
@@ -156,7 +156,7 @@ export default function EditQuizPage() {
       }
 
       toast({ title: "✅ Success", description: "Quiz has been updated!" });
-      router.push('/dashboard');
+      router.push('/quizzes'); // <-- MODIFIED
       router.refresh(); // Force refresh dashboard data
     } catch (error: any) {
       toast({ title: "❌ Error", description: error.message, variant: "destructive" });
@@ -177,9 +177,9 @@ export default function EditQuizPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <DashboardHeader />
       <div className="container mx-auto max-w-4xl py-12 px-4">
-        <Button variant="ghost" className="mb-6" onClick={() => router.push('/dashboard')}>
+        <Button variant="ghost" className="mb-6" onClick={() => router.push('/quizzes')}> {/* <-- MODIFIED */}
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back to Quizzes
         </Button>
         
         <div className="space-y-8">

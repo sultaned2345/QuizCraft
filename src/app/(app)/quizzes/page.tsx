@@ -1,8 +1,9 @@
-// src/app/(app)/dashboard/page.tsx
+// src/app/(app)/quizzes/page.tsx
 
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
-import { DashboardClientComponent } from './DashboardClientComponent';
+// --- MODIFICATION: Renamed component import ---
+import { QuizzesClientComponent } from './QuizzesClientComponent';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/getServerSession';
 import { Quiz, QuizAttempt } from '@/types/database';
@@ -113,14 +114,14 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
 }
 
 // --- The Page Component (Server Component) ---
-export default async function DashboardPage() {
+export default async function QuizzesPage() { // --- MODIFICATION: Renamed component ---
   const session = await getServerSession();
 
   if (!session?.user) {
     return <div>Please log in.</div>; // Placeholder
   }
 
-  console.log("--- Dashboard Page Got Session User ID:", session.user.id);
+  console.log("--- Quizzes Page Got Session User ID:", session.user.id);
   // Fetch initial data on the server
   const initialDashboardData = await getDashboardData(session.user.id, 1, 9);
 
@@ -132,8 +133,8 @@ export default async function DashboardPage() {
         </div>
       }
     >
-      {/* Render the Client Component */}
-      <DashboardClientComponent initialData={initialDashboardData} />
+      {/* --- MODIFICATION: Renamed component --- */}
+      <QuizzesClientComponent initialData={initialDashboardData} />
     </Suspense>
   );
 }

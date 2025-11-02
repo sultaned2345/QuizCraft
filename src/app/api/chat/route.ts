@@ -30,7 +30,7 @@ interface AISource {
 
 // Define Context type
 interface PageContext {
-  type: 'quiz' | 'essay' | 'page';
+  type: 'quiz' | 'essay' | 'page' | 'document'; // --- ADDED 'document' ---
   id?: string;
   name?: string;
 }
@@ -51,7 +51,9 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// --- NEW: Define Tool Schemas ---
+// --- (Tool Schemas and Handlers remain unchanged) ---
+// ... (tools, handleAddQuestionToQuiz, handleUpdateQuestionInQuiz, handleDeleteQuestionFromQuiz, saveChatHistory) ...
+// --- Tool Schemas ---
 const tools: { spec: FunctionDeclaration }[] = [
   {
     spec: {
@@ -127,7 +129,7 @@ const tools: { spec: FunctionDeclaration }[] = [
   }
 ];
 
-// --- NEW: Tool Handler Functions ---
+// --- Tool Handler Functions ---
 
 async function handleAddQuestionToQuiz(args: {
   quizId: string;
@@ -283,13 +285,73 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
         { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy new request is: ${message}` }] }
       ];
 
-      // Save user message to history (Quiz-specific, not general)
-      // Note: We'll skip saving context-specific chats for now to meet the "general chat history" requirement.
+      // We don't save quiz-editing chats to the general history
       // await saveChatHistory(userId, 'user', `(Context: Quiz ${quiz.id}) ${message}`);
 
+    // --- NEW BRANCH FOR DOCUMENT-SPECIFIC CHAT ---
+    } else if (context?.type === 'document' && context.id) {
+      // --- BRANCH B: DOCUMENT-SPECIFIC RAG ---
+      console.log(`[Chat API] Handling Document-Specific RAG for doc: ${context.id}`);
+      
+      // We don't save document-specific chats to the general history
+      // await saveChatHistory(userId, 'user', message); 
+      
+      model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
+
+      const queryEmbedding = await generateQueryEmbedding(message);
+      
+      // Call RPC, passing the specific document ID
+      const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.7, 
+          match_count: 5,
+          p_user_id: user.id,
+          p_content_id: context.id // <-- PASS THE DOCUMENT ID HERE
+      });
+
+      if (rpcError) { 
+        console.error("Error matching document chunks:", rpcError);
+        throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
+      }
+
+      let contextString = `--- START: Relevant excerpts from document --- \n\n`;
+      if (chunks && chunks.length > 0) {
+          chunks.forEach((chunk: any, index: number) => {
+              const citation = index + 1;
+              contextString += `[${citation}] Excerpt (from ${chunk.content_title || 'Document'}):\n`;
+              contextString += `${chunk.content_chunk}\n\n`;
+              sources.push({
+                  content_id: chunk.content_id,
+                  content_type: chunk.content_type,
+                  content_title: chunk.content_title || 'Document',
+                  citation: citation,
+              });
+          });
+      } else {
+          contextString += "No specific excerpts were found for your question in this document.\n";
+      }
+      contextString += "--- END: Relevant excerpts from document ---";
+
+      systemPrompt = `You are a helpful AI tutor. Your task is to answer the user's questions based ONLY on the provided "RELEVANT EXCERPTS" from the document they are currently viewing.
+- Do not use any external knowledge. 
+- You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence.
+- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't answer that based on the provided excerpts from this document."
+
+${contextString}`;
+
+      // We don't load general history for document-specific chats
+      chatHistory = [
+        { role: "user", parts: [{ text: systemPrompt }] },
+        { role: "model", parts: [{ text: "I'm ready to answer questions about this document. What would you like to know?" }] },
+        ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
+          role: msg.role,
+          parts: [{ text: msg.text }],
+        })),
+      ];
+    // --- END NEW BRANCH ---
 
     } else if (context?.type === 'essay' && context.id) {
-      // --- BRANCH B: ESSAY FOLLOW-UP (Unchanged) ---
+      // --- BRANCH C: ESSAY FOLLOW-UP ---
       console.log(`[Chat API] Handling Essay Follow-up for essay: ${context.id}`);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
@@ -327,7 +389,7 @@ ${JSON.stringify(gradedEssay.feedback)}
       await saveChatHistory(userId, 'user', message);
 
     } else {
-      // --- BRANCH C: DEFAULT RAG (Retrieval-Augmented Generation) (Modified to save history) ---
+      // --- BRANCH D: DEFAULT RAG (Retrieval-Augmented Generation) ---
       console.log(`[Chat API] Handling Default RAG for user: ${user.id}`);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
@@ -336,11 +398,13 @@ ${JSON.stringify(gradedEssay.feedback)}
       await saveChatHistory(userId, 'user', message);
       
       const queryEmbedding = await generateQueryEmbedding(message);
+      // --- MODIFIED RPC CALL: Pass NULL for p_content_id ---
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7,
           match_count: 5,
-          p_user_id: user.id
+          p_user_id: user.id,
+          p_content_id: null // <-- This ensures it searches ALL documents
       });
       if (rpcError) { 
         console.error("Error matching chunks:", rpcError);
@@ -457,8 +521,8 @@ ${contextString}`;
         }
         
         // --- Save model response to history ---
-        // Only save if it's not a quiz-editing context
-        if (context?.type !== 'quiz') {
+        // Only save if it's not a quiz-editing or document-specific chat context
+        if (!context || (context.type !== 'quiz' && context.type !== 'document')) {
             await saveChatHistory(userId, 'model', fullModelResponse);
         }
 
@@ -477,11 +541,14 @@ ${contextString}`;
     if (error instanceof Response) return error;
     console.error("Error in /api/chat:", error);
     
-    // Save error to history? Maybe not.
-    // if (userId && userMessageContent) {
-    //     await saveChatHistory(userId, 'user', userMessageContent);
-    //     await saveChatHistory(userId, 'model', `Error: ${error.message || "An internal server error occurred."}`);
-    // }
+    // Save error to history?
+    if (userId && userMessageContent) {
+        // Only save if it was a general chat
+        const tempContext = (request as any).context; // A bit of a hack to get context here
+        if (!tempContext || (tempContext.type !== 'quiz' && tempContext.type !== 'document')) {
+            await saveChatHistory(userId, 'model', `Error: ${error.message || "An internal server error occurred."}`);
+        }
+    }
     
     return NextResponse.json(
       { success: false, error: error.message || "An internal server error occurred." },

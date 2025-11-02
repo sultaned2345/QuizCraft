@@ -21,7 +21,7 @@ import { useState } from 'react';
 import { ChatbotDialog } from '@/components/ChatbotDialog';
 import { PageProvider } from '@/contexts/PageContext'; // <-- 1. IMPORT
 
-// ... (AppHeader and SidebarNav components remain unchanged) ...
+// ... (AppHeader component remains unchanged) ...
 const AppHeader = () => {
   /* ... (no changes) ... */
   const { signOut } = useAuth();
@@ -44,15 +44,18 @@ const AppHeader = () => {
     </header>
   );
 };
+
+// --- MODIFIED SidebarNav ---
 const SidebarNav = () => {
-  /* ... (no changes) ... */
   const pathname = usePathname();
   const navItems = [
-    { href: '/dashboard', label: 'Quizzes', icon: FileQuestion },
+    // --- Re-ordered and Renamed ---
+    { href: '/documents', label: 'Documents', icon: FileText },
+    { href: '/quizzes', label: 'Quizzes', icon: FileQuestion }, // <-- MODIFIED HREF
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
-    { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
+    // --- End of Change ---
   ];
 
   return (
@@ -63,7 +66,9 @@ const SidebarNav = () => {
           href={item.href}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-            (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
+            // --- MODIFIED: Simplified Highlight logic ---
+            (pathname === item.href || (item.href !== '/documents' && pathname.startsWith(item.href))) && 'bg-muted text-primary'
+            // This now correctly highlights /quizzes, /notes, etc., when on sub-pages
           )}
         >
           <item.icon className="h-4 w-4" />
@@ -73,6 +78,7 @@ const SidebarNav = () => {
     </nav>
   );
 };
+// --- END MODIFICATION ---
 
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -85,7 +91,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
           {/* ... (Sidebar content remains the same) ... */}
           <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-            <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+            <Link href="/documents" className="flex items-center gap-2 font-semibold">
               <Sparkles className="h-6 w-6 text-primary" />
               <span className="">QuizCraft</span>
             </Link>

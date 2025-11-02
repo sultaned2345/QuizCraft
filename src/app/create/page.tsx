@@ -70,7 +70,7 @@ const DashboardHeader = () => {
 
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <Link href="/dashboard" className="flex items-center gap-2">
+      <Link href="/quizzes" className="flex items-center gap-2"> {/* <-- MODIFIED */}
         <Sparkles className="w-6 h-6 text-primary" />
         <span className="text-xl font-bold">QuizCraft</span>
       </Link>
@@ -298,7 +298,7 @@ export default function CreatePage() {
         title: 'Quiz Generated!',
         description: `"${result.title}" created.`,
       }); // Access title directly
-      window.location.href = '/dashboard'; // Force full reload
+      window.location.href = '/quizzes'; // <-- MODIFIED: Force full reload to /quizzes
     } catch (err) {
       // Catch errors from fetch itself, parsing, or thrown checks
       const errorMessage = err instanceof Error ? err.message : 'Something went wrong.';

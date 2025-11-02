@@ -45,9 +45,9 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* It's recommended to add your <DashboardHeader /> here */}
       <main className="container mx-auto max-w-2xl py-12 px-4">
-        <Button variant="ghost" className="mb-6" onClick={() => router.push('/dashboard')}>
+        <Button variant="ghost" className="mb-6" onClick={() => router.push('/quizzes')}> {/* <-- MODIFIED */}
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back to Quizzes
         </Button>
         <Card>
           <CardHeader>

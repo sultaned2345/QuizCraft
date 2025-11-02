@@ -47,7 +47,7 @@ type UserAnswer = {
   isCorrect: boolean;
 };
 
-// Updated DashboardHeader
+// --- MODIFIED Header ---
 const DashboardHeader = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -57,7 +57,7 @@ const DashboardHeader = () => {
   };
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <Link href="/dashboard" className="flex items-center gap-2">
+      <Link href="/quizzes" className="flex items-center gap-2"> {/* <-- MODIFIED LINK */}
         <Sparkles className="w-6 h-6 text-primary" />
         <span className="text-xl font-bold">QuizCraft</span>
       </Link>
@@ -73,29 +73,15 @@ const DashboardHeader = () => {
     </header>
   );
 };
+// --- END MODIFICATION ---
 
 export default function QuizPage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [fillInBlankAnswer, setFillInBlankAnswer] = useState('');
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-
-  const [viewMode, setViewMode] = useState<'quiz' | 'results' | 'review'>(
-    'quiz'
-  );
-
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  // --- MODIFICATION: Added state for MATCHING questions ---
+  // ... (rest of the state variables) ...
   const [matchingAnswers, setMatchingAnswers] = useState<string[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
-  // --- END MODIFICATION ---
 
   const { user, loading: authLoading, session } = useAuth();
   const router = useRouter();
@@ -103,6 +89,10 @@ export default function QuizPage() {
   const { toast } = useToast();
   const quizId = params.quizId as string;
 
+  // ... (all helper functions like saveAttempt, handleQuizEnd, loadQuizData, etc. remain unchanged) ...
+  // ... (handleAnswerSelect, handleNextQuestion, handleRestartQuiz, handleMatchingAnswerChange, renderQuestion) ...
+  // ... (loading and error states) ...
+  
   const saveAttempt = useCallback(
     async (score: number, total: number) => {
       if (!session || !quizId) {
@@ -504,9 +494,7 @@ export default function QuizPage() {
   };
 
   if (isLoading || authLoading) {
-    console.log(
-      '[QuizPage Render] Showing loading spinner (isLoading || authLoading).'
-    );
+    // ... (loading render)
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -515,7 +503,7 @@ export default function QuizPage() {
   }
 
   if (error) {
-    console.log(`[QuizPage Render] Showing error message: "${error}"`);
+    // --- MODIFIED: Back button link ---
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
         <DashboardHeader />
@@ -524,21 +512,20 @@ export default function QuizPage() {
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/quizzes')}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back to Quizzes
           </Button>
         </main>
       </div>
     );
+    // --- END MODIFICATION ---
   }
 
   if (!quiz) {
-    console.error(
-      '[QuizPage Render] Reached render return, but quiz is null and no error is set. This should not happen.'
-    );
-    return (
+    // ... (error render)
+     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-destructive">
           An unexpected error occurred. Could not load quiz data.
@@ -546,10 +533,6 @@ export default function QuizPage() {
       </div>
     );
   }
-
-  console.log(
-    `[QuizPage Render] Rendering quiz "${quiz.title}" in viewMode: ${viewMode}`
-  );
 
   const score = userAnswers.filter((a) => a.isCorrect).length;
   const currentQuestion = questions[currentQuestionIndex];
@@ -560,14 +543,16 @@ export default function QuizPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <DashboardHeader />
       <main className="container mx-auto px-4 py-8 md:py-12">
+        {/* --- MODIFIED: Back button link --- */}
         <Button
           variant="ghost"
           className="mb-6"
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/quizzes')}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
+          Back to Quizzes
         </Button>
+        {/* --- END MODIFICATION --- */}
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
             <CardTitle className="text-2xl font-bold">{quiz.title}</CardTitle>
@@ -688,16 +673,19 @@ export default function QuizPage() {
             {viewMode === 'quiz' && questions.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
                 <p>This quiz currently has no questions.</p>
+                {/* --- MODIFIED: Back button link --- */}
                 <Button
                   variant="outline"
                   className="mt-4"
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => router.push('/quizzes')}
                 >
-                  Back to Dashboard
+                  Back to Quizzes
                 </Button>
+                {/* --- END MODIFICATION --- */}
               </div>
             )}
-
+            
+            {/* ... (rest of viewMode === 'results' and viewMode === 'review' are unchanged) ... */}
             {/* Handle results view */}
             {viewMode === 'results' && (
               <div className="text-center py-8">
