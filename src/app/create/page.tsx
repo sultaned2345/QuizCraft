@@ -50,7 +50,7 @@ import {
 } from '@/lib/file-parser';
 // ---
 import { QuestionType, ApiResponse, DocumentMetadata } from '@/types/database';
-import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. IMPORT HOOK (FIXED PATH)
 
 interface QuizSettings {
   questionCount: number;
