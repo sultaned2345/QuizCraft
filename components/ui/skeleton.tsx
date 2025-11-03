@@ -1,6 +1,7 @@
-// src/components/ui/skeleton.tsx
+// components/ui/skeleton.tsx
 'use client';
 
+import * as React from 'react'; // <-- ADD THIS IMPORT
 import { cn } from "@/lib/utils"
 
 function Skeleton({

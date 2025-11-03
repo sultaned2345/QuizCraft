@@ -1,5 +1,7 @@
+// components/ui/collapsible.tsx
 'use client'
 
+import * as React from 'react'; // <-- ADD THIS IMPORT
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
 
 function Collapsible({
