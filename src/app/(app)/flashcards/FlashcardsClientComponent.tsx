@@ -32,7 +32,7 @@ import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-reac
 import { motion } from 'framer-motion';
 // --- NEW: Import Progress component ---
 import { Progress } from '@/components/ui/progress';
-import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
 
 // --- NEW: Define enhanced types locally ---
 interface DeckWithStats extends FlashcardDeck {

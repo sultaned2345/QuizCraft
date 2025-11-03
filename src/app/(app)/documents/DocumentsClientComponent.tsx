@@ -14,7 +14,7 @@ import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, S
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
 import { motion } from 'framer-motion'; // <-- 1. Import motion
-import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];

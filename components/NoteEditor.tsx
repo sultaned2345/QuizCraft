@@ -14,7 +14,7 @@ import NextLink from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { BacklinksWidget } from '@/components/BacklinksWidget';
-import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
 
 // RelatedContentWidget (copied from old file, with minor update)
 function RelatedContentWidget({ note, onLinkClick }: { note: Note | null; onLinkClick: () => void }) {

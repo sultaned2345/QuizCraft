@@ -1,4 +1,4 @@
-// src/components/GenerateNotesDialog.tsx
+// components/GenerateNotesDialog.tsx
 'use client';
 
 import { useState } from 'react';
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ApiResponse, Note } from '@/types/database'; // Import Note if needed for onSuccess
-import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
 
 interface GenerateNotesDialogProps {
     isOpen: boolean;
