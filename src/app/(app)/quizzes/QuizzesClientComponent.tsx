@@ -37,7 +37,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { QuizPerformanceChart } from '@/components/dashboard/QuizPerformanceChart';
-import { motion } from 'framer-motion'; // <-- 1. Import motion
+import { motion } from 'framer-motion';
+// --- 1. IMPORT NEW WIDGET ---
+import { PersonalizedStudyPlan } from '@/components/dashboard/PersonalizedStudyPlan';
+
 
 // ... (Interface definitions remain the same) ...
 interface DashboardQuiz extends Omit<Quiz, 'questions' | 'user_id' | 'immediate_feedback'> {
@@ -56,39 +59,12 @@ interface QuizzesClientComponentProps {
 }
 
 
+// --- 2. REMOVE StudyQueueWidget ---
+/*
 function StudyQueueWidget({ dueCount }: { dueCount: number }) {
-  // ... (component unchanged) ...
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-primary" />
-          <span>Study Queue</span>
-        </CardTitle>
-        <CardDescription>
-          {dueCount > 0
-            ? `You have ${dueCount} flashcard${dueCount > 1 ? 's' : ''} due for review.`
-            : 'You are all caught up on your flashcards!'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-grow flex items-center justify-center">
-        <p className="text-6xl font-bold">{dueCount}</p>
-      </CardContent>
-      <CardFooter>
-        <Button
-          asChild
-          className="w-full"
-          disabled={dueCount === 0}
-        >
-          <Link href="/flashcards">
-            <Play className="w-4 h-4 mr-2" />
-            Start Review
-          </Link>
-        </Button>
-      </CardFooter>
-    </Card>
-  );
+  // ... (this component is no longer needed)
 }
+*/
 
 export function QuizzesClientComponent({ initialData }: QuizzesClientComponentProps) { 
   const [quizzes, setQuizzes] = useState<DashboardQuiz[]>(initialData.quizzes);
@@ -97,7 +73,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const [currentPage, setCurrentPage] = useState(initialData.quizzesCurrentPage);
   const [totalPages, setTotalPages] = useState(initialData.quizzesTotalPages);
   const quizzesPerPage = 9;
-  const [dueCardCount, setDueCardCount] = useState(initialData.dueCardCount);
+  // const [dueCardCount, setDueCardCount] = useState(initialData.dueCardCount); // No longer needed here
   const [recentAttempts, setRecentAttempts] = useState(initialData.recentAttempts);
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([]);
   const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
@@ -243,15 +219,19 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
 
   return (
     <>
-      {/* (Widget Grid) */}
+      {/* --- 3. MODIFY WIDGET GRID --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-1">
-          <StudyQueueWidget dueCount={dueCardCount} />
+          {/* <StudyQueueWidget dueCount={dueCardCount} /> */}
+          {/* REPLACE with new widget */}
+          <PersonalizedStudyPlan />
         </div>
         <div className="md:col-span-2">
           <QuizPerformanceChart attempts={recentAttempts} />
         </div>
       </div>
+      {/* --- END MODIFICATION --- */}
+
 
       {/* (Quizzes Section Header) */}
       <div className="flex items-center justify-between mb-8">

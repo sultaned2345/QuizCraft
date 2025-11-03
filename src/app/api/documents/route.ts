@@ -33,7 +33,7 @@ const ALLOWED_EXTENSIONS = [
     '.pptx'
 ];
 const STORAGE_BUCKET_NAME = 'user_documents';
-const FREE_DOCUMENT_LIMIT = 5;
+const FREE_DOCUMENT_LIMIT = 5; // Keep consistent
 
 // --- MODIFIED: Interface now includes ai_summary ---
 interface PaginatedDocumentsResponse { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
@@ -104,8 +104,55 @@ async function generateAISummary(text: string): Promise<string | null> {
 }
 // --- END NEW HELPER ---
 
+// --- 1. ADD NEW HELPER for Insights ---
+interface AIDocumentInsights {
+  keyConcepts: string[];
+  examQuestions: string[];
+  mainArguments: string[];
+}
 
-// --- POST Handler (Refactored) ---
+async function generateAIDocumentInsights(text: string): Promise<AIDocumentInsights | null> {
+    if (!API_KEY) {
+        console.error("Missing GOOGLE_AI_API_KEY for insights.");
+        return null;
+    }
+    const textSnippet = text.substring(0, 4000); // Use a larger snippet for insights
+
+    try {
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ 
+            model: AI_MODEL_NAME,
+            generationConfig: { temperature: 0.5, responseMimeType: "application/json" }
+        });
+        const prompt = `Based on the following text, extract:
+1.  'keyConcepts': An array of 5-7 core terms or ideas.
+2.  'examQuestions': An array of 3-5 potential exam questions.
+3.  'mainArguments': An array of 2-3 main arguments or theses.
+Return ONLY valid JSON in this exact shape: {"keyConcepts": ["...", "..."], "examQuestions": ["...", "..."], "mainArguments": ["...", "..."]}
+
+Text:
+"""
+${textSnippet}
+"""`;
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const content = response.text();
+        
+        const parsed: AIDocumentInsights = JSON.parse(content);
+        if (!parsed.keyConcepts || !parsed.examQuestions || !parsed.mainArguments) {
+          throw new Error("AI response missing required insight fields.");
+        }
+        return parsed;
+    } catch (error) {
+        console.error("Failed to generate AI insights:", error);
+        return null; // Return null on error, don't fail the upload
+    }
+}
+// --- END NEW HELPER ---
+
+
+// --- 2. MODIFY POST Handler ---
 export async function POST(request: NextRequest) {
     let user;
     let storagePath: string | null = null;
@@ -150,9 +197,9 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 }); //
         }
 
-        // --- DYNAMIC: Generate summary (non-blocking) ---
-        // We run this in parallel with storage upload
+        // --- DYNAMIC: Generate summary AND insights in parallel ---
         const summaryPromise = generateAISummary(extractedText);
+        const insightsPromise = generateAIDocumentInsights(extractedText); // <-- ADD THIS
         // --- END DYNAMIC ---
 
         storagePath = `${user.id}/${Date.now()}-${file.name}`; //
@@ -165,8 +212,11 @@ export async function POST(request: NextRequest) {
         }
         if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); } //
 
-        // --- DYNAMIC: Wait for summary result ---
-        const aiSummary = await summaryPromise; 
+        // --- DYNAMIC: Wait for both summary and insights ---
+        const [aiSummary, aiInsights] = await Promise.all([
+          summaryPromise,
+          insightsPromise
+        ]);
         // --- END DYNAMIC ---
 
         const newDocumentData = await prisma.documents.create({
@@ -178,8 +228,9 @@ export async function POST(request: NextRequest) {
                 storage_path: uploadData.path,
                 extracted_text: extractedText,
                 ai_summary: aiSummary, // <-- Save the summary
+                ai_insights: aiInsights as Prisma.JsonValue | undefined, // <-- SAVE INSIGHTS
             },
-            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true } // <-- Select summary
+            select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true, ai_insights: true } // <-- Select insights
         }); //
 
         // --- NEW: Asynchronously generate embeddings ---
@@ -193,6 +244,7 @@ export async function POST(request: NextRequest) {
             ...newDocumentData,
             user_id: user.id, // Add user_id for type consistency
             ai_summary: newDocumentData.ai_summary || null, // Ensure it's null, not undefined
+            ai_insights: newDocumentData.ai_insights || null, // <-- ADD TO RESPONSE
             created_at: newDocumentData.created_at?.toISOString() || '',
             file_size: Number(newDocumentData.file_size) // Ensure file_size is number
         }; //
@@ -221,7 +273,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// --- DYNAMIC: Original GET Handler (Restored and Modified) ---
+// --- 3. MODIFY GET Handler ---
 export async function GET(request: NextRequest) {
      try {
         const user = await requireAuth(request);
@@ -236,8 +288,8 @@ export async function GET(request: NextRequest) {
         const [documentsData, totalCount] = await prisma.$transaction([
              prisma.documents.findMany({
                 where: { user_id: user.id },
-                // --- MODIFIED: Select ai_summary ---
-                select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true },
+                // --- MODIFIED: Select ai_summary and ai_insights ---
+                select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true, ai_insights: true },
                 orderBy: { created_at: 'desc' },
                 take: limit,
                 skip: skip,
@@ -253,6 +305,7 @@ export async function GET(request: NextRequest) {
              ...doc,
              user_id: user.id, // Add user_id
              ai_summary: doc.ai_summary || null, // Ensure null
+             ai_insights: doc.ai_insights || null, // <-- ADD THIS
              created_at: doc.created_at?.toISOString() || '',
              file_size: Number(doc.file_size) // Ensure number
          }));
