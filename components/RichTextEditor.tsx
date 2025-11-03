@@ -1,5 +1,4 @@
 // components/RichTextEditor.tsx
-// NEW FILE
 'use client';
 
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -22,7 +21,7 @@ const Toolbar = ({ editor }: { editor: any }) => {
     isActive,
     children,
   }: {
-    onClick: ();
+    onClick: () => void; // <-- THIS LINE IS FIXED
     isActive: boolean;
     children: React.ReactNode;
   }) => (
