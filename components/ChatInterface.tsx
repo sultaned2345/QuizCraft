@@ -1,5 +1,5 @@
 // components/ChatInterface.tsx
-// UPDATED FILE
+'use client'; // <-- THIS IS THE FIX
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
-// --- THIS IS THE FIX ---
 import {
   Bot,
   Loader2,
@@ -19,9 +18,8 @@ import {
   StickyNote,
   FileQuestion,
   Layers,
-  MessageSquareText, // Changed from MessageSquareQuestion
+  MessageSquareText,
 } from 'lucide-react';
-// --- END FIX ---
 import { cn } from '@/lib/utils';
 import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
@@ -374,9 +372,7 @@ export function ChatInterface({
                             onClick={() => sendSuggestedQuestion(q)}
                             disabled={isLoading}
                           >
-                            {/* --- THIS IS THE FIX --- */}
                             <MessageSquareText className="w-3 h-3 mr-2 shrink-0" />
-                            {/* --- END FIX --- */}
                             {q}
                           </Button>
                         ))}
