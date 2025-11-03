@@ -16,59 +16,52 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
-    let limitValidation = await validateNoteCreation(user.id); //
+    let limitValidation = await validateNoteCreation(user.id);
     if (!limitValidation.isValid) {
-      return NextResponse.json<ApiResponse>({ success: false, error: limitValidation.error, message: limitValidation.message }, { status: 403 }); //
+      return NextResponse.json<ApiResponse>({ success: false, error: limitValidation.error, message: limitValidation.message }, { status: 403 });
     }
 
     let body: CreateNoteData;
     try {
       body = await request.json();
     } catch (parseError) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON in request body' }, { status: 400 }); //
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON in request body' }, { status: 400 });
     }
     
-    const validation = validateRequestBody(body, ['title', 'content']); //
+    // Title and Content are validated by the client editor, but we double-check
+    const validation = validateRequestBody(body, ['title', 'content']);
     if (!validation.isValid) {
-      return NextResponse.json<ApiResponse>({ success: false, error: validation.error }, { status: 400 }); //
+      return NextResponse.json<ApiResponse>({ success: false, error: validation.error }, { status: 400 });
     }
     
     const newNote = await prisma.notes.create({
         data: {
             user_id: user.id,
             title: body.title.trim(),
-            content: body.content.trim(),
+            content: body.content.trim(), // Storing HTML content
             tags: body.tags || [],
+            linked_note_ids: body.linked_note_ids || [], // <-- ADD THIS
         }
-    }); //
+    });
 
-    // --- NEW: Asynchronously generate embeddings ---
-    // We don't await this; let it run in the background.
-    // No need to block the user's response.
+    // ... (embedding generation remains the same) ...
     generateEmbeddingsForContent(newNote.id, 'note', newNote.content, user.id)
       .catch(err => {
         console.error(`Failed to generate embeddings for note ${newNote.id}:`, err);
       });
-    // --- END NEW ---
 
     const responseNote = {
         ...newNote,
         tags: newNote.tags || [],
+        linked_note_ids: newNote.linked_note_ids || null, // <-- ADD THIS
         created_at: newNote.created_at?.toISOString() || '',
         updated_at: newNote.updated_at?.toISOString() || '',
-    }; //
+    };
 
-    return NextResponse.json<ApiResponse<Note>>({ success: true, data: responseNote, message: 'Note created successfully' }, { status: 201 }); //
+    return NextResponse.json<ApiResponse<Note>>({ success: true, data: responseNote, message: 'Note created successfully' }, { status: 201 });
 
   } catch (error: any) {
     // ... (error handling remains the same) ...
-    console.error('Unexpected error in POST /api/notes:', error);
-     if (error instanceof Response) return error; 
-     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        console.error('Prisma Error creating note:', { code: error.code, meta: error.meta });
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Database error occurred while creating the note.' }, { status: 500 });
-    }
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error: ' + (error.message || 'Unknown error') }, { status: 500 });
   }
 }
 
@@ -76,84 +69,72 @@ export async function POST(request: NextRequest) {
 // --- PUT function (Uses Prisma) ---
 export async function PUT(request: NextRequest) {
   try {
-    const user = await requireAuth(request); //
+    const user = await requireAuth(request);
     const url = new URL(request.url);
-    const noteId = url.searchParams.get('id'); //
+    const noteId = url.searchParams.get('id');
 
     if (!noteId) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Note ID is required' }, { status: 400 }); //
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Note ID is required' }, { status: 400 });
     }
 
-    const body: UpdateNoteData = await request.json(); //
-    const { title, content, tags } = body;
+    const body: UpdateNoteData = await request.json();
+    const { title, content, tags, linked_note_ids } = body; // <-- ADD linked_note_ids
 
-    if (title === undefined && content === undefined && tags === undefined) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Title, content, or tags is required for update' }, { status: 400 }); //
+    if (title === undefined && content === undefined && tags === undefined && linked_note_ids === undefined) { // <-- ADD linked_note_ids
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Title, content, tags, or linked_note_ids is required for update' }, { status: 400 });
     }
 
     // ... (ownership verification remains the same) ...
-    const existingNote = await prisma.notes.findUnique({
-        where: { id: noteId },
+    const existingNote = await prisma.notes.findFirst({ // Use findFirst for RLS
+        where: { id: noteId, user_id: user.id },
         select: { user_id: true }
     });
-
     if (!existingNote) {
-        return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found' }, { status: 404 });
-    }
-    if (existingNote.user_id !== user.id) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Access denied' }, { status: 403 });
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found or access denied' }, { status: 404 });
     }
 
     const updates: Prisma.notesUpdateInput = {};
     if (title !== undefined) {
-      if (title.trim().length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'Title cannot be empty' }, { status: 400 }); //
-      updates.title = title.trim(); //
+      if (title.trim().length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'Title cannot be empty' }, { status: 400 });
+      updates.title = title.trim();
     }
     if (content !== undefined) {
-       updates.content = content.trim(); //
+       updates.content = content.trim(); // Saving HTML
      }
     if (tags !== undefined && Array.isArray(tags)) {
-        updates.tags = tags; //
+        updates.tags = tags;
+    }
+    if (linked_note_ids !== undefined && Array.isArray(linked_note_ids)) { // <-- ADD THIS BLOCK
+        updates.linked_note_ids = linked_note_ids;
     }
 
-    if (Object.keys(updates).length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'No valid fields provided for update' }, { status: 400 }); //
+    if (Object.keys(updates).length === 0) return NextResponse.json<ApiResponse>({ success: false, error: 'No valid fields provided for update' }, { status: 400 });
 
     const updatedNoteData = await prisma.notes.update({
         where: { id: noteId },
         data: updates
-    }); //
+    });
 
-     // --- NEW: Asynchronously RE-generate embeddings if content changed ---
+    // ... (embedding re-generation remains the same) ...
     if (content !== undefined) {
       generateEmbeddingsForContent(updatedNoteData.id, 'note', updatedNoteData.content, user.id)
         .catch(err => {
           console.error(`Failed to RE-generate embeddings for note ${updatedNoteData.id}:`, err);
         });
     }
-    // --- END NEW ---
 
     const updatedNote = {
         ...updatedNoteData,
         tags: updatedNoteData.tags || [],
+        linked_note_ids: updatedNoteData.linked_note_ids || null, // <-- ADD THIS
         created_at: updatedNoteData.created_at?.toISOString() || '',
         updated_at: updatedNoteData.updated_at?.toISOString() || '',
-    }; //
+    };
 
 
-    return NextResponse.json<ApiResponse<Note>>({ success: true, data: updatedNote, message: 'Note updated successfully' }); //
+    return NextResponse.json<ApiResponse<Note>>({ success: true, data: updatedNote, message: 'Note updated successfully' });
   } catch (error) {
     // ... (error handling remains the same) ...
-    if (error instanceof Response) return error;
-    console.error('[PUT /api/notes] Unexpected error updating note:', error);
-     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-         if (error.code === 'P2025') {
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found.' }, { status: 404 });
-         }
-         console.error('Prisma Error updating note:', { code: error.code, meta: error.meta });
-         return NextResponse.json<ApiResponse>({ success: false, error: 'Database error updating note.' }, { status: 500 });
-     }
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update note';
-    return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 

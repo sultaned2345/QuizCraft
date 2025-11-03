@@ -1,6 +1,6 @@
 // tailwind.config.mjs
 // UPDATED FILE
-import typography from 'tailwindcss/typography'
+import typography from '@tailwindcss/typography'; // <-- IMPORT THIS
 
 /** @type {import('tailwindcss').Config} */
 const config = {
@@ -13,7 +13,6 @@ const config = {
   darkMode: 'class',
   theme: {
     extend: {
-      // --- ADD THIS BLOCK ---
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
@@ -28,12 +27,11 @@ const config = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
-      // --- END BLOCK ---
     },
   },
   plugins: [
-    typography(),
+    typography(), // <-- ADD THIS
   ],
-}
+};
 
-export default config
+export default config;

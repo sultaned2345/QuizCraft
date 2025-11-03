@@ -1,8 +1,8 @@
 // components/MarkdownViewer.tsx
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+// We are now rendering HTML from Tiptap, not Markdown.
+// react-markdown is not needed. We just use dangerouslySetInnerHTML.
 import { cn } from '@/lib/utils';
 
 interface MarkdownViewerProps {
@@ -11,12 +11,12 @@ interface MarkdownViewerProps {
 }
 
 /**
- * A component that renders Markdown content with consistent styling.
- * It uses a 'prose' class for typography, which we will add to globals.css.
+ * A component that renders Markdown/HTML content with consistent styling.
+ * It uses a 'prose' class for typography.
  */
 export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
   return (
-    <ReactMarkdown
+    <div
       className={cn(
         'prose prose-sm dark:prose-invert max-w-none break-words',
         'prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base',
@@ -28,9 +28,7 @@ export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
         'prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-md',
         className,
       )}
-      remarkPlugins={[remarkGfm]}
-    >
-      {content}
-    </ReactMarkdown>
+      dangerouslySetInnerHTML={{ __html: content }}
+    />
   );
 }

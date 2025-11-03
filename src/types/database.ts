@@ -45,6 +45,7 @@ export interface Note {
   title: string;
   content: string;
   tags: string[]; // <-- ADDED
+  linked_note_ids: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -163,12 +164,14 @@ export interface CreateNoteData {
   title: string;
   content: string;
   tags?: string[]; // <-- ADDED
+  linked_note_ids?: string[];
 }
 
 export interface UpdateNoteData {
   title?: string;
   content?: string;
   tags?: string[]; // <-- ADDED
+  linked_note_ids?: string[];
 }
 
 export interface CreateDeckData {
@@ -207,6 +210,7 @@ export interface NoteListItem {
   created_at: string;
   updated_at: string;
   // content is excluded
+  // linked_note_ids is excluded for list view
 }
 export interface PaginatedNotesResponse {
   notes: NoteListItem[];
