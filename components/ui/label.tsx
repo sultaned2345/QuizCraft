@@ -1,3 +1,4 @@
+// components/ui/label.tsx
 'use client'; // <-- ADD THIS LINE
 
 import * as React from 'react'
