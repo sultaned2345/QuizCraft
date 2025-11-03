@@ -29,11 +29,18 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-react';
-import { motion } from 'framer-motion'; // <-- 1. Import motion
+import { motion } from 'framer-motion';
+// --- NEW: Import Progress component ---
+import { Progress } from '@/components/ui/progress';
 
-// ... (Interface definitions remain the same) ...
+// --- NEW: Define enhanced types locally ---
+interface DeckWithStats extends FlashcardDeck {
+  cardCount: number;
+  dueCount: number;
+  newCount: number;
+}
 interface PaginatedDecksData {
-  decks: FlashcardDeck[];
+  decks: DeckWithStats[];
   count: number;
   limit: number | typeof Infinity;
   totalPages: number;
@@ -46,6 +53,7 @@ interface FlashcardsPageData extends PaginatedDecksData {
 interface FlashcardsClientComponentProps {
   initialData: FlashcardsPageData;
 }
+// --- END NEW ---
 
 
 function StudyQueueCard({
@@ -55,7 +63,7 @@ function StudyQueueCard({
   dueCount: number;
   firstDueDeckId: string | null;
 }) {
-  // ... (function remains the same)
+  // ... (component remains the same)
   const router = useRouter();
   if (dueCount === 0) {
     return null;
@@ -90,7 +98,9 @@ function StudyQueueCard({
 }
 
 export function FlashcardsClientComponent({ initialData }: FlashcardsClientComponentProps) {
-  const [decks, setDecks] = useState<FlashcardDeck[]>(initialData.decks);
+  // --- MODIFIED: Use DeckWithStats type ---
+  const [decks, setDecks] = useState<DeckWithStats[]>(initialData.decks);
+  // ... (rest of state is the same)
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number; limit: number | typeof Infinity }>({
     count: initialData.count,
@@ -105,42 +115,31 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [dueCount, setDueCount] = useState(initialData.dueCount);
   const [firstDueDeckId, setFirstDueDeckId] = useState(initialData.firstDueDeckId);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingDeck, setEditingDeck] = useState<FlashcardDeck | null>(null);
+  const [editingDeck, setEditingDeck] = useState<DeckWithStats | null>(null); // Use DeckWithStats
   const [editDeckTitle, setEditDeckTitle] = useState('');
 
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- 2. Define animation variants ---
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-      },
-    },
+    visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
   };
-
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: { type: 'spring', stiffness: 100 }
-    },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
   };
-  // ---
 
+  // --- MODIFIED: Update types for fetch/refresh functions ---
   const fetchMoreDecks = useCallback(async (page: number) => {
-    // ... (function remains the same)
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
     try {
       const response = await fetch(`/api/decks?page=${page}&limit=${decksPerPage}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+      // --- Use new type ---
       const data: ApiResponse<PaginatedDecksData> = await response.json();
       if (!data.success || !data.data) {
         throw new Error(data.error || 'Failed to load more decks.');
@@ -156,12 +155,9 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   }, [session, toast, decksPerPage, isLoadingMore, totalPages]);
 
-  const handleLoadMore = () => {
-    fetchMoreDecks(currentPage + 1);
-  };
+  const handleLoadMore = () => { fetchMoreDecks(currentPage + 1); };
 
   const refreshFirstPage = useCallback(async () => {
-    // ... (function remains the same)
     if (!session) return;
     try {
       const [decksResponse, queueResponse] = await Promise.all([
@@ -172,6 +168,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           headers: { Authorization: `Bearer ${session.access_token}` },
         }),
       ]);
+      // --- Use new type ---
       const decksData: ApiResponse<PaginatedDecksData> = await decksResponse.json();
       if (!decksData.success || !decksData.data)
         throw new Error(decksData.error || 'Failed refresh.');
@@ -179,6 +176,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       setCurrentPage(decksData.data.currentPage);
       setTotalPages(decksData.data.totalPages);
       setUsage({ count: decksData.data.count, limit: decksData.data.limit });
+      
       const queueData: ApiResponse<{ dueCount: number; firstDueDeckId: string | null }> =
         await queueResponse.json();
       if (queueData.success && queueData.data) {
@@ -191,7 +189,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   }, [session, toast, decksPerPage]);
 
   const handleCreateDeck = async (e: React.FormEvent) => {
-    // ... (function remains the same)
+    // ... (function remains same, but refreshFirstPage will pull new stats)
     e.preventDefault();
     if (!newDeckTitle.trim() || !session) return;
     setIsSaving(true);
@@ -206,7 +204,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Created!', description: `"${result.data.title}" added.` });
       setNewDeckTitle('');
       setIsCreateDialogOpen(false);
-      refreshFirstPage();
+      refreshFirstPage(); // This will now pull the deck with stats
     } catch (error: any) {
       toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
     } finally {
@@ -214,15 +212,14 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   };
 
-  const handleOpenEditDialog = (deck: FlashcardDeck) => {
-    // ... (function remains the same)
+  const handleOpenEditDialog = (deck: DeckWithStats) => { // Use new type
     setEditingDeck(deck);
     setEditDeckTitle(deck.title);
     setIsEditDialogOpen(true);
   };
 
   const handleEditDeck = async (e: React.FormEvent) => {
-    // ... (function remains the same)
+    // ... (function remains same, but refreshFirstPage will pull new stats)
     e.preventDefault();
     if (!editDeckTitle.trim() || !session || !editingDeck) return;
     setIsSaving(true);
@@ -238,7 +235,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Updated!', description: `Renamed to "${result.data.title}".` });
       setIsEditDialogOpen(false);
       setEditingDeck(null);
-      refreshFirstPage();
+      refreshFirstPage(); // This will now pull the deck with new stats
     } catch (error: any) {
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
     } finally {
@@ -246,8 +243,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   };
 
-  // This function is already optimistic, no changes needed.
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
+    // ... (function remains the same)
     if (!session || !confirm(`Delete "${deckTitle}"? All cards within will be deleted.`)) return;
     const originalDecks = [...decks];
     setDecks((prevDecks) => prevDecks.filter((d) => d.id !== deckId));
@@ -264,17 +261,16 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
     } catch (error: any) {
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-      setDecks(originalDecks); // Rollback
-      setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
+      setDecks(originalDecks); 
+      setUsage(prev => ({ ...prev, count: prev.count + 1 }));
     }
   };
 
   return (
     <>
-      {/* (Study Queue Card) */}
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
-
-      {/* (Header and Create Dialog Trigger) */}
+      
+      {/* (Header and Create Dialog Trigger remain the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Flashcard Decks</h1>
@@ -290,7 +286,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
               <Plus className="w-4 h-4 mr-2" /> New Deck
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          {/* ... (Create Dialog Content) ... */}
+           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Create New Deck</DialogTitle>
               <DialogDesc>Enter a title.</DialogDesc>
@@ -324,8 +321,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
+      {/* (Empty state remains the same) */}
       {decks.length === 0 ? (
-        // (Empty state)
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No Decks Yet</h3>
@@ -335,24 +332,44 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           </Button>
         </div>
       ) : (
-        // --- 3. Wrap grid in motion.div ---
         <motion.div 
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
+          {/* --- MODIFIED: Deck Card Rendering --- */}
           {decks.map((deck) => (
-            // --- 4. Wrap Card in motion.div ---
             <motion.div key={deck.id} variants={itemVariants}>
-              <Card className="flex flex-col h-full"> {/* Added h-full */}
+              <Card className="flex flex-col h-full">
                 <CardHeader>
                   <Link href={`/flashcards/${deck.id}`} className="hover:underline">
                     <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
                   </Link>
+                  {/* --- NEW: Display Stats --- */}
+                  <CardDescription className="text-xs pt-1">
+                    {deck.cardCount} Card{deck.cardCount !== 1 ? 's' : ''}
+                    {deck.cardCount > 0 && (
+                      <span className="text-muted-foreground/80">
+                        {' '}&bull; {deck.dueCount} Due &bull; {deck.newCount} New
+                      </span>
+                    )}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
-                  <p className="text-sm text-muted-foreground">Contains flashcards...</p>
+                  {/* --- NEW: Progress Bar --- */}
+                  {deck.cardCount > 0 && (
+                    <div>
+                      <Progress 
+                        value={(deck.dueCount / deck.cardCount) * 100} 
+                        className="h-2" 
+                        title={`${deck.dueCount} cards due`}
+                      />
+                    </div>
+                  )}
+                  {deck.cardCount === 0 && (
+                     <p className="text-sm text-muted-foreground italic">Deck is empty.</p>
+                  )}
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => router.push(`/flashcards/${deck.id}`)}>
@@ -380,6 +397,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
               </Card>
             </motion.div>
           ))}
+          {/* --- END MODIFICATION --- */}
         </motion.div>
       )}
 
@@ -395,7 +413,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </div>
       )}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        {/* ... (Edit Dialog Content) ... */}
+         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Deck Title</DialogTitle>
             <DialogDesc>Rename your flashcard deck.</DialogDesc>

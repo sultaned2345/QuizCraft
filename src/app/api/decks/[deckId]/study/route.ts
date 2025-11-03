@@ -8,7 +8,7 @@ import { USAGE_LIMITS } from '@/lib/usage-limits';
 
 export const runtime = 'nodejs';
 
-const STUDY_SESSION_LIMIT = 10; // Max 10 cards per study session
+const STUDY_SESSION_LIMIT = 20; // Increased session limit
 
 // --- GET Handler: Fetch a study session for a specific deck ---
 export async function GET(
@@ -18,12 +18,14 @@ export async function GET(
     try {
         const user = await requireAuth(request);
         const { deckId } = params;
+        const url = new URL(request.url);
+        // --- NEW: Read study mode from query param ---
+        const mode = url.searchParams.get('mode') || 'due'; // 'due', 'new', 'all'
 
         if (!deckId) {
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck ID is required.' }, { status: 400 });
         }
 
-        // Fetch the deck owner and plan first
         const deck = await prisma.flashcard_decks.findUnique({
             where: {
                 id: deckId,
@@ -40,30 +42,44 @@ export async function GET(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck not found or access denied.' }, { status: 404 });
         }
         
-        // Now fetch cards due for review
+        // --- NEW: Dynamic query based on mode ---
+        let whereClause: Prisma.flashcardsWhereInput = { deck_id: deckId };
+        let orderByClause: Prisma.flashcardsOrderByWithRelationInput | Prisma.flashcardsOrderByWithRelationInput[] = {};
+        let takeClause: number | undefined = undefined;
+        const now = new Date();
+
+        if (mode === 'due') {
+            // Original logic: only cards due for review
+            whereClause.review_at = { lte: now };
+            orderByClause = { review_at: 'asc' }; // Oldest due first
+            takeClause = STUDY_SESSION_LIMIT;
+        } else if (mode === 'new') {
+            // New logic: cards with default ease factor and due
+            whereClause.review_at = { lte: now };
+            whereClause.ease_factor = 2.5; // Default ease factor
+            orderByClause = { created_at: 'asc' }; // Oldest new cards first
+            takeClause = STUDY_SESSION_LIMIT;
+        } else if (mode === 'all') {
+            // New logic: All cards in the deck
+            whereClause = { deck_id: deckId };
+            orderByClause = { created_at: 'asc' }; // Study in creation order
+            takeClause = undefined; // No limit
+        }
+        // --- END NEW ---
+        
         const dueCards = await prisma.flashcards.findMany({
-            where: {
-                deck_id: deckId,
-                review_at: {
-                    lte: new Date() // Fetch cards where review_at is in the past or now
-                }
-            },
-            orderBy: {
-                review_at: 'asc', // Show oldest due cards first
-            },
-            take: STUDY_SESSION_LIMIT
+            where: whereClause,
+            orderBy: orderByClause,
+            take: takeClause
         });
 
-        // Determine card limits based on plan
         const plan = deck.profile?.subscription_plan === 'pro' ? 'pro' : 'free';
         const cardLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_TOTAL_FLASHCARDS;
         
-        // Get total card count for the deck
         const totalCardCount = await prisma.flashcards.count({
             where: { deck_id: deckId }
         });
 
-        // Prepare response data
         const responseData: DeckWithCardsResponse = {
             id: deck.id,
             user_id: deck.user_id,
@@ -81,7 +97,7 @@ export async function GET(
         });
 
     } catch (error: any) {
-        if (error instanceof Response) return error; // Handle requireAuth errors
+        if (error instanceof Response) return error; 
         console.error(`Error fetching study session for deck ${params.deckId}:`, error);
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2023') {
              return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Deck ID format.' }, { status: 400 });
