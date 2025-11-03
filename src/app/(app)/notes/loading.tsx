@@ -1,5 +1,5 @@
 // src/app/(app)/notes/loading.tsx
-// UPDATED FILE (Motion removed)
+'use client'; // <-- ADD THIS LINE
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoteCardSkeleton } from "@/components/skeletons/NoteCardSkeleton";

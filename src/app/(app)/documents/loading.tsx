@@ -1,5 +1,5 @@
 // src/app/(app)/documents/loading.tsx
-// UPDATED FILE (Motion removed)
+'use client'; // <-- ADD THIS LINE
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocumentCardSkeleton } from "@/components/skeletons/DocumentCardSkeleton";
@@ -29,4 +29,4 @@ export default function DocumentsLoading() {
       </div>
     </>
   );
-}v
+}

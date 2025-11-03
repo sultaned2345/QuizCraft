@@ -1,5 +1,5 @@
 // src/app/(app)/flashcards/loading.tsx
-// UPDATED FILE (Motion removed)
+'use client'; // <-- ADD THIS LINE
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeckCardSkeleton } from "@/components/skeletons/DeckCardSkeleton";
