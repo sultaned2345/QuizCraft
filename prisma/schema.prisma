@@ -50,7 +50,7 @@ model Quiz {
 
   // Relationships
   questions questions[]
-  profile   profiles? @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
+  profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
   attempts  quiz_attempts[] // Relation to quiz attempts
 
   @@map("quizzes")
@@ -70,7 +70,7 @@ model questions {
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relationship back to the quiz
-  quizzes Quiz? @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes Quiz?     @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("questions")
   @@schema("public")
@@ -78,14 +78,14 @@ model questions {
 
 // Represents notes created by a user
 model notes {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String    @db.Uuid // Foreign key referencing profiles.id
-  title      String
-  content    String
-  tags       String[]  @default([])
-  linked_note_ids String[] @db.Uuid @default([]) // <-- THIS LINE IS FIXED
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @updatedAt @db.Timestamptz(6)
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String    @db.Uuid // Foreign key referencing profiles.id
+  title           String
+  content         String
+  tags            String[]  @default([])
+  linked_note_ids String[]  @db.Uuid @default([]) // <-- THIS LINE IS FIXED
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @updatedAt @db.Timestamptz(6)
 
   // Relation to the user profile
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
@@ -131,17 +131,16 @@ model flashcards {
 // Represents uploaded documents
 model documents {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id        String    @db.Uuid
+  user_id        String    @db.Uuid // Foreign key referencing profiles.id
   file_name      String
   file_type      String    @db.VarChar(100)
   file_size      BigInt?
-  storage_path   String    @unique
-  extracted_text String?   @db.Text
-  ai_summary     String?   @db.Text
-  ai_insights    Json?     @db.JsonB // <-- ADD THIS LINE
+  storage_path   String    @unique // Store the path in Supabase Storage, ensure uniqueness
+  extracted_text String?   @db.Text // Store extracted text
+  ai_summary     String?   @db.Text // --- ADDED: For Smart Document Processing ---
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
 
-  created_at     DateTime? @default(now()) @db.Timestamz(6)
-
+  // Relationship to the user profile
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
 
   @@map("documents")
@@ -284,7 +283,7 @@ model users {
   mfa_factors     mfa_factors[]
   one_time_tokens one_time_tokens[]
   sessions        sessions[]
-  profile         profiles?     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey") // Correct 1-to-1
+  profile         profiles?         @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "profiles_id_fkey") // Correct 1-to-1
 
   @@index([instance_id])
   @@index([is_anonymous])
@@ -401,7 +400,7 @@ model mfa_factors {
 }
 
 model oauth_clients {
-  id                 String                  @id @db.Uuid
+  id                 String                @id @db.Uuid
   client_id          String                  @unique
   client_secret_hash String
   registration_type  oauth_registration_type // Refers to enum below
