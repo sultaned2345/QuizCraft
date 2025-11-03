@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ApiResponse, Note } from '@/types/database'; // Import Note if needed for onSuccess
+import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
 
 interface GenerateNotesDialogProps {
     isOpen: boolean;
@@ -35,6 +36,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
     const [error, setError] = useState('');
 
     const { session } = useAuth();
+    const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -71,6 +73,12 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             const result: ApiResponse<{ count: number }> = await response.json(); // Expect count in response
 
             if (!response.ok || !result.success) {
+                // --- 3. CATCH LIMIT ERROR ---
+                if (result.error === 'limit_exceeded') {
+                    openModal();
+                    throw new Error(result.message || 'AI generation limit reached.');
+                }
+                // ---
                 throw new Error(result.error || `Failed to generate notes (Status: ${response.status})`);
             }
 
@@ -80,8 +88,14 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             onSuccess(result.data || { count: 0 }); // Pass back the count or default
 
         } catch (err: any) {
-            setError(err.message || 'An unknown error occurred.');
-            onError(err.message || 'An unknown error occurred.');
+            // --- 4. HANDLE ERROR MESSAGING ---
+            const errorMessage = err.message || 'An unknown error occurred.';
+            // Don't show modal error in the dialog UI
+            if (!errorMessage.includes('limit reached')) {
+                setError(errorMessage);
+            }
+            onError(errorMessage);
+            // ---
         } finally {
             setIsGenerating(false);
         }

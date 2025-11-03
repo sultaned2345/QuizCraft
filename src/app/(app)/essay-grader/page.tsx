@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
 
 // (All interfaces, components, and state remain the same)
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
@@ -105,6 +106,7 @@ export default function EssayGraderPage() {
   const { toast } = useToast();
   const { setPageContext } = usePageContext();
   const router = useRouter(); // This now works because of the import
+  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
   // (All functions and useEffects remain unchanged)
   useEffect(() => {
@@ -253,7 +255,12 @@ export default function EssayGraderPage() {
       response = await fetch('/api/grade-essay', { method: 'POST', headers: headers, body: requestBody });
       const result: ApiResponse<GradeEssayResponseData> = await response.json();
       if (!response.ok || !result.success || !result.data) {
-        if (result.error?.includes("limit exceeded")) { throw new Error("You have reached your AI generation limit for this month."); }
+        // --- 3. CATCH LIMIT ERROR ---
+        if (result.error === 'limit_exceeded') {
+          openModal();
+          throw new Error(result.message || 'AI generation limit reached.');
+        }
+        // ---
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
@@ -279,8 +286,13 @@ export default function EssayGraderPage() {
          });
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred during grading.');
-      toast({ title: "Grading Failed", description: err.message, variant: "destructive" });
+      // --- 4. AVOID DOUBLE-TOASTING ---
+      const errorMessage = err.message || 'An unexpected error occurred during grading.';
+      if (!errorMessage.includes('limit reached')) {
+        setError(errorMessage);
+        toast({ title: "Grading Failed", description: errorMessage, variant: "destructive" });
+      }
+      // ---
     } finally {
       setIsLoading(false);
     }

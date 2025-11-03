@@ -1,25 +1,98 @@
 // src/app/api/notes/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
-import { USAGE_LIMITS } from '@/lib/usage-limits';
+// --- MODIFIED: Import specific validator ---
+import { USAGE_LIMITS, validateNoteCreation } from '@/lib/usage-limits';
 import { ApiResponse, CreateNoteData, UpdateNoteData, Note, NoteListItem, PaginatedNotesResponse } from '@/types/database';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { generateEmbeddingsForContent } from '@/lib/embedding'; // <-- NEW IMPORT
 
-// ... (validateNoteCreation and GET function remain the same) ...
-// (GET function from file:)
-// (validateNoteCreation function from file:)
+// --- GET function (Unchanged) ---
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireAuth(request);
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '9', 10);
+    const skip = (page - 1) * limit;
+
+    // Fetch user's subscription plan
+    const userProfile = await prisma.profiles.findUnique({
+      where: { id: user.id },
+      select: { subscription_plan: true },
+    });
+    const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
+    const usageLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_NOTES;
+
+    // Fetch initial notes and total count
+    const [notesData, totalCount] = await prisma.$transaction([
+      prisma.notes.findMany({
+        where: { user_id: user.id },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: skip,
+        select: {
+          id: true,
+          user_id: true,
+          title: true,
+          created_at: true,
+          updated_at: true,
+          tags: true,
+        },
+      }),
+      prisma.notes.count({
+        where: { user_id: user.id },
+      }),
+    ]);
+
+    // Serialize dates
+    const notes: NoteListItem[] = notesData.map((note) => ({
+      ...note,
+      tags: note.tags || [],
+      created_at: note.created_at?.toISOString() || '',
+      updated_at: note.updated_at?.toISOString() || '',
+    }));
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const responseData: PaginatedNotesResponse = {
+      notes,
+      count: totalCount,
+      limit: usageLimit,
+      totalPages,
+      currentPage: page,
+    };
+
+    return NextResponse.json<ApiResponse<PaginatedNotesResponse>>({
+      success: true,
+      data: responseData,
+    });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error('[GET /api/notes] Error fetching notes:', error);
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Failed to fetch notes' },
+      { status: 500 }
+    );
+  }
+}
 
 // --- POST function (Uses Prisma) ---
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
+    // --- MODIFIED: Use validator ---
     let limitValidation = await validateNoteCreation(user.id);
     if (!limitValidation.isValid) {
-      return NextResponse.json<ApiResponse>({ success: false, error: limitValidation.error, message: limitValidation.message }, { status: 403 });
+      return NextResponse.json<ApiResponse>({ 
+          success: false, 
+          error: limitValidation.error, // This will be "limit_exceeded"
+          message: limitValidation.message 
+      }, { status: 403 });
     }
+    // --- END MODIFICATION ---
 
     let body: CreateNoteData;
     try {
@@ -50,10 +123,10 @@ export async function POST(request: NextRequest) {
         console.error(`Failed to generate embeddings for note ${newNote.id}:`, err);
       });
 
-    const responseNote = {
+    const responseNote: Note = {
         ...newNote,
         tags: newNote.tags || [],
-        linked_note_ids: newNote.linked_note_ids || null, // <-- ADD THIS
+        linked_note_ids: newNote.linked_note_ids || [], // <-- MODIFIED (ensure array)
         created_at: newNote.created_at?.toISOString() || '',
         updated_at: newNote.updated_at?.toISOString() || '',
     };
@@ -61,7 +134,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json<ApiResponse<Note>>({ success: true, data: responseNote, message: 'Note created successfully' }, { status: 201 });
 
   } catch (error: any) {
-    // ... (error handling remains the same) ...
+    if (error instanceof Response) return error;
+    console.error('[POST /api/notes] Error creating note:', error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error('Prisma Error creating note:', {
+        code: error.code,
+        meta: error.meta,
+      });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Database error occurred while creating note.' },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Failed to create note' },
+      { status: 500 }
+    );
   }
 }
 
@@ -123,10 +211,10 @@ export async function PUT(request: NextRequest) {
         });
     }
 
-    const updatedNote = {
+    const updatedNote: Note = {
         ...updatedNoteData,
         tags: updatedNoteData.tags || [],
-        linked_note_ids: updatedNoteData.linked_note_ids || null, // <-- ADD THIS
+        linked_note_ids: updatedNoteData.linked_note_ids || [], // <-- MODIFIED (ensure array)
         created_at: updatedNoteData.created_at?.toISOString() || '',
         updated_at: updatedNoteData.updated_at?.toISOString() || '',
     };
@@ -134,7 +222,22 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json<ApiResponse<Note>>({ success: true, data: updatedNote, message: 'Note updated successfully' });
   } catch (error) {
-    // ... (error handling remains the same) ...
+    if (error instanceof Response) return error;
+    console.error('[PUT /api/notes] Error updating note:', error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error('Prisma Error updating note:', {
+        code: error.code,
+        meta: error.meta,
+      });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Database error occurred while updating note.' },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Failed to update note' },
+      { status: 500 }
+    );
   }
 }
 

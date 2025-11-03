@@ -112,14 +112,16 @@ export async function POST(request: NextRequest) {
     try {
         const user = await requireAuth(request); 
 
+        // --- MODIFICATION: Use standardized validator ---
         const limitValidation = await validateDeckCreation(user.id);
         if (!limitValidation.isValid) {
             return NextResponse.json<ApiResponse>({
                 success: false,
-                error: limitValidation.error,
+                error: limitValidation.error, // This will be "limit_exceeded"
                 message: limitValidation.message
             }, { status: 403 });
         }
+        // --- END MODIFICATION ---
 
         let body: CreateDeckData;
         try {

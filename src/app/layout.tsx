@@ -1,3 +1,4 @@
+// src/app/layout.tsx
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
@@ -6,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
 import { Footer } from "@/components/Footer"
+import { UpgradeModalProvider } from "@/contexts/UpgradeModalContext" // <-- 1. IMPORT
 
 // Main sans-serif font
 const inter = Inter({
@@ -29,10 +31,14 @@ export default function RootLayout({
       <body className="antialiased flex flex-col min-h-screen">
         <AuthProvider>
           <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
-            <div className="flex-1 flex flex-col">
-              <Suspense fallback={null}>{children}</Suspense>
-            </div>
-            <Footer />
+            {/* 2. WRAP with Provider */}
+            <UpgradeModalProvider>
+              <div className="flex-1 flex flex-col">
+                <Suspense fallback={null}>{children}</Suspense>
+              </div>
+              <Footer />
+            </UpgradeModalProvider>
+            {/* 3. END WRAP */}
           </ThemeProvider>
         </AuthProvider>
       </body>

@@ -50,6 +50,7 @@ import {
 } from '@/lib/file-parser';
 // ---
 import { QuestionType, ApiResponse, DocumentMetadata } from '@/types/database';
+import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
 
 interface QuizSettings {
   questionCount: number;
@@ -105,6 +106,7 @@ export default function CreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams(); // Hook to read query params
   const { toast } = useToast();
+  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
   // Effect to handle initial login state
   useEffect(() => {
@@ -269,6 +271,14 @@ export default function CreatePage() {
           }
         }
         console.error('API Error Response Body:', errorBody);
+
+        // --- 3. CATCH LIMIT ERROR ---
+        if (typeof errorBody === 'object' && errorBody.error === 'limit_exceeded') {
+          openModal();
+          throw new Error(errorBody.message || 'AI generation limit reached.');
+        }
+        // ---
+
         // Try to access errorBody.error if it's an object, otherwise use the string/statusText
         const specificError =
           typeof errorBody === 'object' && errorBody !== null && errorBody.error
@@ -302,13 +312,18 @@ export default function CreatePage() {
     } catch (err) {
       // Catch errors from fetch itself, parsing, or thrown checks
       const errorMessage = err instanceof Error ? err.message : 'Something went wrong.';
-      console.error('--- Error in handleSubmit ---', err); // Log the full error
-      setError(errorMessage); // Show error in UI
-      toast({
-        title: 'Generation Failed',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      
+      // --- 4. AVOID DOUBLE-TOASTING LIMIT ERRORS ---
+      if (!errorMessage.includes('limit reached')) {
+        console.error('--- Error in handleSubmit ---', err); // Log the full error
+        setError(errorMessage); // Show error in UI
+        toast({
+          title: 'Generation Failed',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
+      // ---
     } finally {
       setIsLoading(false);
     }

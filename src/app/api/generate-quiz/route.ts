@@ -391,7 +391,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: usageCheck.error,
+          error: usageCheck.error, // <-- This will be "limit_exceeded"
           message: usageCheck.message,
         },
         { status: 403 }

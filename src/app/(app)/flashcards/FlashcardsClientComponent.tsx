@@ -32,6 +32,7 @@ import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play } from 'lucide-reac
 import { motion } from 'framer-motion';
 // --- NEW: Import Progress component ---
 import { Progress } from '@/components/ui/progress';
+import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
 
 // --- NEW: Define enhanced types locally ---
 interface DeckWithStats extends FlashcardDeck {
@@ -121,6 +122,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -200,13 +202,27 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         body: JSON.stringify({ title: newDeckTitle }),
       });
       const result: ApiResponse<FlashcardDeck> = await response.json();
-      if (!result.success || !result.data) throw new Error(result.error || 'Failed create.');
+      
+      if (!response.ok || !result.success || !result.data) {
+        // --- 3. CATCH LIMIT ERROR ---
+        if (result.error === 'limit_exceeded') {
+          openModal();
+          throw new Error(result.message || 'Deck limit reached.');
+        }
+        // ---
+        throw new Error(result.error || 'Failed create.');
+      }
+
       toast({ title: 'Deck Created!', description: `"${result.data.title}" added.` });
       setNewDeckTitle('');
       setIsCreateDialogOpen(false);
       refreshFirstPage(); // This will now pull the deck with stats
     } catch (error: any) {
-      toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
+      // --- 4. AVOID DOUBLE-TOASTING ---
+      if (!error.message.includes('limit reached')) {
+        toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
+      }
+      // ---
     } finally {
       setIsSaving(false);
     }

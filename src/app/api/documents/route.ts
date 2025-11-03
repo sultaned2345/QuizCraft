@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
-import { USAGE_LIMITS } from '@/lib/usage-limits';
+// --- MODIFIED: Import specific validator ---
+import { USAGE_LIMITS, validateDocumentUpload } from '@/lib/usage-limits';
 import { ApiResponse, DocumentMetadata } from '@/types/database'; // Updated type
 import { Prisma } from '@prisma/client';
 import { generateEmbeddingsForContent } from '@/lib/embedding';
@@ -38,7 +39,7 @@ const FREE_DOCUMENT_LIMIT = 5; // Keep consistent
 // --- MODIFIED: Interface now includes ai_summary ---
 interface PaginatedDocumentsResponse { documents: DocumentMetadata[]; count: number; limit: number | typeof Infinity; totalPages: number; currentPage: number; }
 
-// ... (getSupabaseClientForUser, validateDocumentLimit helpers remain the same) ...
+// ... (getSupabaseClientForUser helper remains the same) ...
 function getSupabaseClientForUser(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -49,30 +50,8 @@ function getSupabaseClientForUser(request: NextRequest) {
         global: { headers: { Authorization: `Bearer ${token}` } }
     });
 }
-async function validateDocumentLimit(userId: string): Promise<{
-    isValid: boolean; error?: string; message?: string; limit?: number | typeof Infinity; count?: number;
-}> {
-    try {
-        const userProfile = await prisma.profiles.findUnique({
-            where: { id: userId },
-            select: { subscription_plan: true }
-        });
-        const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
-        const limit = plan === 'pro' ? Infinity : FREE_DOCUMENT_LIMIT;
 
-        if (plan !== 'pro') {
-            const currentCount = await prisma.documents.count({ where: { user_id: userId } });
-            if (currentCount >= limit) {
-                return { isValid: false, limit, count: currentCount, error: 'Document limit reached', message: `Max ${limit} docs for free users.` };
-            }
-            return { isValid: true, limit, count: currentCount };
-        }
-        return { isValid: true, limit, count: undefined };
-    } catch (error) {
-        console.error("Error validating document limit:", error);
-        return { isValid: true }; // Permissive on error
-    }
-}
+// --- REMOVED: validateDocumentLimit (now in usage-limits.ts) ---
 
 // --- NEW HELPER: Generate AI Summary ---
 async function generateAISummary(text: string): Promise<string | null> {
@@ -162,10 +141,16 @@ export async function POST(request: NextRequest) {
         user = await requireAuth(request); //
         supabaseForUser = getSupabaseClientForUser(request); //
 
-        const limitCheck = await validateDocumentLimit(user.id); //
+        // --- MODIFIED: Use new validator ---
+        const limitCheck = await validateDocumentUpload(user.id); //
         if (!limitCheck.isValid) {
-            return NextResponse.json<ApiResponse>({ success: false, error: limitCheck.error, message: limitCheck.message }, { status: 403 }); //
+            return NextResponse.json<ApiResponse>({ 
+                success: false, 
+                error: limitCheck.error, // This will be "limit_exceeded"
+                message: limitCheck.message 
+            }, { status: 403 }); //
         }
+        // --- END MODIFICATION ---
 
         const formData = await request.formData(); //
         const file = formData.get('file') as File | null;
@@ -283,7 +268,15 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(url.searchParams.get('limit') || '9', 10);
         const skip = (page - 1) * limit;
 
-        const limitCheck = await validateDocumentLimit(user.id);
+        // --- MODIFIED: Use new validator just to get the limit ---
+        // We don't block GET, just report the limit.
+        const profile = await prisma.profiles.findUnique({
+            where: { id: user.id },
+            select: { subscription_plan: true }
+        });
+        const plan = profile?.subscription_plan === 'pro' ? 'pro' : 'free';
+        const usageLimit = plan === 'pro' ? Infinity : FREE_DOCUMENT_LIMIT;
+        // ---
 
         const [documentsData, totalCount] = await prisma.$transaction([
              prisma.documents.findMany({
@@ -313,7 +306,7 @@ export async function GET(request: NextRequest) {
         const responseData: PaginatedDocumentsResponse = {
             documents: formattedDocuments,
             count: totalCount,
-            limit: limitCheck.limit ?? Infinity,
+            limit: usageLimit ?? Infinity, // Use the fetched limit
             totalPages,
             currentPage: page,
         };

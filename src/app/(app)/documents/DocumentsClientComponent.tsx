@@ -14,6 +14,7 @@ import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, S
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
 import { motion } from 'framer-motion'; // <-- 1. Import motion
+import { useUpgradeModal } from '@/contexts/UpgradeModalContext'; // <-- 1. IMPORT HOOK
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];
@@ -45,6 +46,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { setPageContext } = usePageContext();
+  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
   // --- 2. Define animation variants ---
   const containerVariants = {
@@ -95,6 +97,12 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        const response = await fetch('/api/documents', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }); 
        const result: ApiResponse<DocumentMetadata> = await response.json(); 
        if (!response.ok || !result.success || !result.data) {
+         // --- 3. CATCH LIMIT ERROR ---
+         if (result.error === 'limit_exceeded') {
+           openModal();
+           throw new Error(result.message || 'Document limit reached.');
+         }
+         // ---
          throw new Error(result.error || `Upload failed ${response.status}`);
        }
        toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); 
@@ -103,8 +111,12 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        await refreshFirstPage(); // Refresh to show new item
        router.push(`/documents/${result.data.id}`); // Navigate to new page
      } catch (error: any) { 
-       setUploadError(error.message || 'Upload error.'); 
-       toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); 
+       // --- 4. AVOID DOUBLE-TOASTING ---
+       if (!error.message.includes('limit reached')) {
+         setUploadError(error.message || 'Upload error.'); 
+         toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' });
+       }
+       // ---
      } finally { 
        setIsUploading(false); 
      }
@@ -129,18 +141,84 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   };
   
   const handleGenerateQuiz = async (docId: string) => { 
-    // ... (function remains the same)
-    if(!session) return; setIsGenerating({type:'quiz', docId}); toast({title:'Preparing Quiz...'}); try{ router.push(`/create?docId=${docId}`); } catch(e:any){ toast({title:'Failed Prep', description:e.message, variant:'destructive'}); setIsGenerating(null); } 
+    // This action just navigates, the 'create' page will handle the limit check
+    if(!session) return; 
+    setIsGenerating({type:'quiz', docId}); 
+    toast({title:'Preparing Quiz...'}); 
+    try{ 
+      router.push(`/create?docId=${docId}`); 
+    } catch(e:any){ 
+      toast({title:'Failed Prep', description:e.message, variant:'destructive'}); 
+      setIsGenerating(null); 
+    } 
   };
   
+  // --- MODIFIED: handleGenerateNotes to catch limit error ---
   const handleGenerateNotes = async (docId: string) => { 
-    // ... (function remains the same)
-    if(!session) return; setIsGenerating({type:'notes', docId}); toast({title:'Generating Notes...'}); try { const cRes = await fetch(`/api/documents/${docId}/content`, {headers:{Authorization:`Bearer ${session.access_token}`}}); const cResult: ApiResponse<{extracted_text:string|null}> = await cRes.json(); if(!cResult.success || !cResult.data?.extracted_text) throw new Error(cResult.error||'Failed content fetch.'); const gRes = await fetch(`/api/generate-notes`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({text: cResult.data.extracted_text})}); const gResult: ApiResponse = await gRes.json(); if(!gRes.ok || !gResult.success) throw new Error(gResult.error||'Failed generate.'); toast({title:'Notes Generated!'}); router.push('/notes'); } catch(e:any){ toast({title:'Note Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } 
+    if(!session) return; 
+    setIsGenerating({type:'notes', docId}); 
+    toast({title:'Generating Notes...'}); 
+    try { 
+      const cRes = await fetch(`/api/documents/${docId}/content`, {headers:{Authorization:`Bearer ${session.access_token}`}}); 
+      const cResult: ApiResponse<{extracted_text:string|null}> = await cRes.json(); 
+      if(!cResult.success || !cResult.data?.extracted_text) throw new Error(cResult.error||'Failed content fetch.'); 
+      
+      const gRes = await fetch(`/api/generate-notes`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({text: cResult.data.extracted_text})}); 
+      const gResult: ApiResponse = await gRes.json(); 
+      
+      if(!gRes.ok || !gResult.success) {
+        // --- CATCH LIMIT ERROR ---
+        if (gResult.error === 'limit_exceeded') {
+          openModal();
+          throw new Error(gResult.message || 'AI generation limit reached.');
+        }
+        // ---
+        throw new Error(gResult.error||'Failed generate.'); 
+      }
+      
+      toast({title:'Notes Generated!'}); 
+      router.push('/notes'); 
+    } catch(e:any){ 
+      // --- AVOID DOUBLE-TOASTING ---
+      if (!e.message.includes('limit reached')) {
+        toast({title:'Note Gen Failed', description:e.message, variant:'destructive'}); 
+      }
+      // ---
+    } finally { 
+      setIsGenerating(null); 
+    } 
   };
   
+  // --- MODIFIED: handleGenerateFlashcards to catch limit error ---
   const handleGenerateFlashcards = async (docId: string) => { 
-    // ... (function remains the same)
-    if(!session) return; setIsGenerating({type:'flashcards', docId}); toast({title:'Generating Flashcards...'}); try { const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); const result: ApiResponse<GeneratedDeckInfo> = await response.json(); if(!response.ok || !result.success || !result.data) throw new Error(result.error||'Failed generate.'); toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); router.push(`/flashcards/${result.data.id}`); } catch(e:any){ toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); } finally { setIsGenerating(null); } 
+    if(!session) return; 
+    setIsGenerating({type:'flashcards', docId}); 
+    toast({title:'Generating Flashcards...'}); 
+    try { 
+      const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); 
+      const result: ApiResponse<GeneratedDeckInfo> = await response.json(); 
+      
+      if(!response.ok || !result.success || !result.data) {
+        // --- CATCH LIMIT ERROR (checks for AI limit or Deck limit) ---
+         if (result.error === 'limit_exceeded') {
+          openModal();
+          throw new Error(result.message || 'Limit reached.');
+        }
+        // ---
+        throw new Error(result.error||'Failed generate.'); 
+      }
+
+      toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); 
+      router.push(`/flashcards/${result.data.id}`); 
+    } catch(e:any){ 
+      // --- AVOID DOUBLE-TOASTING ---
+      if (!e.message.includes('limit reached')) {
+        toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); 
+      }
+      // ---
+    } finally { 
+      setIsGenerating(null); 
+    } 
   };
 
   return (

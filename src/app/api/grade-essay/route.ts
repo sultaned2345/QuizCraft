@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth';
 import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Use admin client for usage update
 import { ApiResponse, GradeEssayData, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory } from '@/types/database';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google-generative-ai";
 import { Prisma } from '@prisma/client';
 import pdfParse from 'pdf-parse-fork';
 import { cleanExtractedText } from '@/lib/file-parser';
@@ -147,7 +147,13 @@ export async function POST(request: NextRequest) {
         // 1. Check AI Usage Limits
         const usageCheck = await checkAIGenerationUsageLimit(user.id);
         if (!usageCheck.isValid || !usageCheck.canGenerate) {
-            return NextResponse.json<ApiResponse>({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
+            // --- MODIFICATION: Return standardized error ---
+            return NextResponse.json<ApiResponse>({ 
+                success: false, 
+                error: usageCheck.error, // This will be "limit_exceeded"
+                message: usageCheck.message 
+            }, { status: 403 });
+            // --- END MODIFICATION ---
         }
 
         // 2. Handle Input
@@ -226,7 +232,7 @@ export async function POST(request: NextRequest) {
         }
          if (error.message?.includes("AI grading failed:") || error.message?.includes("AI Error:")) {
              return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 }); // Bad Gateway for AI issues
-        }
+         }
          if (error.message?.includes("Failed to process AI feedback structure.")) {
              return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 500 }); // Internal error processing AI response
          }

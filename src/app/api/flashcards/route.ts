@@ -1,3 +1,4 @@
+// src/app/api/flashcards/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
@@ -16,11 +17,13 @@ export async function POST(request: NextRequest) {
         const limitValidation = await validateFlashcardCreation(user.id);
         if (!limitValidation.isValid) {
             console.log(`Flashcard creation blocked for user ${user.id}: ${limitValidation.error}`);
+            // --- MODIFICATION: Return standardized error ---
             return NextResponse.json<ApiResponse>({
                 success: false,
-                error: limitValidation.error,
+                error: limitValidation.error, // This will be "limit_exceeded"
                 message: limitValidation.message
             }, { status: 403 }); // Forbidden
+            // --- END MODIFICATION ---
         }
 
         // 2. Parse and validate request body
@@ -106,7 +109,3 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
     }
 }
-
-// Note: A GET handler here could list ALL flashcards for a user across all decks,
-// but it might be less performant/useful than getting cards per deck.
-// We are skipping GET /api/flashcards for now.

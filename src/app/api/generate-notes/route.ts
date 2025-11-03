@@ -166,7 +166,13 @@ export async function POST(request: NextRequest) {
     if (!usage.canGenerate || (usage.currentCount !== undefined && usage.limit !== Infinity && (usage.currentCount + incrementCount) > usage.limit)) {
       const remaining = usage.limit !== Infinity && usage.currentCount !== undefined ? Math.max(0, usage.limit - usage.currentCount) : 0;
       console.warn("Usage limit exceeded.");
-      return NextResponse.json<ApiResponse>({ success: false, error: `Usage limit exceeded. ${remaining} generations left.`, }, { status: 403 });
+      // --- MODIFICATION: Ensure standardized error is returned ---
+      return NextResponse.json<ApiResponse>({ 
+          success: false, 
+          error: usage.error, // This will be "limit_exceeded"
+          message: usage.message || `Usage limit exceeded. ${remaining} generations left.`
+      }, { status: 403 });
+      // --- END MODIFICATION ---
     }
     console.log("DEBUG: Usage limit check passed.");
 

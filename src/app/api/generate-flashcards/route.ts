@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
 import { checkAIGenerationUsageLimit, USAGE_LIMITS } from '@/lib/usage-limits';
 import { ApiResponse, FlashcardDeck } from '@/types/database';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google-generative-ai";
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Import the admin client
 import { Prisma } from '@prisma/client';
 
@@ -75,7 +75,15 @@ export async function POST(request: NextRequest) {
 
         // 1. Check usage limits
         const usageCheck = await checkAIGenerationUsageLimit(user.id);
-        if (!usageCheck.isValid || !usageCheck.canGenerate) return NextResponse.json<ApiResponse>({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
+        if (!usageCheck.isValid || !usageCheck.canGenerate) {
+            // --- MODIFICATION: Return standardized error ---
+            return NextResponse.json<ApiResponse>({ 
+                success: false, 
+                error: usageCheck.error, // This will be "limit_exceeded"
+                message: usageCheck.message 
+            }, { status: 403 });
+            // --- END MODIFICATION ---
+        }
 
         // 2. Parse/Validate Body
         let body: GenerateFlashcardsRequestBody;
@@ -110,7 +118,7 @@ export async function POST(request: NextRequest) {
         });
 
         // 6. Update AI Usage using Admin client helper
-        await updateAIUsage(user.id, new Date(), actualGeneratedCount); // Use the new helper
+        await updateAIUsage(user.id, new Date(), 1); // --- MODIFICATION: Only count as 1 generation, not per card ---
 
         // 7. Return Success
         const responseDeck: FlashcardDeck = { ...newDeckAndCards, user_id: user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };

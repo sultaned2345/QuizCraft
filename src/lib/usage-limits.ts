@@ -7,7 +7,7 @@ import { supabaseAdmin } from './supabaseAdmin'; // --- ADDED: For increment ---
 
 interface ValidationResult {
   isValid: boolean;
-  error?: string;
+  error?: string; // <-- This will be our consistent error code
   message?: string;
 }
 
@@ -84,7 +84,7 @@ export async function validateNoteCreation(
       if (currentCount >= USAGE_LIMITS.FREE_NOTES) {
         return {
           isValid: false,
-          error: 'Note limit reached',
+          error: 'limit_exceeded', // <-- STANDARDIZED ERROR
           message: `Max ${USAGE_LIMITS.FREE_NOTES} notes for free users. Upgrade for unlimited.`,
         };
       }
@@ -113,7 +113,7 @@ export async function validateQuizCreation(
       if (currentCount >= USAGE_LIMITS.FREE_QUIZZES) {
         return {
           isValid: false,
-          error: 'Quiz limit reached',
+          error: 'limit_exceeded', // <-- STANDARDIZED ERROR
           message: `Max ${USAGE_LIMITS.FREE_QUIZZES} quizzes for free users. Upgrade for unlimited.`,
         };
       }
@@ -173,7 +173,7 @@ export async function checkAIGenerationUsageLimit(
         canGenerate: false,
         currentCount,
         limit,
-        error: 'AI generation limit reached for this month',
+        error: 'limit_exceeded', // <-- STANDARDIZED ERROR
         message: `You have reached the maximum number of AI generations (${limit}) for this calendar month on the free plan. Upgrade to Pro for unlimited AI generations.`,
       };
     }
@@ -209,7 +209,7 @@ export async function validateDeckCreation(
       if (currentCount >= USAGE_LIMITS.FREE_FLASHCARD_DECKS) {
         return {
           isValid: false,
-          error: 'Deck limit reached',
+          error: 'limit_exceeded', // <-- STANDARDIZED ERROR
           message: `Max ${USAGE_LIMITS.FREE_FLASHCARD_DECKS} decks for free users. Upgrade for unlimited.`,
         };
       }
@@ -239,7 +239,7 @@ export async function validateFlashcardCreation(
       if (currentCount >= USAGE_LIMITS.FREE_TOTAL_FLASHCARDS) {
         return {
           isValid: false,
-          error: 'Total flashcard limit reached',
+          error: 'limit_exceeded', // <-- STANDARDIZED ERROR
           message: `Max ${USAGE_LIMITS.FREE_TOTAL_FLASHCARDS} total flashcards for free users. Upgrade for unlimited.`,
         };
       }
@@ -269,7 +269,7 @@ export async function validateDocumentUpload(
       if (currentCount >= USAGE_LIMITS.FREE_DOCUMENTS) {
         return {
           isValid: false,
-          error: 'Document limit reached',
+          error: 'limit_exceeded', // <-- STANDARDIZED ERROR
           message: `Max ${USAGE_LIMITS.FREE_DOCUMENTS} documents for free users. Upgrade for unlimited.`,
         };
       }
