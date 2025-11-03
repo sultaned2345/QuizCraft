@@ -44,8 +44,8 @@ export interface Note {
   user_id: string;
   title: string;
   content: string;
-  tags: string[]; // <-- ADDED
-  linked_note_ids: string[] | null;
+  tags: string[];
+  linked_note_ids: string[]; // <-- THIS LINE IS FIXED (removed | null)
   created_at: string;
   updated_at: string;
 }

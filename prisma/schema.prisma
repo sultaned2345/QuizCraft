@@ -83,7 +83,7 @@ model notes {
   title      String
   content    String
   tags       String[]  @default([])
-  linked_note_ids String[]? @db.Uuid // <-- ADD THIS LINE
+  linked_note_ids String[] @db.Uuid @default([]) // <-- THIS LINE IS FIXED
   created_at DateTime? @default(now()) @db.Timestamptz(6)
   updated_at DateTime? @updatedAt @db.Timestamptz(6)
 
