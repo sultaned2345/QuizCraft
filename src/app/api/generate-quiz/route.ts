@@ -1,7 +1,6 @@
 // src/app/api/generate-quiz/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai'; // <-- FIX: Changed hyphen to slash
 import pdfParse from 'pdf-parse-fork';
 
 import { prisma } from '@/lib/prisma';

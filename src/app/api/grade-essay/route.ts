@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth';
 import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Use admin client for usage update
 import { ApiResponse, GradeEssayData, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory } from '@/types/database';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google-generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 import { Prisma } from '@prisma/client';
 import pdfParse from 'pdf-parse-fork';
 import { cleanExtractedText } from '@/lib/file-parser';

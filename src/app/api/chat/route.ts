@@ -8,7 +8,7 @@ import {
   SchemaType, // <-- FIX: This is the correct export
   FunctionDeclaration,
   Part,
-} from "@google/generative-ai";
+} from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; 
 import { generateQueryEmbedding } from '@/lib/embedding';

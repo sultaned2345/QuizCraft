@@ -1,6 +1,6 @@
 // src/app/api/generate-notes/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 // Use the shared Prisma client again
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client'; // Import Prisma namespace for types if needed

@@ -1,5 +1,5 @@
 // src/lib/embedding.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from './supabaseAdmin'; // Use admin client for DB operations
 

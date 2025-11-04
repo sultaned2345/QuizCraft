@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
 import { checkAIGenerationUsageLimit, USAGE_LIMITS } from '@/lib/usage-limits';
 import { ApiResponse, FlashcardDeck } from '@/types/database';
-import { GoogleGenerativeAI } from "@google-generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Import the admin client
 import { Prisma } from '@prisma/client';
 

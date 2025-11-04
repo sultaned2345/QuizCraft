@@ -11,7 +11,7 @@ import { generateEmbeddingsForContent } from '@/lib/embedding';
 // --- DYNAMIC: Import the new server-side helper ---
 import { extractTextFromServerFile } from '@/lib/file-parser.server';
 // --- NEW: Import Google AI ---
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
 
 export const runtime = 'nodejs';
 
