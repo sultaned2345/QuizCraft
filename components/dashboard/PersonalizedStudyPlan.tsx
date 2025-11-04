@@ -8,11 +8,12 @@ import { ApiResponse } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Layers, FileQuestion, ArrowRight } from 'lucide-react';
+// --- 1. IMPORT NEW ICONS ---
+import { Loader2, Layers, FileQuestion, ArrowRight, StickyNote, FileText } from 'lucide-react';
 
 interface StudySuggestion {
-  type: 'flashcard' | 'quiz';
-  id: string; // Deck ID or Quiz ID
+  type: 'flashcard' | 'quiz' | 'note' | 'document'; // <-- 2. ADD NEW TYPES
+  id: string; // Deck ID, Quiz ID, Note ID, or Document ID
   title: string;
   reason: string;
 }
@@ -38,16 +39,36 @@ export function PersonalizedStudyPlan() {
     }
   }, [session]);
 
-  const getIcon = (type: 'flashcard' | 'quiz') => {
-    return type === 'flashcard' 
-      ? <Layers className="w-5 h-5 text-primary" /> 
-      : <FileQuestion className="w-5 h-5 text-blue-500" />;
+  // --- 3. UPDATE getIcon HELPER ---
+  const getIcon = (type: StudySuggestion['type']) => {
+    switch (type) {
+      case 'flashcard':
+        return <Layers className="w-5 h-5 text-purple-500" />;
+      case 'quiz':
+        return <FileQuestion className="w-5 h-5 text-green-500" />;
+      case 'note':
+        return <StickyNote className="w-5 h-5 text-yellow-500" />;
+      case 'document':
+        return <FileText className="w-5 h-5 text-blue-500" />;
+      default:
+        return <Layers className="w-5 h-5 text-primary" />;
+    }
   };
 
+  // --- 4. UPDATE getHref HELPER ---
   const getHref = (item: StudySuggestion) => {
-    return item.type === 'flashcard' 
-      ? `/flashcards/${item.id}` 
-      : `/quiz/${item.id}`;
+    switch (item.type) {
+      case 'flashcard':
+        return `/flashcards/${item.id}`;
+      case 'quiz':
+        return `/quiz/${item.id}`; // Link to the quiz taking page
+      case 'note':
+        return `/notes/${item.id}`; // Link to the note editor page
+      case 'document':
+        return `/documents/${item.id}`; // Link to the document chat/view page
+      default:
+        return '/';
+    }
   };
 
   return (
@@ -72,7 +93,7 @@ export function PersonalizedStudyPlan() {
           <div className="space-y-3">
             {suggestions.map((item) => (
               <Button
-                key={item.id}
+                key={`${item.type}-${item.id}`} // Use a more unique key
                 asChild
                 variant="outline"
                 className="w-full h-auto justify-between items-start p-3"
