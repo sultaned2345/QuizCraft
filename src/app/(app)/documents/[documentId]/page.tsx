@@ -1,47 +1,54 @@
 // src/app/(app)/documents/[documentId]/page.tsx
+// MODIFIED FILE
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-// ... other imports
-import { Loader2, ArrowLeft, FileText, StickyNote, FileQuestion, Layers, Sparkles, Brain, HelpCircle, Target } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, StickyNote, FileQuestion, Layers, Sparkles, Brain, HelpCircle, Target, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-// ...
 import { ChatInterface } from '@/components/ChatInterface';
-import { usePageContext } from '@/contexts/PageContext';
+import { usePageContext, PageContextType } from '@/contexts/PageContext';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-// --- 1. ADD TABS AND SKELETON ---
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from '@/components/ui/skeleton';
-
-// ... (Message interface remains the same) ...
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { ApiResponse, Message, Question } from '@/types/database';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { PopQuizModal } from '@/components/PopQuizModal'; // <-- 1. IMPORT NEW MODAL
 
 interface ViewingContentState {
   title: string;
   text: string | null;
   pdfUrl: string | null;
 }
-
-// --- 2. ADD INSIGHTS TYPE ---
 interface AIDocumentInsights {
   keyConcepts: string[];
   examQuestions: string[];
   mainArguments: string[];
 }
 
-// --- 3. ADD INSIGHTS STATE ---
 export default function DocumentViewPage() {
-  // ... (all existing state remains the same) ...
   const [viewingContent, setViewingContent] = useState<ViewingContentState>({ title: '', text: null, pdfUrl: null });
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
-  
-  // --- ADDED STATE ---
   const [insights, setInsights] = useState<AIDocumentInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(true);
-  // --- END ADDED STATE ---
+  
+  // --- 2. ADD NEW STATE ---
+  const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
+  const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
+  const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
+  // --- END NEW STATE ---
+
+  const { user, session, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const params = useParams();
+  const documentId = params.documentId as string;
+  const { toast } = useToast();
 
   const { setPageContext } = usePageContext();
   const pageContext = useMemo((): PageContextType => ({
@@ -49,9 +56,11 @@ export default function DocumentViewPage() {
     id: documentId,
   }), [documentId]);
   
-  // ... (setPageContext useEffect remains the same) ...
+  useEffect(() => {
+    setPageContext(pageContext);
+    return () => setPageContext(null);
+  }, [setPageContext, pageContext]);
 
-  // --- 4. MODIFY fetchData useEffect ---
   useEffect(() => {
     if (!session || !documentId) {
         if (!authLoading && !user) router.push('/login');
@@ -61,10 +70,9 @@ export default function DocumentViewPage() {
     const fetchData = async () => {
       setIsLoadingContent(true);
       setIsHistoryLoading(true);
-      setIsLoadingInsights(true); // <-- Set insights loading
+      setIsLoadingInsights(true);
 
       try {
-        // --- Fetch content, history, AND insights ---
         const [contentRes, historyRes, insightsRes] = await Promise.all([
           fetch(`/api/documents/${documentId}/content`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
@@ -72,42 +80,43 @@ export default function DocumentViewPage() {
           fetch(`/api/chat/history?context_id=${documentId}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
           }),
-          // --- ADDED INSIGHTS FETCH ---
           fetch(`/api/documents/${documentId}/insights`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
           })
         ]);
 
-        // ... (Process Content logic remains the same) ...
+        // Process Content
         const contentResult: ApiResponse<{ extracted_text: string | null; file_name: string }> = await contentRes.json();
         if (!contentRes.ok || !contentResult.success || !contentResult.data) {
           throw new Error(contentResult.error || 'Failed to fetch document content.');
         }
-        const docText = contentResult.data.extracted_text;
-        const docFileName = contentResult.data.file_name;
-        setViewingContent(prev => ({ ...prev, title: docFileName, text: docText, pdfUrl: null }));
+        setViewingContent(prev => ({ ...prev, title: contentResult.data!.file_name, text: contentResult.data!.extracted_text, pdfUrl: null }));
         setIsLoadingContent(false);
 
-        // ... (Process History logic remains the same) ...
+        // Process History
         const historyResult: ApiResponse<Message[]> = await historyRes.json();
         if (historyResult.success && historyResult.data) {
           setChatHistory(historyResult.data);
         }
         setIsHistoryLoading(false);
 
-        // --- ADDED INSIGHTS PROCESSING ---
+        // Process Insights
         const insightsResult: ApiResponse<AIDocumentInsights | null> = await insightsRes.json();
         if (insightsResult.success && insightsResult.data) {
           setInsights(insightsResult.data);
         }
         setIsLoadingInsights(false);
-        // --- END INSIGHTS PROCESSING ---
-
-        // ... (PDF URL logic remains the same) ...
-        const isPdf = docFileName.toLowerCase().endsWith('.pdf');
+        
+        // PDF URL logic (if you have it)
+        const isPdf = contentResult.data.file_name.toLowerCase().endsWith('.pdf');
         if (isPdf) {
-          // ... fetch signed url ...
-          // ... setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
+          const urlRes = await fetch(`/api/documents/${documentId}/url`, {
+             headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          const urlResult: ApiResponse<{ signedUrl: string }> = await urlRes.json();
+          if (urlResult.success && urlResult.data) {
+            setViewingContent(prev => ({ ...prev, pdfUrl: urlResult.data.signedUrl }));
+          }
         }
 
       } catch (error: any) {
@@ -119,126 +128,212 @@ export default function DocumentViewPage() {
     fetchData();
   }, [documentId, session, authLoading, user, router, toast]);
 
-  // ... (loading state render remains the same) ...
+  // --- 3. ADD POP QUIZ HANDLER ---
+  const handleStartPopQuiz = async () => {
+    if (!session || isPopQuizLoading) return;
+    setIsPopQuizLoading(true);
+    toast({ title: "Generating Pop Quiz...", description: "Please wait, the AI is creating questions." });
+    try {
+      const response = await fetch('/api/generate-pop-quiz', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ documentId: documentId })
+      });
+      
+      const result: ApiResponse<{ questions: Question[] }> = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Failed to generate pop quiz.');
+      }
 
-  // --- 5. MODIFY JSX TO INCLUDE TABS ---
-  return (
-    <div className="flex flex-col h-[calc(100vh-100px)]">
-      {/* ... (Page Header remains the same) ... */}
+      setPopQuizQuestions(result.data.questions);
+      setIsPopQuizOpen(true);
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden h-full">
-        
-        {/* Left Column: Document Viewer + Insights */}
-        <Card className="flex flex-col h-full overflow-hidden">
-          <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
-            <CardHeader className="pb-0">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="document">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Document
-                </TabsTrigger>
-                <TabsTrigger value="insights">
-                  <Brain className="w-4 h-4 mr-2" />
-                  AI Insights
-                </TabsTrigger>
-              </TabsList>
-            </CardHeader>
+    } catch (err: any) {
+      toast({ title: "Pop Quiz Failed", description: err.message, variant: 'destructive' });
+    } finally {
+      setIsPopQuizLoading(false);
+    }
+  };
+  // --- END HANDLER ---
+  
 
-            <TabsContent value="document" className="flex-1 overflow-auto mt-0">
-              <CardContent className="h-full">
-                {isLoadingContent ? (
-                  <div className="flex justify-center items-center h-full min-h-[60vh]">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                ) : viewingContent.pdfUrl ? (
-                  <iframe
-                    src={viewingContent.pdfUrl}
-                    className="w-full h-full min-h-[65vh] border rounded-md"
-                    title={`PDF Viewer for ${viewingContent.title}`}
-                  />
-                ) : (
-                  <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
-                    <pre className="text-sm whitespace-pre-wrap break-words">
-                      {viewingContent.text || "No text extracted or file is empty."}
-                    </pre>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </TabsContent>
-
-            <TabsContent value="insights" className="flex-1 overflow-auto mt-0">
-              <CardContent>
-                {isLoadingInsights ? (
-                  <div className="space-y-4 p-4">
-                    <Skeleton className="h-6 w-1/3" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-6 w-1/3 mt-4" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                  </div>
-                ) : !insights ? (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-muted-foreground text-center">
-                    <Brain className="w-12 h-12 mb-4" />
-                    <p className="font-medium">No AI Insights Generated</p>
-                    <p className="text-sm">This document may be too short or was uploaded before this feature was available.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6 p-1">
-                    <InsightSection icon={<Target className="w-4 h-4 text-primary" />} title="Main Arguments">
-                      {insights.mainArguments.map((arg, i) => (
-                        <li key={i}>{arg}</li>
-                      ))}
-                    </InsightSection>
-                    <InsightSection icon={<HelpCircle className="w-4 h-4 text-blue-500" />} title="Potential Exam Questions">
-                      {insights.examQuestions.map((q, i) => (
-                        <li key={i}>{q}</li>
-                      ))}
-                    </InsightSection>
-                    <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
-                      {insights.keyConcepts.map((concept, i) => (
-                        <li key={i}>{concept}</li>
-                      ))}
-                    </InsightSection>
-                  </div>
-                )}
-              </CardContent>
-            </TabsContent>
-          </Tabs>
-        </Card>
-
-        {/* Right Column: Chat Interface (remains the same) */}
-        <Card className="flex flex-col h-full overflow-hidden">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-               <Sparkles className="w-5 h-5 text-primary" />
-               AI Tutor
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-hidden h-full">
-            <ChatInterface
-              context={pageContext}
-              initialMessages={chatHistory}
-              isLoadingHistory={isHistoryLoading}
-              className="h-full"
-            />
-          </CardContent>
-        </Card>
-
+  if (isLoadingContent || authLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex flex-col h-[calc(100vh-100px)]">
+        {/* Page Header */}
+        <div className="flex items-center justify-between mb-4">
+          <Button variant="ghost" onClick={() => router.push('/documents')}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Documents
+          </Button>
+          <h1 className="text-xl font-semibold truncate text-center" title={viewingContent.title}>
+            {viewingContent.title}
+          </h1>
+          <div className="w-32"></div> 
+        </div>
+
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden h-full">
+          
+          {/* Left Column: Document Viewer + Insights */}
+          <Card className="flex flex-col h-full overflow-hidden">
+            <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
+              <CardHeader className="pb-0">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="document">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Document
+                  </TabsTrigger>
+                  <TabsTrigger value="insights">
+                    <Brain className="w-4 h-4 mr-2" />
+                    AI Insights
+                  </TabsTrigger>
+                </TabsList>
+              </CardHeader>
+
+              <TabsContent value="document" className="flex-1 overflow-auto mt-0">
+                <CardContent className="h-full">
+                  {isLoadingContent ? (
+                    <div className="flex justify-center items-center h-full min-h-[60vh]">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : viewingContent.pdfUrl ? (
+                    <iframe
+                      src={viewingContent.pdfUrl}
+                      className="w-full h-full min-h-[65vh] border rounded-md"
+                      title={`PDF Viewer for ${viewingContent.title}`}
+                    />
+                  ) : (
+                    <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
+                      <pre className="text-sm whitespace-pre-wrap break-words">
+                        {viewingContent.text || "No text extracted or file is empty."}
+                      </pre>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </TabsContent>
+
+              <TabsContent value="insights" className="flex-1 overflow-auto mt-0">
+                <CardContent>
+                  {isLoadingInsights ? (
+                    <div className="space-y-4 p-4">
+                      <Skeleton className="h-6 w-1/3" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-6 w-1/3 mt-4" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                  ) : !insights ? (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-muted-foreground text-center">
+                      <Brain className="w-12 h-12 mb-4" />
+                      <p className="font-medium">No AI Insights Generated</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6 p-1">
+                      {/* --- 4. ADD BUTTON to Exam Questions section --- */}
+                      <InsightSection icon={<HelpCircle className="w-4 h-4 text-blue-500" />} title="Potential Exam Questions">
+                        {insights.examQuestions.length > 0 ? (
+                           <>
+                              <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                                {insights.examQuestions.map((q, i) => (
+                                  <li key={i}>{q}</li>
+                                ))}
+                              </ul>
+                              <Button 
+                                size="sm" 
+                                className="mt-4" 
+                                onClick={handleStartPopQuiz}
+                                disabled={isPopQuizLoading}
+                              >
+                                {isPopQuizLoading ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Zap className="w-4 h-4 mr-2" />
+                                )}
+                                Start Pop Quiz
+                              </Button>
+                           </>
+                        ) : (
+                           <p className="text-sm text-muted-foreground italic">No specific exam questions were generated.</p>
+                        )}
+                      </InsightSection>
+                      
+                      <InsightSection icon={<Target className="w-4 h-4 text-primary" />} title="Main Arguments">
+                        {insights.mainArguments.length > 0 ? (
+                           <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                            {insights.mainArguments.map((arg, i) => (
+                              <li key={i}>{arg}</li>
+                            ))}
+                          </ul>
+                        ) : <p className="text-sm text-muted-foreground italic">No main arguments extracted.</p>}
+                      </InsightSection>
+                      
+                      <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
+                         {insights.keyConcepts.length > 0 ? (
+                            <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                              {insights.keyConcepts.map((concept, i) => (
+                                <li key={i}>{concept}</li>
+                              ))}
+                            </ul>
+                         ) : <p className="text-sm text-muted-foreground italic">No key concepts extracted.</p>}
+                      </InsightSection>
+                    </div>
+                  )}
+                </CardContent>
+              </TabsContent>
+            </Tabs>
+          </Card>
+
+          {/* Right Column: Chat Interface (unchanged) */}
+          <Card className="flex flex-col h-full overflow-hidden">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                 <Sparkles className="w-5 h-5 text-primary" />
+                 AI Tutor
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden h-full">
+              <ChatInterface
+                context={pageContext}
+                initialMessages={chatHistory}
+                isLoadingHistory={isHistoryLoading}
+                className="h-full"
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      
+      {/* --- 5. RENDER THE MODAL --- */}
+      <PopQuizModal
+        isOpen={isPopQuizOpen}
+        onOpenChange={setIsPopQuizOpen}
+        questions={popQuizQuestions}
+      />
+    </>
   );
 }
 
-// --- 6. ADD A HELPER COMPONENT for insights ---
+// Helper component
 const InsightSection = ({ title, icon, children }: { title: string, icon: React.ReactNode, children: React.ReactNode }) => (
   <div className="space-y-2">
     <h3 className="flex items-center gap-2 font-semibold">
       {icon}
       <span>{title}</span>
     </h3>
-    <ul className="list-disc pl-6 space-y-1 text-sm text-muted-foreground">
+    <div className="pl-6">
       {children}
-    </ul>
+    </div>
   </div>
 );

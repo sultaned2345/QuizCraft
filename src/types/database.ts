@@ -1,4 +1,6 @@
 // src/types/database.ts
+// MODIFIED FILE
+
 // --- Base Types ---
 export interface User {
   id: string;
@@ -45,12 +47,23 @@ export interface Note {
   title: string;
   content: string;
   tags: string[];
-  linked_note_ids: string[]; // <-- THIS LINE IS FIXED (removed | null)
+  linked_note_ids: string[];
   created_at: string;
   updated_at: string;
 }
 
-// src/types/database.ts
+// --- Flashcard Types ---
+export interface FlashcardDeck {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  flashcards?: Flashcard[]; // Relation
+  _count?: { // For list view
+    flashcards: number;
+  };
+}
 
 export interface Flashcard {
   id: string;
@@ -72,35 +85,27 @@ export interface DocumentMetadata {
   file_size: number;
   storage_path: string;
   extracted_text?: string | null; // Optional, might not be needed in all contexts
-  ai_summary?: string | null; // --- ADDED ---
+  ai_summary?: string | null;
+  ai_insights?: any | null; // --- ADDED ---
   created_at: string;
 }
 
 // --- Graded Essay Types (NEW) ---
-
-// --- MODIFICATION: Define new structured feedback ---
 export interface EssayFeedbackHighlight {
-    text: string; // The exact text snippet from the essay
-    comment: string; // The AI's comment on that snippet
+    text: string;
+    comment: string;
 }
-
 export interface EssayFeedbackCategory {
-    summary: string; // Overall summary for this category
-    highlights: EssayFeedbackHighlight[]; // Specific examples
+    summary: string;
+    highlights: EssayFeedbackHighlight[];
 }
-
 export interface GradedEssayFeedback {
-  clarity?: EssayFeedbackCategory | string; // Support old (string) and new format
+  clarity?: EssayFeedbackCategory | string;
   argument?: EssayFeedbackCategory | string;
   grammar?: EssayFeedbackCategory | string;
-  summary: string; // Keep summary as a simple string
-  // Add other categories as defined in your AI prompt
-  [key: string]: EssayFeedbackCategory | string | undefined; // Allow flexible categories
+  summary: string;
+  [key: string]: EssayFeedbackCategory | string | undefined;
 }
-// --- END MODIFICATION ---
-
-
-// --- MODIFICATION: Replaced PrismaJsonValue ---
 export type GenericJsonValue =
   | string
   | number
@@ -108,36 +113,29 @@ export type GenericJsonValue =
   | null
   | { [key: string]: GenericJsonValue }
   | GenericJsonValue[];
-// --- END MODIFICATION ---
 
 export interface GradedEssay {
   id: string;
   user_id: string;
   essay_title: string | null;
-  essay_content: string; // May not always be needed on frontend lists
+  essay_content: string;
   rubric_or_criteria: string | null;
-  // --- MODIFICATION: Replaced PrismaJsonValue ---
   feedback: GradedEssayFeedback | GenericJsonValue | null;
-  // ---
   score: number | null;
-  graded_at: string; // Keep as string (ISO format) for consistency
+  graded_at: string;
 }
-
-// API request body type (for JSON requests)
 export interface GradeEssayData {
   essayText: string;
-  rubricText?: string; // Optional rubric
-  essayTitle?: string; // Optional title
+  rubricText?: string;
+  essayTitle?: string;
 }
-
-// API response data structure (after successful grading)
 export interface GradeEssayResponseData {
-  id: string; // ID of the saved graded_essay record
+  id: string;
   feedback: GradedEssayFeedback;
   score: number | null;
-  suggestions?: string[]; // Optional suggestions from AI
-  graded_at: string; // ISO string format
-  essay_content: string; // --- ADDED: Return the graded text ---
+  suggestions?: string[];
+  graded_at: string;
+  essay_content: string;
 }
 
 export interface QuizAttempt {
@@ -149,45 +147,77 @@ export interface QuizAttempt {
   created_at: string;
 }
 
+// --- NEW: Project Types ---
+export interface Project {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  links?: ProjectContentLink[]; // Optional relation
+  _count?: {
+    links: number;
+  };
+}
+
+export interface ProjectContentLink {
+  id: string;
+  user_id: string;
+  project_id: string;
+  content_id: string;
+  content_type: 'document' | 'quiz' | 'note' | 'deck'; // Add more as needed
+  created_at: string;
+}
+
+// For API response of a project's content
+export interface ProjectContentDetails {
+  links: {
+    id: string; // link ID
+    content_id: string;
+    content_type: string;
+    created_at: string;
+    // Joined data:
+    title: string;
+    description: string | null;
+    icon: string; // 'document', 'quiz', 'note', 'deck'
+  }[];
+}
+// --- END NEW ---
+
+
 // --- Form Data Types ---
 export interface CreateQuizData {
   title: string;
   is_public?: boolean;
 }
-
 export interface UpdateQuizData {
   title?: string;
   is_public?: boolean;
 }
-
 export interface CreateNoteData {
   title: string;
   content: string;
-  tags?: string[]; // <-- ADDED
+  tags?: string[];
   linked_note_ids?: string[];
 }
-
 export interface UpdateNoteData {
   title?: string;
   content?: string;
-  tags?: string[]; // <-- ADDED
+  tags?: string[];
   linked_note_ids?: string[];
 }
-
 export interface CreateDeckData {
   title: string;
 }
-
 export interface UpdateDeckData {
   title?: string;
 }
-
 export interface CreateFlashcardData {
   deck_id: string;
   front_content: string;
   back_content: string;
 }
-
 export interface UpdateFlashcardData {
   front_content?: string;
   back_content?: string;
@@ -206,11 +236,9 @@ export interface NoteListItem {
   id: string;
   user_id: string;
   title: string;
-  tags: string[]; // <-- ADDED
+  tags: string[];
   created_at: string;
   updated_at: string;
-  // content is excluded
-  // linked_note_ids is excluded for list view
 }
 export interface PaginatedNotesResponse {
   notes: NoteListItem[];
@@ -220,26 +248,23 @@ export interface PaginatedNotesResponse {
   currentPage: number;
 }
 
-// --- NEW: Add GeneratedDeckInfo type ---
 export interface GeneratedDeckInfo {
   id: string;
   title: string;
 }
-// --- END NEW ---
 
-// --- NEW: Add RelatedItem type ---
 export interface RelatedItem {
   content_id: string;
   content_type: 'note' | 'document';
   content_title: string;
-  content_chunk: string; // The best matching text snippet
+  content_chunk: string;
   similarity: number;
+  citation?: number; // Added for chat
 }
-// --- END NEW ---
 
 // For Paginated Decks List
 export interface PaginatedDecksResponse {
-  decks: FlashcardDeck[]; // Assuming full deck needed for list, adjust if not
+  decks: FlashcardDeck[];
   count: number;
   limit: number | typeof Infinity;
   totalPages: number;
@@ -265,16 +290,9 @@ export interface PaginatedDocumentsResponse {
 // For Listing Graded Essays (Example)
 export interface GradedEssaysListResponse {
   essays: Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>[];
-  // Add pagination fields if needed (count, totalPages, currentPage, limit)
 }
 
-// --- Utility Types ---
-// --- REMOVED PRISMA IMPORT ---
-// import { Prisma } from '@prisma/client'; // <-- REMOVED
-// export type PrismaJsonValue = Prisma.JsonValue; // <-- REMOVED
-
 // --- Original Supabase Types ---
-// Can be kept for reference or if using Supabase client directly elsewhere
 export interface Database {
   public: {
     Tables: {
@@ -316,21 +334,31 @@ export interface Database {
         Update: Partial<Omit<Flashcard, 'id' | 'deck_id' | 'created_at'>>;
       };
       documents: {
-        Row: DocumentMetadata; // This now includes ai_summary
+        Row: DocumentMetadata;
         Insert: Omit<DocumentMetadata, 'id' | 'created_at'>;
         Update: Partial<
           Omit<DocumentMetadata, 'id' | 'user_id' | 'created_at'>
         >;
       };
-      // Add graded_essays if needed for direct Supabase client usage
       graded_essays: {
         Row: GradedEssay;
         Insert: Omit<GradedEssay, 'id' | 'graded_at'>;
         Update: Partial<Omit<GradedEssay, 'id' | 'user_id' | 'graded_at'>>;
       };
+      // --- ADD NEW TABLES ---
+      projects: {
+        Row: Project;
+        Insert: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'links'>;
+        Update: Partial<Omit<Project, 'id' | 'user_id' | 'created_at'>>;
+      };
+      project_content_links: {
+        Row: ProjectContentLink;
+        Insert: Omit<ProjectContentLink, 'id' | 'created_at'>;
+        Update: Partial<Omit<ProjectContentLink, 'id' | 'user_id' | 'project_id' | 'created_at'>>;
+      };
+      // --- END NEW TABLES ---
     };
     Functions: {
-      // Add Supabase RPC functions if defined and used directly
       increment_ai_usage: {
         Args: {
           p_user_id: string;
@@ -339,12 +367,10 @@ export interface Database {
         };
         Returns: void;
       };
-      // Add other functions if needed
+      // ... (other functions) ...
     };
     Enums: {
-      // Add Supabase Enums if defined and used directly
-      // Example: user_plan_enum: 'free' | 'pro'
+      // ... (enums) ...
     };
   };
-  // Add other schemas like 'auth' if needed for direct client usage
 }

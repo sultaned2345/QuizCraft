@@ -18,8 +18,9 @@ import {
   FileSignature,
   MessageSquare,
   FileText,
-  User, // <-- 1. IMPORT USER ICON
-  CreditCard, // <-- 2. IMPORT CREDITCARD ICON
+  User,
+  CreditCard,
+  FolderKanban, // <-- 1. IMPORT NEW ICON
 } from 'lucide-react';
 import { useState } from 'react';
 import { ChatbotDialog } from '@/components/ChatbotDialog';
@@ -37,9 +38,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'; // <-- 3. IMPORT DROPDOWN
+} from '@/components/ui/dropdown-menu';
 
-// --- 4. MODIFIED AppHeader ---
+// ... (AppHeader component is unchanged) ...
 const AppHeader = () => {
   const { user, signOut } = useAuth(); // Get user
   const router = useRouter();
@@ -53,7 +54,6 @@ const AppHeader = () => {
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <div className="relative ml-auto flex items-center gap-2">
         <ThemeToggle />
-        {/* --- ADDED USER DROPDOWN --- */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -93,24 +93,24 @@ const AppHeader = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* --- END USER DROPDOWN --- */}
       </div>
     </header>
   );
 };
 
-// --- 5. MODIFIED SidebarNav ---
+// --- MODIFIED SidebarNav ---
 const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
   const pathname = usePathname();
 
   const navItems = [
+    // --- 2. ADD PROJECTS LINK ---
+    { href: '/projects', label: 'Projects', icon: FolderKanban },
     { href: '/documents', label: 'Documents', icon: FileText },
     { label: 'AI Tutor', icon: MessageSquare, action: onOpenChat },
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
-    // --- ADDED ACCOUNT LINK ---
     { href: '/account', label: 'Account', icon: CreditCard, isLast: true },
   ];
 
@@ -124,11 +124,17 @@ const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
             .map((item) => {
               const isActive =
                 item.href &&
+                // --- 3. ADDED PROJECT ACTIVE STATE LOGIC ---
                 (pathname === item.href ||
+                  (item.href === '/projects' &&
+                    pathname.startsWith('/projects/')) ||
                   (item.href === '/documents' &&
                     pathname.startsWith('/documents/')) ||
-                  (item.href !== '/documents' && pathname.startsWith(item.href)));
-
+                  (item.href !== '/documents' && 
+                   item.href !== '/projects' && 
+                   pathname.startsWith(item.href)));
+              // --- END MODIFICATION ---
+              
               const itemClasses = cn(
                 'flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-primary',
                 isActive && 'bg-muted text-primary'

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
 import { Check, Infinity, Zap } from 'lucide-react';
 import { USAGE_LIMITS, getUserUsage } from '@/lib/usage-limits';
+import { cn } from '@/lib/utils'; // <-- ADD THIS LINE
 
 // Get the return type from our helper function
 type UsageData = Awaited<ReturnType<typeof getUserUsage>>;
