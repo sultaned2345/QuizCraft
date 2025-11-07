@@ -1,6 +1,5 @@
-[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/components/ChatInterface.tsx]
-// components/ChatInterface.tsx
 'use client';
+// components/ChatInterface.tsx
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';

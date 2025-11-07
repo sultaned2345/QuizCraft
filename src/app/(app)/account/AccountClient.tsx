@@ -1,8 +1,6 @@
-[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/src/app/(app)/account/AccountClient.tsx]
+'use client';
 // src/app/(app)/account/AccountClient.tsx
 // NEW FILE
-
-'use client';
 
 import {
   Card,

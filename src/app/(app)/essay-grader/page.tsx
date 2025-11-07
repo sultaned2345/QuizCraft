@@ -1,7 +1,6 @@
-[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/src/app/(app)/essay-grader/page.tsx]
+'use client';
 // src/app/(app)/essay-grader/page.tsx
 // UPDATED FILE
-'use client';
 
 import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
