@@ -1,3 +1,4 @@
+// src/app/signup/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation'; // <-- 1. Import useRouter
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -17,6 +19,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const { signUp } = useAuth();
+  const router = useRouter(); // <-- 2. Get router instance
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,14 +32,22 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const { error } = await signUp(email.trim(), password);
+      const { data, error } = await signUp(email.trim(), password); // <-- 3. Get data
       if (error) {
         setError(error.message || 'Failed to create an account. Please try again.');
       } else {
-        setMessage('Success! Please check your email for a confirmation link.');
-        setEmail('');
-        setPassword('');
-        setConfirmPassword('');
+        // --- 4. MODIFICATION ---
+        // On success, the AuthContext listener will pick up the new session.
+        // We can just redirect.
+        if (data.session) {
+          router.push('/documents'); // Redirect immediately
+        } else {
+          // This case should not happen if "Confirm email" is off
+          // But as a fallback, show a success message.
+          setMessage('Account created successfully! Redirecting...');
+          setTimeout(() => router.push('/documents'), 2000);
+        }
+        // --- END MODIFICATION ---
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');

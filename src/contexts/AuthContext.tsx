@@ -64,11 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        options: {
-          // --- THIS IS THE CHANGE ---
-          emailRedirectTo: `${window.location.origin}/documents`,
-          // --- END OF CHANGE ---
-        },
+        // --- THIS IS THE CHANGE ---
+        // The `options` object can be removed or left empty,
+        // as emailRedirectTo is no longer used.
+        // options: {
+        //   emailRedirectTo: `${window.location.origin}/documents`,
+        // },
+        // --- END OF CHANGE ---
       });
 
       console.log('Sign up result:', {
