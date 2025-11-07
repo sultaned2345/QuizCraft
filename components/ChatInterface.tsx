@@ -1,11 +1,11 @@
-'use client';
 // components/ChatInterface.tsx
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea'; // <-- IMPORT Textarea
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -30,9 +30,8 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"; // <-- IMPORT Tooltip
+} from "@/components/ui/tooltip";
 
-// --- UPDATED Source TYPE ---
 type Source = Pick<RelatedItem, 'content_id' | 'content_type' | 'content_title' | 'citation' | 'content_chunk'>;
 
 interface Message {
@@ -44,14 +43,16 @@ interface ChatInterfaceProps {
   context: PageContextType;
   initialMessages?: Message[];
   isLoadingHistory?: boolean;
-  className?: string;
+  className?: string; // --- 1. Keep className prop ---
 }
+
+// --- (getSourceHref and getSourceIcon are unchanged) ---
 function getSourceHref(source: Source): string {
     if (source.content_type === 'note') {
-        return `/notes/${source.content_id}`; // <-- FIX: Link to specific note
+        return `/notes/${source.content_id}`;
     }
     if (source.content_type === 'document') {
-        return `/documents/${source.content_id}`; // <-- FIX: Link to specific document
+        return `/documents/${source.content_id}`;
     }
     return '#';
 }
@@ -70,7 +71,7 @@ export function ChatInterface({
   context,
   initialMessages,
   isLoadingHistory: isHistoryLoadingProp = false,
-  className
+  className // --- 2. Receive className prop ---
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [input, setInput] = useState('');
@@ -78,7 +79,7 @@ export function ChatInterface({
   const [isHistoryLoading, setIsHistoryLoading] = useState(isHistoryLoadingProp);
   const { session } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // <-- Ref for textarea
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
   const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -88,6 +89,7 @@ export function ChatInterface({
   const { toast } = useToast();
 
   // (All action handlers and useEffects remain the same)
+  // ... (handleGenerateQuizFromContext, handleGenerateNotesFromContext, etc.) ...
   const handleGenerateQuizFromContext = () => {
     if (context?.type !== 'document' || !context.id) return;
     setIsActionLoading(true);
@@ -149,6 +151,8 @@ export function ChatInterface({
   };
 
   useEffect(() => {
+    // This logic handles fetching history or showing proactive prompts
+    // It's safe to run in both the modal and the static page
     if (initialMessages && initialMessages.length > 0) {
       setMessages(initialMessages);
       setIsHistoryLoading(isHistoryLoadingProp);
@@ -204,10 +208,12 @@ export function ChatInterface({
           </div>
         );
       } else {
+        // This is the general case for the modal
         setProactivePrompt(null);
         historyFetchUrl = '/api/chat/history';
       }
 
+      // Fetch history
       fetch(historyFetchUrl, {
           headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
@@ -232,7 +238,7 @@ export function ChatInterface({
           setIsHistoryLoading(false);
       });
     }
-  }, [context, session, initialMessages, isHistoryLoadingProp]);
+  }, [context, session, initialMessages, isHistoryLoadingProp]); // proactive prompts removed from deps
 
   useEffect(() => {
     if (initialMessages) {
@@ -254,14 +260,14 @@ export function ChatInterface({
     }
   }, [messages, isHistoryLoading]);
 
-  // --- Auto-resize logic for textarea ---
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'; // Reset height
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // Set to scroll height
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [input]);
 
+  // --- (sendMessage, handleFormSubmit, etc. are unchanged) ---
   const sendMessage = async (messageText: string) => {
     if (!messageText || !session || isLoading) return;
 
@@ -342,7 +348,6 @@ export function ChatInterface({
     sendMessage(question);
   };
 
-  // --- Handle Enter/Shift+Enter for Textarea ---
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -350,9 +355,11 @@ export function ChatInterface({
     }
   };
 
+  // --- 3. APPLY className prop ---
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      <ScrollArea className="h-full flex-1 my-4 pr-1" ref={scrollAreaRef as any}>
+      {/* 4. REMOVE my-4 from ScrollArea, add pr-1 */}
+      <ScrollArea className="h-full flex-1 pr-1" ref={scrollAreaRef as any}>
         <div className="space-y-4 pr-3">
           {isHistoryLoading ? (
             <div className="space-y-4">
@@ -416,7 +423,7 @@ export function ChatInterface({
                       )}
                       <div className={cn(
                         "rounded-lg p-3 max-w-[85%]", 
-                        msg.role === 'user' ? 'bg-muted' : 'bg-secondary border' // <-- ADDED BORDER
+                        msg.role === 'user' ? 'bg-muted' : 'bg-secondary border'
                       )}>
                         <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                       </div>
@@ -468,7 +475,8 @@ export function ChatInterface({
           )}
         </div>
       </ScrollArea>
-      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 pt-4 border-t items-start">
+      {/* 5. REMOVE pt-4 and border-t from form */}
+      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 items-start">
         <Textarea
           ref={textareaRef}
           rows={1}
@@ -477,7 +485,7 @@ export function ChatInterface({
           onKeyDown={handleKeyDown}
           placeholder="Type your question..."
           disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading}
-          className="min-h-0 h-10 max-h-36 resize-none" // <-- APPLIED STYLING
+          className="min-h-0 h-10 max-h-36 resize-none"
         />
         <Button type="submit" disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading || !input.trim()}>
           <Send className="w-4 h-4" />

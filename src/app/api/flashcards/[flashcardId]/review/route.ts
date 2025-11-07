@@ -11,46 +11,40 @@ type ReviewQuality = 'again' | 'good' | 'easy';
 
 interface ReviewRequestBody {
   quality: ReviewQuality;
+  isCramming?: boolean; // --- 1. ADD isCramming flag ---
 }
 
-// Simple SM-2 based algorithm helper
+// (calculateNextReview helper function is unchanged)
 function calculateNextReview(
   quality: ReviewQuality,
   oldEaseFactor: number,
-  repetitions: number // We'll simplify and just use ease_factor
+  repetitions: number
 ): { newEaseFactor: number; nextReviewDate: Date } {
     
     let newEaseFactor = oldEaseFactor;
-    let nextIntervalDays = 1; // Default interval
+    let nextIntervalDays = 1;
     const now = new Date();
 
     if (quality === 'again') {
         newEaseFactor = Math.max(1.3, oldEaseFactor - 0.2);
-        // Reset interval to 10 minutes from now
         const nextReviewDate = new Date(now.getTime() + 10 * 60 * 1000);
         return { newEaseFactor, nextReviewDate };
     }
     
-    // For 'good' and 'easy'
     if (quality === 'good') {
-        // No change to ease factor
-        nextIntervalDays = Math.round(1 * oldEaseFactor); // 1 day * ease
+        nextIntervalDays = Math.round(1 * oldEaseFactor);
     } else if (quality === 'easy') {
         newEaseFactor = oldEaseFactor + 0.15;
-        nextIntervalDays = Math.round(4 * oldEaseFactor); // 4 days * ease
+        nextIntervalDays = Math.round(4 * oldEaseFactor);
     }
 
-    // Clamp ease factor
     newEaseFactor = Math.max(1.3, newEaseFactor);
-
-    // Calculate next review date
     const nextReviewDate = new Date(now.getTime() + nextIntervalDays * 24 * 60 * 60 * 1000);
 
     return { newEaseFactor, nextReviewDate };
 }
 
 
-// --- POST Handler: Update a flashcard's review status ---
 export async function POST(
     request: NextRequest,
     { params }: { params: { flashcardId: string } }
@@ -63,7 +57,6 @@ export async function POST(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard ID is required.' }, { status: 400 });
         }
 
-        // 1. Verify Ownership & get current card data
         const card = await prisma.flashcards.findFirst({
             where: { 
                 id: flashcardId,
@@ -78,23 +71,33 @@ export async function POST(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard not found or access denied.' }, { status: 404 });
         }
 
-        // 2. Parse and validate request body
         let body: ReviewRequestBody;
         try { body = await request.json(); } 
         catch (e) { return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON body.' }, { status: 400 }); }
 
-        const { quality } = body;
+        // --- 2. DESTRUCTURE isCramming ---
+        const { quality, isCramming } = body;
         if (!['again', 'good', 'easy'].includes(quality)) {
              return NextResponse.json<ApiResponse>({ success: false, error: "Invalid review quality. Must be 'again', 'good', or 'easy'." }, { status: 400 });
         }
         
-        // 3. Calculate new review data
+        // --- 3. CHECK CRAM FLAG ---
+        // If cramming, don't update stats. Just return success.
+        if (isCramming) {
+            return NextResponse.json<ApiResponse<Flashcard>>({
+                success: true,
+                data: card, // Return the original card data
+                message: 'Flashcard review acknowledged (cram mode).',
+            });
+        }
+        // --- (End of modification) ---
+        
         const { newEaseFactor, nextReviewDate } = calculateNextReview(
             quality,
-            card.ease_factor || 2.5
+            card.ease_factor || 2.5,
+            0 // Repetitions not used here
         );
 
-        // 4. Update the flashcard
         const updatedFlashcard = await prisma.flashcards.update({
             where: {
                 id: flashcardId

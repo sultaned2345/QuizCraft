@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+// --- 1. IMPORT useSearchParams ---
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Flashcard, ApiResponse, DeckWithCardsResponse, CreateFlashcardData, UpdateFlashcardData } from '@/types/database';
@@ -25,14 +26,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical, Layers, Check, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// --- FlashcardViewer Component (Unchanged) ---
+// --- (FlashcardViewer and FlashcardEditorDialog components are unchanged) ---
 interface FlashcardViewerProps {
   card: Flashcard;
   isFlipped: boolean;
   onFlip: () => void;
 }
 function FlashcardViewer({ card, isFlipped, onFlip }: FlashcardViewerProps) {
-    // ... (component remains the same)
     return (
         <div
             className="w-full h-64 border bg-card rounded-lg flex items-center justify-center p-6 text-center cursor-pointer perspective preserve-3d transition-transform duration-700 relative"
@@ -51,8 +51,6 @@ function FlashcardViewer({ card, isFlipped, onFlip }: FlashcardViewerProps) {
         </div>
     );
 }
-
-// --- Add/Edit Flashcard Dialog Component (Unchanged) ---
 interface FlashcardEditorDialogProps {
     deckId: string;
     cardToEdit?: Flashcard | null; 
@@ -61,7 +59,6 @@ interface FlashcardEditorDialogProps {
     onSaveSuccess: (savedCard: Flashcard) => void; 
 }
 function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSaveSuccess }: FlashcardEditorDialogProps) {
-    // ... (component remains the same)
     const [front, setFront] = useState('');
     const [back, setBack] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -147,16 +144,17 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
         </Dialog>
     );
 }
+// --- (End of unchanged components) ---
 
 
 // --- Main Deck View Page Component ---
-type StudyMode = 'due' | 'new' | 'all';
-type ViewState = 'loading' | 'error' | 'menu' | 'studying' | 'complete';
+type StudyMode = 'due' | 'new' | 'cram' | 'all'; // 'all' is fallback
+type ViewState = 'loading' | 'error' | 'studying' | 'complete';
 
 export default function DeckViewPage() {
-    // --- NEW: Updated State ---
     const [deckTitle, setDeckTitle] = useState('');
     const [studyCards, setStudyCards] = useState<Flashcard[]>([]);
+    // --- 2. UPDATE DEFAULT VIEWSTATE ---
     const [viewState, setViewState] = useState<ViewState>('loading');
     const [error, setError] = useState('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -164,9 +162,10 @@ export default function DeckViewPage() {
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [cardToEdit, setCardToEdit] = useState<Flashcard | null>(null);
     const [isReviewing, setIsReviewing] = useState(false);
-    // This state will require enhancing the /api/decks/[deckId] route
-    const [deckStats, setDeckStats] = useState({ total: 0, due: 0, new: 0 }); 
-    // --- END NEW ---
+    
+    // --- 3. ADD searchParams and studyMode ---
+    const searchParams = useSearchParams();
+    const studyMode = (searchParams.get('mode') || 'due') as StudyMode; // Default to 'due'
 
     const { user, session, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -174,7 +173,7 @@ export default function DeckViewPage() {
     const { toast } = useToast();
     const deckId = params.deckId as string;
 
-    // --- NEW: Fetch deck info and stats on load ---
+    // --- 4. MODIFIED useEffect to auto-start study session ---
     useEffect(() => {
         if (!authLoading && !user) {
             router.push('/login');
@@ -182,35 +181,37 @@ export default function DeckViewPage() {
         }
         if (user && deckId && session) {
             setViewState('loading');
-            // We need an API route that returns deck info + stats
-            // For now, we'll use the existing /api/decks/[deckId]
+            
+            // Fetch deck title first (or get it from the study session API)
             fetch(`/api/decks/${deckId}`, { 
                  headers: { Authorization: `Bearer ${session.access_token}` },
             })
             .then(res => res.json())
             .then((data: ApiResponse<DeckWithCardsResponse>) => {
                 if (!data.success || !data.data) {
-                    throw new Error(data.error || 'Failed to load deck.');
+                    throw new Error(data.error || 'Failed to load deck title.');
                 }
                 setDeckTitle(data.data.title);
-                // TODO: Enhance /api/decks/[deckId] to return due/new counts
-                setDeckStats({ total: data.data.cardCount, due: 0, new: 0 }); // Placeholder
-                setViewState('menu');
+                
+                // Now, immediately start the study session based on the URL param
+                startStudySession(studyMode);
             })
             .catch(err => {
                 setError(err.message);
                 setViewState('error');
             });
         }
-    }, [user, authLoading, deckId, session, router]);
+    }, [user, authLoading, deckId, session, router, studyMode]); // Add studyMode dependency
 
-    // --- NEW: Function to start a study session ---
+    
     const startStudySession = async (mode: StudyMode) => {
         if (!session || !deckId) return;
         setViewState('loading');
         setError('');
         try {
-            const response = await fetch(`/api/decks/${deckId}/study?mode=${mode}`, {
+            // Use 'cram' if mode is 'cram', otherwise use the mode (due, new)
+            const apiUrlMode = mode === 'cram' ? 'all' : mode;
+            const response = await fetch(`/api/decks/${deckId}/study?mode=${apiUrlMode}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             const data: ApiResponse<DeckWithCardsResponse> = await response.json();
@@ -220,7 +221,6 @@ export default function DeckViewPage() {
             setStudyCards(data.data.flashcards);
             setCurrentCardIndex(0); 
             setIsFlipped(false);
-            // Go to 'complete' state if no cards are returned
             setViewState(data.data.flashcards.length > 0 ? 'studying' : 'complete');
         } catch (err: any) {
             setError(err.message || 'Deck not found or access denied.');
@@ -228,16 +228,19 @@ export default function DeckViewPage() {
         }
     };
     
-    // --- (handleReview remains the same) ---
     const handleReview = async (quality: 'again' | 'good' | 'easy') => {
         const card = currentCard;
         if (!card || !session || isReviewing) return;
         setIsReviewing(true);
+        
+        // --- 5. ADD isCramming FLAG ---
+        const isCramming = studyMode === 'cram';
+        
         try {
             const response = await fetch(`/api/flashcards/${card.id}/review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({ quality }),
+                body: JSON.stringify({ quality, isCramming }), // Send cram flag
             });
             const result: ApiResponse<Flashcard> = await response.json();
             if (!result.success) throw new Error(result.error || 'Failed to save review.');
@@ -249,19 +252,16 @@ export default function DeckViewPage() {
         }
     };
 
-    // --- MODIFIED: goToNextCard ---
     const goToNextCard = () => {
         if (studyCards.length === 0) return;
-        // Check if we are on the last card
         if (currentCardIndex + 1 >= studyCards.length) {
-            setViewState('complete'); // Go to complete state
+            setViewState('complete'); 
         } else {
             setCurrentCardIndex((prev) => prev + 1);
             setIsFlipped(false);
         }
     };
     
-    // --- (handleDeleteCard remains the same - it's already optimistic) ---
     const handleDeleteCard = async (cardId: string) => {
         if (!session) return;
         const cardToDelete = studyCards.find(c => c.id === cardId);
@@ -279,7 +279,7 @@ export default function DeckViewPage() {
             toast({ title: 'Card Deleted' });
         } catch (error: any) {
             toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-            setStudyCards(originalStudyCards); // Rollback
+            setStudyCards(originalStudyCards);
         }
     };
 
@@ -303,43 +303,8 @@ export default function DeckViewPage() {
         );
     }
 
-    // --- NEW: Study Menu View ---
-    if (viewState === 'menu') {
-        return (
-             <>
-                <Button variant="ghost" onClick={() => router.push('/flashcards')}>
-                    <ArrowLeft className="w-4 h-4 mr-2" /> Back to Decks
-                </Button>
-                <div className="max-w-xl mx-auto text-center mt-8">
-                    <h1 className="text-3xl font-bold mb-2">{deckTitle}</h1>
-                    <p className="text-lg text-muted-foreground mb-8">
-                        {deckStats.total} cards total.
-                        {/* TODO: Add stats: ({deckStats.due} due, {deckStats.new} new) */}
-                    </p>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Start Studying</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-1 gap-4">
-                            <Button size="lg" onClick={() => startStudySession('due')}>
-                                Review Due Cards
-                                {/* ({deckStats.due}) */}
-                            </Button>
-                            <Button size="lg" variant="secondary" onClick={() => startStudySession('new')}>
-                                Learn New Cards
-                                {/* ({deckStats.new}) */}
-                            </Button>
-                             <Button size="lg" variant="outline" onClick={() => startStudySession('all')}>
-                                Cram All Cards
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-             </>
-        );
-    }
+    // --- 6. REMOVE 'menu' VIEWSTATE ---
     
-    // --- NEW: Session Complete View ---
     if (viewState === 'complete') {
          return (
             <>
@@ -351,9 +316,10 @@ export default function DeckViewPage() {
                         <Check className="w-16 h-16 text-green-500 mb-4" />
                         <p className="text-xl font-medium mb-4">Session Complete!</p>
                         <p className="text-sm mb-6">You've finished this batch of cards.</p>
-                        <Button onClick={() => setViewState('menu')}>
+                        {/* --- 7. UPDATE BUTTON to go back to deck list --- */}
+                        <Button onClick={() => router.push('/flashcards')}>
                             <ArrowLeft className="w-4 h-4 mr-2" />
-                            Back to Deck Menu
+                            Back to All Decks
                         </Button>
                     </div>
                 </div>
@@ -361,9 +327,7 @@ export default function DeckViewPage() {
          );
     }
     
-    // --- Studying View (Modified) ---
     const currentCard = studyCards[currentCardIndex];
-    // This case handles if the card list becomes empty during study (e.g., deleting last card)
     if (!currentCard) {
         setViewState('complete');
         return null; 
@@ -372,9 +336,10 @@ export default function DeckViewPage() {
     return (
         <>
             <div className="flex items-center justify-between mb-6">
-                <Button variant="ghost" onClick={() => setViewState('menu')}>
+                {/* --- 8. UPDATE BUTTON to go back to deck list --- */}
+                <Button variant="ghost" onClick={() => router.push('/flashcards')}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Menu
+                    Back to Decks
                 </Button>
                  <Button onClick={() => { setCardToEdit(null); setIsEditorOpen(true); }}>
                     <Plus className="w-4 h-4 mr-2" />
@@ -425,7 +390,6 @@ export default function DeckViewPage() {
                 </div>
             </div>
 
-             {/* --- MODIFIED onSaveSuccess --- */}
              <FlashcardEditorDialog
                 deckId={deckId}
                 cardToEdit={cardToEdit}
@@ -433,16 +397,14 @@ export default function DeckViewPage() {
                 onOpenChange={setIsEditorOpen}
                 onSaveSuccess={(savedCard) => {
                     if (cardToEdit) {
-                        // We edited an existing card
                         setStudyCards(prev => 
                             prev.map(c => c.id === savedCard.id ? savedCard : c)
                         );
                         toast({ title: "Card Updated!" });
                     } else {
                         // We added a new card.
-                        // Don't add to the current session, just update stats.
-                        setDeckStats(prev => ({ ...prev, total: prev.total + 1, new: prev.new + 1 }));
-                        toast({ title: "Card Added!" });
+                        // Don't add to the current session, just toast.
+                        toast({ title: "Card Added!", description: "It will appear in your next new card session." });
                     }
                 }}
              />

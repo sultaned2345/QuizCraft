@@ -1,6 +1,4 @@
 // src/app/(app)/documents/[documentId]/page.tsx
-// MODIFIED FILE
-
 'use client';
 
 import { useState, useEffect, useMemo, Fragment } from 'react';
@@ -17,8 +15,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PopQuizModal } from '@/components/PopQuizModal'; // <-- 1. IMPORT NEW MODAL
+// import { PopQuizModal } from '@/components/PopQuizModal'; // <-- 1. REMOVE STATIC IMPORT
+import dynamic from 'next/dynamic'; // <-- 2. IMPORT DYNAMIC
 
+// --- 3. LAZY-LOAD THE POPQUIZMODAL ---
+const PopQuizModal = dynamic(
+  () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
+  {
+    loading: () => (
+      <div className="flex h-full items-center justify-center p-6">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    ),
+  }
+);
+// --- (Rest of file is unchanged) ---
 interface ViewingContentState {
   title: string;
   text: string | null;
@@ -38,11 +49,9 @@ export default function DocumentViewPage() {
   const [insights, setInsights] = useState<AIDocumentInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(true);
   
-  // --- 2. ADD NEW STATE ---
   const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
   const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
   const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
-  // --- END NEW STATE ---
 
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -128,7 +137,6 @@ export default function DocumentViewPage() {
     fetchData();
   }, [documentId, session, authLoading, user, router, toast]);
 
-  // --- 3. ADD POP QUIZ HANDLER ---
   const handleStartPopQuiz = async () => {
     if (!session || isPopQuizLoading) return;
     setIsPopQuizLoading(true);
@@ -157,7 +165,6 @@ export default function DocumentViewPage() {
       setIsPopQuizLoading(false);
     }
   };
-  // --- END HANDLER ---
   
 
   if (isLoadingContent || authLoading) {
@@ -241,7 +248,6 @@ export default function DocumentViewPage() {
                     </div>
                   ) : (
                     <div className="space-y-6 p-1">
-                      {/* --- 4. ADD BUTTON to Exam Questions section --- */}
                       <InsightSection icon={<HelpCircle className="w-4 h-4 text-blue-500" />} title="Potential Exam Questions">
                         {insights.examQuestions.length > 0 ? (
                            <>
@@ -315,17 +321,19 @@ export default function DocumentViewPage() {
         </div>
       </div>
       
-      {/* --- 5. RENDER THE MODAL --- */}
-      <PopQuizModal
-        isOpen={isPopQuizOpen}
-        onOpenChange={setIsPopQuizOpen}
-        questions={popQuizQuestions}
-      />
+      {/* --- 4. RENDER THE LAZY-LOADED MODAL --- */}
+      {isPopQuizOpen && (
+        <PopQuizModal
+          isOpen={isPopQuizOpen}
+          onOpenChange={setIsPopQuizOpen}
+          questions={popQuizQuestions}
+        />
+      )}
     </>
   );
 }
 
-// Helper component
+// (Helper component is unchanged)
 const InsightSection = ({ title, icon, children }: { title: string, icon: React.ReactNode, children: React.ReactNode }) => (
   <div className="space-y-2">
     <h3 className="flex items-center gap-2 font-semibold">

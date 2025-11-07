@@ -1,6 +1,4 @@
 // src/app/(app)/layout.tsx
-// MODIFIED FILE
-
 'use client';
 
 import Link from 'next/link';
@@ -16,14 +14,13 @@ import {
   StickyNote,
   Layers,
   FileSignature,
-  MessageSquare,
   FileText,
   User,
   CreditCard,
-  FolderKanban, // <-- 1. IMPORT NEW ICON
+  FolderKanban,
+  Loader2,
 } from 'lucide-react';
 import { useState } from 'react';
-import { ChatbotDialog } from '@/components/ChatbotDialog';
 import { PageProvider } from '@/contexts/PageContext';
 import {
   Tooltip,
@@ -39,10 +36,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import dynamic from 'next/dynamic';
+import { ChatToggleButton } from '@/components/ChatToggleButton'; // <-- 1. IMPORT new button
 
-// ... (AppHeader component is unchanged) ...
+// --- 2. LAZY-LOAD THE NEW WIDGET CONTAINER ---
+const ChatWidgetContainer = dynamic(
+  () =>
+    import('@/components/ChatWidgetContainer').then(
+      (mod) => mod.ChatWidgetContainer
+    ),
+  {
+    loading: () => null, // No loader needed for a hidden component
+    ssr: false,
+  }
+);
+
+// --- (AppHeader component is unchanged) ---
 const AppHeader = () => {
-  const { user, signOut } = useAuth(); // Get user
+  const { user, signOut } = useAuth();
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -87,7 +98,10 @@ const AppHeader = () => {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              className="text-destructive"
+            >
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
             </DropdownMenuItem>
@@ -98,15 +112,14 @@ const AppHeader = () => {
   );
 };
 
-// --- MODIFIED SidebarNav ---
-const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
+// --- 3. MODIFY SidebarNav to REMOVE chat button ---
+const SidebarNav = () => {
   const pathname = usePathname();
 
   const navItems = [
-    // --- 2. ADD PROJECTS LINK ---
     { href: '/projects', label: 'Projects', icon: FolderKanban },
     { href: '/documents', label: 'Documents', icon: FileText },
-    { label: 'AI Tutor', icon: MessageSquare, action: onOpenChat },
+    // { label: 'AI Tutor', icon: MessageSquare, action: onOpenChat }, // <-- REMOVED
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
@@ -124,41 +137,19 @@ const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
             .map((item) => {
               const isActive =
                 item.href &&
-                // --- 3. ADDED PROJECT ACTIVE STATE LOGIC ---
                 (pathname === item.href ||
                   (item.href === '/projects' &&
                     pathname.startsWith('/projects/')) ||
                   (item.href === '/documents' &&
                     pathname.startsWith('/documents/')) ||
-                  (item.href !== '/documents' && 
-                   item.href !== '/projects' && 
-                   pathname.startsWith(item.href)));
-              // --- END MODIFICATION ---
-              
+                  (item.href !== '/documents' &&
+                    item.href !== '/projects' &&
+                    pathname.startsWith(item.href)));
+
               const itemClasses = cn(
                 'flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-primary',
                 isActive && 'bg-muted text-primary'
               );
-
-              if (item.action) {
-                return (
-                  <Tooltip key={item.label}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className={itemClasses}
-                        onClick={item.action}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        <span className="sr-only">{item.label}</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>{item.label}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              }
 
               return (
                 <Tooltip key={item.label}>
@@ -206,9 +197,13 @@ const SidebarNav = ({ onOpenChat }: { onOpenChat: () => void }) => {
   );
 };
 
-// --- (Main Layout Component remains the same) ---
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  // --- 4. RENAME state to control the new widget ---
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const pathname = usePathname(); // <-- 5. Get current path
+
+  // --- 6. DETERMINE if we are on a document page ---
+  const isDocumentPage = pathname.startsWith('/documents/');
 
   return (
     <PageProvider>
@@ -224,7 +219,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-4">
-            <SidebarNav onOpenChat={() => setIsChatbotOpen(true)} />
+            {/* --- 7. REMOVE onOpenChat prop --- */}
+            <SidebarNav />
           </div>
         </aside>
 
@@ -233,10 +229,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
         </div>
 
-        <ChatbotDialog
-          isOpen={isChatbotOpen}
-          onClose={() => setIsChatbotOpen(false)}
-        />
+        {/* --- 8. CONDITIONALLY RENDER the global chat --- */}
+        {!isDocumentPage && (
+          <>
+            <ChatToggleButton
+              isOpen={isChatOpen}
+              onClick={() => setIsChatOpen(!isChatOpen)}
+            />
+            <ChatWidgetContainer
+              isOpen={isChatOpen}
+              onClose={() => setIsChatOpen(false)}
+            />
+          </>
+        )}
       </div>
     </PageProvider>
   );

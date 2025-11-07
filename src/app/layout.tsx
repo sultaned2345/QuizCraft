@@ -7,7 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
 import { Footer } from "@/components/Footer"
-import { UpgradeModalProvider } from "@/components/UpgradeModalContext" // <-- 1. IMPORT (FIXED PATH)
+// --- 1. IMPORT FROM THE CORRECTED PATH ---
+import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
 
 // Main sans-serif font
 const inter = Inter({

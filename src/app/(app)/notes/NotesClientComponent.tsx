@@ -1,24 +1,33 @@
 // src/app/(app)/notes/NotesClientComponent.tsx
-// REFACTORED
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Keep
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Note, ApiResponse } from '@/types/database'; // Keep
+import { Note, ApiResponse } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X } from 'lucide-react';
-// --- REMOVE NoteEditor ---
-// import { NoteEditor } from '@/components/NoteEditor';
-import { GenerateNotesDialog } from '@/components/GenerateNotesDialog';
+// import { GenerateNotesDialog } from '@/components/GenerateNotesDialog'; // <-- 1. REMOVE STATIC IMPORT
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic'; // <-- 2. IMPORT DYNAMIC
 
-// ... (PaginatedNotesData, NoteListItem, NotesClientComponentProps interfaces remain the same) ...
+// --- 3. LAZY-LOAD THE GENERATE NOTES DIALOG ---
+const GenerateNotesDialog = dynamic(
+  () => import('@/components/GenerateNotesDialog').then((mod) => mod.GenerateNotesDialog),
+  {
+    loading: () => (
+      <div className="flex h-full items-center justify-center p-6">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    ),
+  }
+);
+// --- (Interfaces remain the same) ---
 interface NoteListItem {
   id: string;
   user_id: string;
@@ -40,36 +49,41 @@ interface NotesClientComponentProps {
 
 
 export function NotesClientComponent({ initialData }: NotesClientComponentProps) {
+  // --- (State and hooks remain the same) ---
   const [notes, setNotes] = useState<NoteListItem[]>(initialData.notes);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  // --- REMOVE ALL MODAL/FETCHING STATE ---
-  // const [isEditorOpen, setIsEditorOpen] = useState(false);
-  // const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-  // const [isFetchingNote, setIsFetchingNote] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
-  
   const [usage, setUsage] = useState({ count: initialData.count, limit: initialData.limit });
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(initialData.currentPage);
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const notesPerPage = 9;
-
   const [allTags, setAllTags] = useState<Set<string>>(new Set());
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const { session } = useAuth();
-  const router = useRouter(); // Keep
+  const router = useRouter();
   const { toast } = useToast();
 
-  // --- REMOVE fetchCache ---
-  // const fetchCache = useRef<Map<string, Promise<Note>>>(new Map());
-
-  // --- (Animation Variants remain the same) ---
-  const containerVariants = { /* ... */ };
-  const itemVariants = { /* ... */ };
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
+      },
+    },
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: 'spring', stiffness: 100 }
+    },
+  };
 
   useEffect(() => {
-    // ... (this useEffect remains the same) ...
     const tags = new Set<string>();
     notes.forEach(note => {
       (note.tags || []).forEach(tag => tags.add(tag));
@@ -78,7 +92,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   }, [notes]);
 
   const fetchMoreNotes = useCallback(async (page: number) => {
-    // ... (this function remains the same) ...
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
     try {
@@ -105,7 +118,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   }
 
    const refreshFirstPage = useCallback(async () => {
-        // ... (this function remains the same) ...
         if (!session) return;
         try {
             const response = await fetch(`/api/notes?page=1&limit=${notesPerPage}`, {
@@ -122,12 +134,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         }
     }, [session, toast, notesPerPage]);
 
-  // --- REMOVE prefetchNote ---
-  // --- REMOVE handleEditClick ---
-  // --- REMOVE handleSaveNote ---
-
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
-     // ... (this function remains the same) ...
      if (!session || !confirm(`Are you sure you want to delete "${noteTitle}"?`)) return;
 
      const originalNotes = [...notes];
@@ -146,7 +153,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
        }
        
        toast({ title: "Note Deleted" });
-       // We might need to refresh the first page if pagination is off
        refreshFirstPage();
        
      } catch (error: any) {
@@ -157,7 +163,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   };
 
   const filteredNotes = useMemo(() => {
-    // ... (this function remains the same) ...
     return notes.filter(note => {
       const matchesSearch = !searchTerm || note.title.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesTag = !selectedTag || (note.tags || []).includes(selectedTag);
@@ -182,7 +187,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           <Button onClick={() => setIsGeneratorOpen(true)}>
               <Sparkles className="w-4 h-4 mr-2" /> Generate with AI
           </Button>
-          {/* --- MODIFIED: Navigate to new page --- */}
           <Button onClick={() => router.push('/notes/new')}>
             <Plus className="w-4 h-4 mr-2" /> New Note
           </Button>
@@ -194,7 +198,31 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
-      {/* ... (tag filter jsx) ... */}
+      
+      {allTags.size > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            <Button
+              variant={!selectedTag ? 'default' : 'secondary'}
+              size="sm"
+              onClick={() => setSelectedTag(null)}
+              className="rounded-full"
+            >
+              All
+            </Button>
+            {Array.from(allTags).map(tag => (
+              <Button
+                key={tag}
+                variant={selectedTag === tag ? 'default' : 'secondary'}
+                size="sm"
+                onClick={() => setSelectedTag(tag)}
+                className="rounded-full"
+              >
+                {tag}
+              </Button>
+            ))}
+          </div>
+        )}
+      
        {(notes.length === 0) ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -206,7 +234,12 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       ) : filteredNotes.length === 0 ? (
          <div className="text-center py-16 border-2 border-dashed rounded-lg">
-           {/* ... (no results jsx) ... */}
+           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
+           <h3 className="mt-4 text-lg font-semibold">No Results Found</h3>
+           <p className="mt-1 text-sm text-muted-foreground">Try clearing your search or tag filters.</p>
+           <Button className="mt-6" variant="outline" onClick={() => { setSearchTerm(''); setSelectedTag(null); }}>
+            <X className="w-4 h-4 mr-2" /> Clear Filters
+          </Button>
         </div>
       ) : (
         <motion.div 
@@ -222,10 +255,18 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                   <CardTitle className="text-lg truncate">{note.title}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-grow">
-                   {/* ... (tag display jsx) ... */}
+                   {note.tags && note.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {note.tags.slice(0, 3).map(tag => (
+                        <Badge key={tag} variant="secondary" className="font-normal">{tag}</Badge>
+                      ))}
+                      {note.tags.length > 3 && (
+                        <Badge variant="secondary" className="font-normal">+{note.tags.length - 3}</Badge>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2">
-                    {/* --- MODIFIED: Navigate to edit page --- */}
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -244,24 +285,33 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </motion.div>
       )}
 
-      {/* (Load More Button remains the same) */}
-      {/* ... */}
+      {/* (Load More Button) */}
+      {totalPages > currentPage && (
+        <div className="mt-8 text-center">
+          <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+            {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Notes
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            Showing {notes.length} of {usage.count} notes
+          </p>
+        </div>
+      )}
 
-      {/* --- REMOVE NoteEditor Modal --- */}
-      
-      {/* (GenerateNotesDialog remains the same) */}
-      <GenerateNotesDialog
-        isOpen={isGeneratorOpen}
-        onClose={() => setIsGeneratorOpen(false)}
-        onSuccess={(newNotes) => {
-            toast({ title: "AI Notes Generated!"});
-            refreshFirstPage();
-            setIsGeneratorOpen(false);
-        }}
-        onError={(errorMessage) => {
-            toast({ title: "Generation Failed", description: errorMessage, variant: "destructive" });
-        }}
-      />
+      {/* --- 4. RENDER THE LAZY-LOADED DIALOG --- */}
+      {isGeneratorOpen && (
+        <GenerateNotesDialog
+          isOpen={isGeneratorOpen}
+          onClose={() => setIsGeneratorOpen(false)}
+          onSuccess={(newNotes) => {
+              toast({ title: "AI Notes Generated!"});
+              refreshFirstPage();
+              setIsGeneratorOpen(false);
+          }}
+          onError={(errorMessage) => {
+              toast({ title: "Generation Failed", description: errorMessage, variant: "destructive" });
+          }}
+        />
+      )}
     </>
   );
 }
