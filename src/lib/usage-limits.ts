@@ -3,7 +3,8 @@
 import { prisma } from '@/lib/prisma';
 // --- MODIFIED: Removed supabaseHelpers import ---
 // import { supabaseHelpers } from './supabase'; // Import the helpers
-import { supabaseAdmin } from './supabaseAdmin'; // --- ADDED: For increment ---
+import { supabaseAdmin } from './supabaseAdmin'; // --- ADDED: For getAIGenerationUsageForMonth ---
+import { Prisma } from '@prisma/client'; // <-- ADDED: For error handling
 
 interface ValidationResult {
   isValid: boolean;
@@ -394,5 +395,52 @@ export async function getUserUsage(userId: string) {
         remaining: USAGE_LIMITS.FREE_DOCUMENTS,
       },
     };
+  }
+}
+
+/**
+ * NEW FUNCTION
+ * Increments the AI generation usage count for a user for the current month.
+ * This should be called *after* a successful AI generation.
+ * Uses Prisma to ensure consistency with checkAIGenerationUsageLimit.
+ */
+export async function incrementAIGenerationUsage(userId: string, count: number = 1) {
+  if (count <= 0) return;
+
+  // Get the first day of the current UTC month
+  const now = new Date();
+  const firstDayOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  try {
+    console.log(`[UsageLib] Incrementing AI usage for ${userId} by ${count} for month ${firstDayOfMonth.toISOString()}`);
+
+    await prisma.ai_usage.upsert({
+      where: {
+        user_id_usage_month: {
+          user_id: userId,
+          usage_month: firstDayOfMonth,
+        },
+      },
+      create: {
+        user_id: userId,
+        usage_month: firstDayOfMonth,
+        usage_count: count,
+        updated_at: new Date(),
+      },
+      update: {
+        usage_count: {
+          increment: count,
+        },
+        updated_at: new Date(),
+      },
+    });
+
+    console.log(`[UsageLib] Successfully updated AI usage for ${userId}.`);
+  } catch (error) {
+    console.error(`[UsageLib] CRITICAL: Failed to increment AI usage for user ${userId}:`, error);
+    // We throw this error so the API route can be aware of the failure.
+    // In a production system, you might queue this for a retry
+    // instead of failing the user's request if the AI part already succeeded.
+    throw new Error(`Failed to update AI usage count: ${error instanceof Error ? error.message : 'Unknown DB error'}`);
   }
 }

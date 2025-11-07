@@ -5,8 +5,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed 
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client'; // Import Prisma namespace for types if needed
 import { requireAuth } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
+// --- MODIFIED IMPORTS ---
+// import { supabaseAdmin } from '@/lib/supabaseAdmin'; // REMOVED
+import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
+// --- END MODIFICATION ---
 import { Note, ApiResponse } from '@/types/database';
 
 export const runtime = "nodejs";
@@ -88,11 +90,7 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
   }
 }
 
-// updateAIUsage (remains the same)
-async function updateAIUsage(userId: string, month: Date, count: number = 1) {
-    // ... (keep existing function) ...
-     if(count<=0) return; const firstDayOfMonth=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth(),1)).toISOString().split('T')[0]; const supabase=supabaseAdmin; try { const {data:currentUsage,error:fetchError}=await supabase.from('ai_usage').select('usage_count').eq('user_id',userId).eq('usage_month',firstDayOfMonth).maybeSingle(); if(fetchError&&fetchError.code!=='PGRST116'){ throw new Error(`Failed fetch AI usage: ${fetchError.message} (Code: ${fetchError.code})`);} const currentCount=currentUsage?.usage_count??0; const newCount=currentCount+count; const {error:upsertError}=await supabase.from('ai_usage').upsert({user_id:userId,usage_month:firstDayOfMonth,usage_count:newCount,updated_at:new Date().toISOString(),},{onConflict:'user_id, usage_month'}); if(upsertError){ throw new Error(`Failed upsert AI usage: ${upsertError.message} (Code: ${upsertError.code})`);} console.log(`[Admin] Updated AI usage for ${userId} in ${firstDayOfMonth}.`);} catch(error){console.error(`[Admin] Error during AI usage update for ${userId}:`,error); throw error;}
-}
+// --- REMOVED LOCAL updateAIUsage HELPER ---
 
 
 /**
@@ -200,7 +198,8 @@ export async function POST(request: NextRequest) {
     // 5. Update usage count (Uses supabaseAdmin, should be less prone to Vercel connection issues)
     try {
         console.log("DEBUG: Attempting to update AI usage count...");
-        await updateAIUsage(user.id, new Date(), actualGeneratedCount);
+        // --- MODIFIED CALL ---
+        await incrementAIGenerationUsage(user.id, actualGeneratedCount);
         console.log("DEBUG: Updated AI usage count.");
     } catch (usageError: any) {
         console.error("CRITICAL DEBUG: Failed to update AI usage count AFTER saving note:", usageError);

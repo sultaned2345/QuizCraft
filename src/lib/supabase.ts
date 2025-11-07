@@ -48,24 +48,11 @@ export const supabaseHelpers = {
       console.warn(
         `No profile found for user ${userId}, assuming 'free' plan.`
       );
-      try {
-        const { data: authUser, error: authError } =
-          await supabase.auth.admin.getUserById(userId);
-        if (authError || !authUser?.user)
-          throw authError || new Error('User not found');
-        return {
-          id: userId,
-          email: authUser.user.email || 'unknown',
-          created_at: authUser.user.created_at || new Date().toISOString(),
-          subscription_plan: 'free' as const,
-        };
-      } catch (adminError) {
-        console.error(
-          `Failed to get auth user details for ${userId} after profile lookup failed:`,
-          adminError
-        );
-        return null;
-      }
+      // --- MODIFICATION: REMOVED ADMIN CALL ---
+      // The client-side helper CANNOT perform this fallback.
+      // The caller must handle the 'null' case.
+      return null;
+      // --- END MODIFICATION ---
     }
     const plan = (data as any).subscription_plan === 'pro' ? 'pro' : 'free';
     return { ...data, subscription_plan: plan } as User & {

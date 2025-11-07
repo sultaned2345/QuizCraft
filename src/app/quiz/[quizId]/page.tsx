@@ -1,7 +1,8 @@
 // src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react'; // <-- IMPORT Fragment
+import * as React from 'react'; // <-- IMPORT React
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,21 @@ type UserAnswer = {
   selectedAnswer: string; // For MATCHING, this will be a stringified array
   isCorrect: boolean;
 };
+
+// --- NEW: Helper function to render text with blanks safely ---
+function renderWithBlanks(text: string) {
+  if (!text.includes('____')) {
+    return text;
+  }
+  
+  return text.split('____').map((part, index, arr) => (
+    <React.Fragment key={index}>
+      {part}
+      {index < arr.length - 1 && <strong>[BLANK]</strong>}
+    </React.Fragment>
+  ));
+}
+// --- END NEW HELPER ---
 
 // --- MODIFIED Header ---
 const DashboardHeader = () => {
@@ -602,21 +618,19 @@ export default function QuizPage() {
             {/* Handle quiz view */}
             {viewMode === 'quiz' && questions.length > 0 && currentQuestion && (
               <div>
+                {/* --- MODIFICATION: Use safe renderWithBlanks --- */}
                 {currentQuestion.question_type === 'FILL_IN_THE_BLANK' ? (
                   <div
                     className="text-lg font-semibold mb-4"
-                    dangerouslySetInnerHTML={{
-                      __html: currentQuestion.question_text.replace(
-                        /____/g,
-                        '<strong>[BLANK]</strong>'
-                      ),
-                    }}
-                  />
+                  >
+                    {renderWithBlanks(currentQuestion.question_text)}
+                  </div>
                 ) : (
                   <div className="text-lg font-semibold mb-4">
                     {currentQuestion.question_text}
                   </div>
                 )}
+                {/* --- END MODIFICATION --- */}
 
                 {renderQuestion()}
 
@@ -744,15 +758,13 @@ export default function QuizPage() {
                           : 'border-destructive/50 bg-destructive/5'
                       )}
                     >
+                      {/* --- MODIFICATION: Use safe renderWithBlanks --- */}
                       <p
                         className="font-semibold"
-                        dangerouslySetInnerHTML={{
-                          __html: `${index + 1}. ${q.question_text.replace(
-                            /____/g,
-                            `<strong>[BLANK]</strong>` // Show blank in review
-                          )}`,
-                        }}
-                      ></p>
+                      >
+                        {index + 1}. {renderWithBlanks(q.question_text)}
+                      </p>
+                      {/* --- END MODIFICATION --- */}
 
                       {q.question_type === 'MATCHING' ? (
                         <div className="mt-2 text-sm">

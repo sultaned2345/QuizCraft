@@ -6,71 +6,17 @@ import pdfParse from 'pdf-parse-fork';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { Question, QuestionType } from '@/types/database';
-import { checkAIGenerationUsageLimit } from '@/lib/usage-limits'; // Import usage limit checker
-import { supabaseAdmin } from '@/lib/supabaseAdmin'; // Import admin client for usage update
+// --- MODIFIED IMPORTS ---
+import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits'; // Import usage limit checker
+// import { supabaseAdmin } from '@/lib/supabaseAdmin'; // REMOVED
+// --- END MODIFICATION ---
 
 export const runtime = 'nodejs'; // Required for pdf-parse (Node APIs)
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
 
-// --- Helper to Update AI Usage using SERVICE ROLE ---
-// (Copied from generate-flashcards/route.ts for consistency)
-async function updateAIUsage(userId: string, month: Date, count: number = 1) {
-  if (count <= 0) return;
-  const firstDayOfMonth = new Date(
-    Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1)
-  )
-    .toISOString()
-    .split('T')[0];
-  const supabase = supabaseAdmin; // Use the imported admin client
-  try {
-    console.log(
-      `[Admin] Attempting to fetch AI usage for ${userId} month ${firstDayOfMonth}`
-    );
-    const { data: currentUsage, error: fetchError } = await supabase
-      .from('ai_usage')
-      .select('usage_count')
-      .eq('user_id', userId)
-      .eq('usage_month', firstDayOfMonth)
-      .maybeSingle();
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('[Admin] Supabase fetch error (updateAIUsage):', fetchError);
-      throw new Error(
-        `Failed fetching current AI usage: ${fetchError.message} (Code: ${fetchError.code})`
-      );
-    }
-    const currentCount = currentUsage?.usage_count ?? 0;
-    const newCount = currentCount + count;
-    console.log(
-      `[Admin] Attempting to upsert AI usage for ${userId} month ${firstDayOfMonth} to ${newCount}`
-    );
-    const { error: upsertError } = await supabase.from('ai_usage').upsert(
-      {
-        user_id: userId,
-        usage_month: firstDayOfMonth,
-        usage_count: newCount,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id, usage_month' }
-    );
-    if (upsertError) {
-      console.error('[Admin] Supabase upsert error (updateAIUsage):', upsertError);
-      throw new Error(
-        `Failed upserting AI usage: ${upsertError.message} (Code: ${upsertError.code})`
-      );
-    }
-    console.log(
-      `[Admin] Successfully updated AI usage for ${userId} in ${firstDayOfMonth}.`
-    );
-  } catch (error) {
-    console.error(
-      `[Admin] Error during AI usage update logic for user ${userId}:`,
-      error
-    );
-    throw error;
-  }
-}
+// --- REMOVED LOCAL updateAIUsage HELPER ---
 
 function parseQuery(
   request: NextRequest
@@ -478,7 +424,8 @@ export async function POST(request: NextRequest) {
     });
 
     // --- Update AI Usage Count ---
-    await updateAIUsage(user.id, new Date(), 1); // Increment by 1
+    // --- MODIFIED CALL ---
+    await incrementAIGenerationUsage(user.id, 1); // Increment by 1
     // --- End Usage Update ---
 
     return NextResponse.json({
