@@ -1,4 +1,3 @@
-[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/src/app/api/chat/route.ts]
 // src/app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -394,7 +393,6 @@ ${JSON.stringify(gradedEssay.feedback)}
         throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
       }
       
-      // --- MODIFICATION: Logic switch based on RAG results ---
       if (chunks && chunks.length > 0) {
         // SCENARIO 1: Chunks found. Use strict RAG prompt.
         console.log(`[Chat API] ${chunks.length} RAG chunks found. Using strict RAG prompt.`);
@@ -431,7 +429,6 @@ ${contextString}`;
 - If the question is academic (e.g., "What is mitosis?"), provide a helpful, educational answer.
 - Do not add any citations.`;
       }
-      // --- END MODIFICATION ---
 
       const generalHistory = await prisma.chat_history.findMany({
           where: { 

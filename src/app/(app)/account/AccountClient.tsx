@@ -1,6 +1,5 @@
 'use client';
 // src/app/(app)/account/AccountClient.tsx
-// NEW FILE
 
 import {
   Card,
