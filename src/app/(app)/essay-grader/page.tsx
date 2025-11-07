@@ -1,12 +1,11 @@
+[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/src/app/(app)/essay-grader/page.tsx]
 // src/app/(app)/essay-grader/page.tsx
 // UPDATED FILE
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
-// --- THIS IS THE FIX ---
 import { useRouter } from 'next/navigation';
-// --- END FIX ---
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,9 +38,8 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
+import { useUpgradeModal } from '@/components/UpgradeModalContext';
 
-// (All interfaces, components, and state remain the same)
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 const rubricPresets = {
     general: {
@@ -101,14 +99,14 @@ export default function EssayGraderPage() {
   const [isUsageLoading, setIsUsageLoading] = useState(true);
   const [history, setHistory] = useState<GradedEssayListItem[] | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [outputTab, setOutputTab] = useState<'feedback' | 'history'>('feedback');
 
   const { session } = useAuth();
   const { toast } = useToast();
   const { setPageContext } = usePageContext();
-  const router = useRouter(); // This now works because of the import
-  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+  const router = useRouter();
+  const { openModal } = useUpgradeModal();
 
-  // (All functions and useEffects remain unchanged)
   useEffect(() => {
     if (gradedEssay?.id) {
       setPageContext({ type: 'essay', id: gradedEssay.id });
@@ -152,7 +150,8 @@ export default function EssayGraderPage() {
 
     fetchUsage();
     fetchHistory();
-  }, [session]); 
+    setOutputTab(gradedEssay ? 'feedback' : 'history');
+  }, [session, gradedEssay]); 
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
@@ -176,9 +175,18 @@ export default function EssayGraderPage() {
        setSelectedFile(file);
        setEssayText('');
        setGradedEssay(null);
+       setOutputTab('history');
      } else {
        setSelectedFile(null);
      }
+   };
+
+   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+     setEssayText(e.target.value); 
+     if(selectedFile) setSelectedFile(null); 
+     setError(null); 
+     setGradedEssay(null);
+     setOutputTab('history');
    };
    
    const handleViewHistoryItem = async (essayId: string) => {
@@ -188,6 +196,7 @@ export default function EssayGraderPage() {
         setGradedEssay(null);
         setEssayText('');
         setSelectedFile(null);
+        setOutputTab('feedback'); // Switch to feedback tab on click
         
         try {
             const response = await fetch(`/api/graded-essays/${essayId}`, {
@@ -216,6 +225,7 @@ export default function EssayGraderPage() {
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred while fetching history.');
             toast({ title: "Failed to Load History", description: err.message, variant: "destructive" });
+            setOutputTab('history'); // Switch back on error
         } finally {
             setIsLoading(false);
         }
@@ -255,16 +265,15 @@ export default function EssayGraderPage() {
       response = await fetch('/api/grade-essay', { method: 'POST', headers: headers, body: requestBody });
       const result: ApiResponse<GradeEssayResponseData> = await response.json();
       if (!response.ok || !result.success || !result.data) {
-        // --- 3. CATCH LIMIT ERROR ---
         if (result.error === 'limit_exceeded') {
           openModal();
           throw new Error(result.message || 'AI generation limit reached.');
         }
-        // ---
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
       setGradedEssay(result.data);
+      setOutputTab('feedback'); // Switch to feedback tab on success
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
       
       if (history) {
@@ -286,13 +295,11 @@ export default function EssayGraderPage() {
          });
       }
     } catch (err: any) {
-      // --- 4. AVOID DOUBLE-TOASTING ---
       const errorMessage = err.message || 'An unexpected error occurred during grading.';
       if (!errorMessage.includes('limit reached')) {
         setError(errorMessage);
         toast({ title: "Grading Failed", description: errorMessage, variant: "destructive" });
       }
-      // ---
     } finally {
       setIsLoading(false);
     }
@@ -401,7 +408,6 @@ export default function EssayGraderPage() {
     );
   };
   
-  // (Rest of the component JSX remains the same)
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
 
   return (
@@ -426,8 +432,10 @@ export default function EssayGraderPage() {
           </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* --- NEW 2-COLUMN LAYOUT --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
+        {/* --- COLUMN 1: INPUT --- */}
         <div className="lg:col-span-1 space-y-6">
            <Card>
                 <CardHeader>
@@ -443,7 +451,7 @@ export default function EssayGraderPage() {
                         <Textarea
                             placeholder="Paste your essay here..."
                             value={essayText}
-                            onChange={(e) => { setEssayText(e.target.value); if(selectedFile) setSelectedFile(null); setError(null); setGradedEssay(null); }}
+                            onChange={handleTextChange}
                             className="min-h-[250px] text-base border rounded-md"
                             disabled={isLoading}
                         />
@@ -510,128 +518,100 @@ export default function EssayGraderPage() {
              )}
         </div>
         
-        <div className="lg:col-span-1 space-y-6">
+        {/* --- COLUMN 2: OUTPUT (TABS) --- */}
+        <div className="lg:col-span-1">
            <Card className="min-h-[400px] flex flex-col"> 
-                <CardHeader>
-                    <CardTitle>AI Feedback</CardTitle>
-                    <CardDescription>Results will appear here after grading.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
-                    {isLoading && ( 
-                        <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
-                            <Loader2 className="w-8 h-8 animate-spin mb-4" />
-                            <p>Analyzing your essay...</p>
-                        </div>
-                    )}
-                    {!isLoading && gradedEssay && ( 
-                        <Tabs defaultValue="summary" className="flex-1 flex flex-col">
-                          <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="summary">Summary</TabsTrigger>
-                            <TabsTrigger value="highlighted-essay">Highlighted Essay</TabsTrigger>
-                          </TabsList>
-                          
-                          <TabsContent value="summary" className="flex-1 overflow-hidden">
-                            <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
-                                <ScoreBadge score={gradedEssay.score} />
-                                {renderFeedback(gradedEssay.feedback)}
-                                {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
-                                    <div className="mt-6 pt-4 border-t">
-                                        <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
-                                        <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                                            {gradedEssay.suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                                        </ul>
+                <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col">
+                    <CardHeader>
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="feedback">AI Feedback</TabsTrigger>
+                            <TabsTrigger value="history">Grading History</TabsTrigger>
+                        </TabsList>
+                    </CardHeader>
+                    
+                    <TabsContent value="feedback" className="flex-1 flex flex-col mt-0">
+                        <CardContent className="flex-1 flex flex-col">
+                            {isLoading && ( 
+                                <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
+                                    <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                                    <p>Analyzing your essay...</p>
+                                </div>
+                            )}
+                            {!isLoading && gradedEssay && ( 
+                                <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
+                                    <ScoreBadge score={gradedEssay.score} />
+                                    {renderFeedback(gradedEssay.feedback)}
+                                    {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
+                                        <div className="mt-6 pt-4 border-t">
+                                            <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
+                                            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                                                {gradedEssay.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </ScrollArea>
+                            )}
+                             {!isLoading && !gradedEssay && ( 
+                                 <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1 text-center">
+                                    <FileSignature className="w-12 h-12 mb-4" />
+                                    <p>Submit your essay to receive feedback.</p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </TabsContent>
+                    
+                    <TabsContent value="history" className="flex-1 flex flex-col mt-0">
+                        <CardContent className="flex-1 flex flex-col">
+                             {isHistoryLoading ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-12 w-full" />
+                                    <Skeleton className="h-12 w-full" />
+                                    <Skeleton className="h-12 w-full" />
+                                </div>
+                            ) : !history || history.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground text-center">
+                                    <History className="w-12 h-12 mb-4" />
+                                    <p>Your graded essays will appear here.</p>
+                                </div>
+                            ) : (
+                                <ScrollArea className="h-full max-h-[60vh]">
+                                    <div className="space-y-2">
+                                        {history.map(item => (
+                                            <div
+                                                key={item.id}
+                                                className={cn(
+                                                    "w-full justify-between h-auto p-3 flex items-center border rounded-md hover:bg-muted/50",
+                                                    isLoading ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                                )}
+                                                onClick={() => !isLoading && handleViewHistoryItem(item.id)}
+                                                tabIndex={0}
+                                                onKeyDown={(e) => (e.key === 'Enter' && !isLoading) && handleViewHistoryItem(item.id)}
+                                            >
+                                                <div className="text-left">
+                                                    <p className="font-medium text-sm truncate">{item.essay_title || 'Untitled Essay'}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {new Date(item.graded_at).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                                {item.score !== null && (
+                                                    <span className={cn(
+                                                        "font-bold text-lg ml-2",
+                                                        item.score >= 90 ? 'text-green-600' :
+                                                        item.score >= 80 ? 'text-blue-600' :
+                                                        item.score >= 70 ? 'text-yellow-600' : 'text-red-600'
+                                                    )}>
+                                                        {item.score}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                )}
-                            </ScrollArea>
-                          </TabsContent>
-                          
-                          <TabsContent value="highlighted-essay" className="flex-1 overflow-hidden">
-                            <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
-                                {gradedEssay.essay_content ? (
-                                    <TooltipProvider>
-                                        <div className="rounded-md border bg-muted/50">
-                                            {renderHighlightedEssay(gradedEssay.essay_content, gradedEssay.feedback)}
-                                        </div>
-                                    </TooltipProvider>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">Could not load essay text for highlighting.</p>
-                                )}
-                            </ScrollArea>
-                          </TabsContent>
-                        </Tabs>
-                    )}
-                     {!isLoading && !gradedEssay && !error && ( 
-                         <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
-                            <FileSignature className="w-12 h-12 mb-4" />
-                            <p>Submit your essay to receive feedback.</p>
-                        </div>
-                    )}
-                    {!isLoading && !gradedEssay && error && (
-                         <div className="flex flex-col items-center justify-center pt-10 text-destructive flex-1">
-                            <AlertCircle className="w-12 h-12 mb-4" />
-                            <p>Could not generate feedback.</p>
-                            <p className="text-xs mt-2 text-center">({error})</p>
-                        </div>
-                    )}
-                </CardContent>
+                                </ScrollArea>
+                            )}
+                        </CardContent>
+                    </TabsContent>
+                </Tabs>
            </Card>
-        </div>
-        
-         <div className="lg:col-span-1 space-y-6">
-            <Card className="min-h-[400px]">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <History className="w-5 h-5" />
-                        Grading History
-                    </CardTitle>
-                    <CardDescription>View your previous submissions.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isHistoryLoading ? (
-                        <div className="space-y-2">
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                        </div>
-                    ) : !history || history.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground text-center">
-                            <History className="w-12 h-12 mb-4" />
-                            <p>Your graded essays will appear here.</p>
-                        </div>
-                    ) : (
-                        <ScrollArea className="h-full max-h-[70vh]">
-                            <div className="space-y-2">
-                                {history.map(item => (
-                                    <Button
-                                        key={item.id}
-                                        variant="outline"
-                                        className="w-full justify-between h-auto py-2"
-                                        onClick={() => handleViewHistoryItem(item.id)}
-                                        disabled={isLoading}
-                                    >
-                                        <div className="text-left">
-                                            <p className="font-medium text-sm truncate">{item.essay_title || 'Untitled Essay'}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {new Date(item.graded_at).toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                        {item.score !== null && (
-                                            <span className={cn(
-                                                "font-bold text-lg ml-2",
-                                                item.score >= 90 ? 'text-green-600' :
-                                                item.score >= 80 ? 'text-blue-600' :
-                                                item.score >= 70 ? 'text-yellow-600' : 'text-red-600'
-                                            )}>
-                                                {item.score}
-                                            </span>
-                                        )}
-                                    </Button>
-                                ))}
-                            </div>
-                        </ScrollArea>
-                    )}
-                </CardContent>
-            </Card>
          </div>
       </div>
     </>

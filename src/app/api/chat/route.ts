@@ -1,3 +1,4 @@
+[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/src/app/api/chat/route.ts]
 // src/app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -5,10 +6,10 @@ import {
   HarmCategory,
   HarmBlockThreshold,
   Content,
-  SchemaType, // <-- FIX: This is the correct export
+  SchemaType,
   FunctionDeclaration,
   Part,
-} from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
+} from "@google/generative-ai";
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin'; 
 import { generateQueryEmbedding } from '@/lib/embedding';
@@ -26,11 +27,12 @@ interface AISource {
   content_type: 'note' | 'document';
   content_title: string;
   citation: number;
+  content_chunk: string;
 }
 
 // Define Context type
 interface PageContext {
-  type: 'quiz' | 'essay' | 'page' | 'document'; // --- ADDED 'document' ---
+  type: 'quiz' | 'essay' | 'page' | 'document';
   id?: string;
   name?: string;
 }
@@ -41,7 +43,6 @@ const generationConfig = {
   topK: 1,
   topP: 1,
   maxOutputTokens: 4096,
-  // responseMimeType: "application/json", // REMOVED: Must be text/plain for tool use streaming
 };
 
 const safetySettings = [
@@ -52,39 +53,37 @@ const safetySettings = [
 ];
 
 // --- (Tool Schemas and Handlers remain unchanged) ---
-// ... (tools, handleAddQuestionToQuiz, handleUpdateQuestionInQuiz, handleDeleteQuestionFromQuiz) ...
-// --- Tool Schemas ---
 const tools: { spec: FunctionDeclaration }[] = [
   {
     spec: {
       name: "addQuestionToQuiz",
       description: "Adds a new question to a specific quiz.",
       parameters: {
-        type: SchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT,
         properties: {
-          quizId: { type: SchemaType.STRING, description: "The ID of the quiz to add the question to." }, // <-- FIX
-          question_text: { type: SchemaType.STRING }, // <-- FIX
+          quizId: { type: SchemaType.STRING, description: "The ID of the quiz to add the question to." },
+          question_text: { type: SchemaType.STRING },
           question_type: { 
-            type: SchemaType.STRING, // <-- FIX
+            type: SchemaType.STRING,
             enum: ["MULTIPLE_CHOICE", "TRUE_FALSE", "FILL_IN_THE_BLANK", "MATCHING"]
           },
           options: { 
-            type: SchemaType.ARRAY, // <-- FIX
-            items: { type: SchemaType.STRING }, // <-- FIX
+            type: SchemaType.ARRAY,
+            items: { type: SchemaType.STRING },
             nullable: true,
             description: "For MULTIPLE_CHOICE or MATCHING. For FILL_IN_THE_BLANK, this is an array of acceptable answers."
           },
           prompts: {
-            type: SchemaType.ARRAY, // <-- FIX
-            items: { type: SchemaType.STRING }, // <-- FIX
+            type: SchemaType.ARRAY,
+            items: { type: SchemaType.STRING },
             nullable: true,
             description: "For MATCHING type only. The list of prompts."
           },
           correct_answer: { 
-            type: SchemaType.STRING, // <-- FIX
+            type: SchemaType.STRING,
             description: "For MC, must be one of the options. For T/F, must be 'True' or 'False'. For FILL_IN_THE_BLANK, can be N/A. For MATCHING, can be N/A."
           },
-          explanation: { type: SchemaType.STRING, nullable: true }, // <-- FIX
+          explanation: { type: SchemaType.STRING, nullable: true },
         },
         required: ["quizId", "question_text", "question_type", "correct_answer"]
       }
@@ -95,18 +94,18 @@ const tools: { spec: FunctionDeclaration }[] = [
       name: "updateQuestionInQuiz",
       description: "Updates an existing question in a quiz.",
       parameters: {
-        type: SchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT,
         properties: {
-          questionId: { type: SchemaType.STRING, description: "The ID of the question to update." }, // <-- FIX
+          questionId: { type: SchemaType.STRING, description: "The ID of the question to update." },
           newQuestionData: {
-            type: SchemaType.OBJECT, // <-- FIX
+            type: SchemaType.OBJECT,
             description: "An object containing *only* the fields to be updated.",
             properties: {
-              question_text: { type: SchemaType.STRING, nullable: true }, // <-- FIX
-              options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }, // <-- FIX
-              prompts: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }, // <-- FIX
-              correct_answer: { type: SchemaType.STRING, nullable: true }, // <-- FIX
-              explanation: { type: SchemaType.STRING, nullable: true }, // <-- FIX
+              question_text: { type: SchemaType.STRING, nullable: true },
+              options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true },
+              prompts: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true },
+              correct_answer: { type: SchemaType.STRING, nullable: true },
+              explanation: { type: SchemaType.STRING, nullable: true },
             }
           }
         },
@@ -119,17 +118,15 @@ const tools: { spec: FunctionDeclaration }[] = [
       name: "deleteQuestionFromQuiz",
       description: "Deletes a question from a quiz.",
       parameters: {
-        type: SchemaType.OBJECT, // <-- FIX
+        type: SchemaType.OBJECT,
         properties: {
-          questionId: { type: SchemaType.STRING, description: "The ID of the question to delete." } // <-- FIX
+          questionId: { type: SchemaType.STRING, description: "The ID of the question to delete." }
         },
         required: ["questionId"]
       }
     }
   }
 ];
-
-// --- Tool Handler Functions ---
 
 async function handleAddQuestionToQuiz(args: {
   quizId: string;
@@ -172,7 +169,6 @@ async function handleUpdateQuestionInQuiz(args: {
   try {
     const { questionId, newQuestionData } = args;
     
-    // Prisma cannot update with 'undefined' values, so we clean the object
     const dataToUpdate: Prisma.questionsUpdateInput = {};
     if (newQuestionData.question_text) dataToUpdate.question_text = newQuestionData.question_text;
     if (newQuestionData.options) dataToUpdate.options = newQuestionData.options;
@@ -203,17 +199,16 @@ async function handleDeleteQuestionFromQuiz(args: { questionId: string }) {
   }
 }
 
-// --- MODIFIED: Helper to save chat history ---
 async function saveChatHistory(userId: string, role: 'user' | 'model', content: string, context?: PageContext | null) {
-    if (!content.trim()) return; // Don't save empty messages
+    if (!content.trim()) return; 
     try {
         await prisma.chat_history.create({
             data: {
                 user_id: userId,
                 role,
                 content,
-                context_id: context?.id || null, // Save context ID or null
-                context_type: context?.type || null, // Save context type or null
+                context_id: context?.id || null, 
+                context_type: context?.type || null, 
             }
         });
     } catch (e) {
@@ -225,18 +220,18 @@ async function saveChatHistory(userId: string, role: 'user' | 'model', content: 
 export async function POST(request: NextRequest) {
   let userMessageContent: string = "";
   let userId: string = "";
-  let requestContext: PageContext | undefined | null = null; // Store context for saving model response
+  let requestContext: PageContext | undefined | null = null; 
 
   try {
     const user = await requireAuth(request);
-    userId = user.id; // Store userId for history saving
+    userId = user.id; 
     const { history, message, context } = await request.json() as { 
       history: Content[], 
       message: string, 
       context?: PageContext 
     };
-    userMessageContent = message; // Store for history saving
-    requestContext = context; // Store context for saving model/error response
+    userMessageContent = message; 
+    requestContext = context; 
 
     if (!API_KEY) {
       throw new Error("Missing GOOGLE_AI_API_KEY environment variable");
@@ -247,14 +242,11 @@ export async function POST(request: NextRequest) {
     let chatHistory: Content[] = [];
     let systemPrompt: string = "";
     let sources: AISource[] = [];
-    let model: any; // To store the generative model instance
+    let model: any; 
     
-    // --- 4. MODIFIED LOGIC BRANCHING ---
     if (context?.type === 'quiz' && context.id) {
-      // --- BRANCH A: QUIZ REFINEMENT (Refactored for Tool Use) ---
       console.log(`[Chat API] Handling Quiz Refinement for quiz: ${context.id}`);
       
-      // --- ADDED: Save user message with context ---
       await saveChatHistory(userId, 'user', message, context);
 
       const quiz = await prisma.quiz.findFirst({
@@ -270,7 +262,7 @@ export async function POST(request: NextRequest) {
           model: MODEL_NAME, 
           generationConfig, 
           safetySettings,
-          tools: [{ functionDeclarations: tools.map(t => t.spec) }] // --- ADDED TOOLS ---
+          tools: [{ functionDeclarations: tools.map(t => t.spec) }]
       });
 
       systemPrompt = `You are an expert quiz editor. The user wants to modify their quiz.
@@ -283,34 +275,28 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
         { role: "model", parts: [{ text: "I'm ready to help you edit this quiz. The quiz JSON is loaded. What would you like to change?" }] },
-        // Add previous conversational history
         ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
           role: msg.role,
           parts: [{ text: msg.text }],
         })),
-        // Add the *full quiz context* as part of the *new* user message
         { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy new request is: ${message}` }] }
       ];
 
-    // --- NEW BRANCH FOR DOCUMENT-SPECIFIC CHAT ---
     } else if (context?.type === 'document' && context.id) {
-      // --- BRANCH B: DOCUMENT-SPECIFIC RAG ---
       console.log(`[Chat API] Handling Document-Specific RAG for doc: ${context.id}`);
       
-      // --- ADDED: Save user message with context ---
       await saveChatHistory(userId, 'user', message, context); 
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
 
       const queryEmbedding = await generateQueryEmbedding(message);
       
-      // Call RPC, passing the specific document ID
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7, 
           match_count: 5,
           p_user_id: user.id,
-          p_content_id: context.id // <-- PASS THE DOCUMENT ID HERE
+          p_content_id: context.id
       });
 
       if (rpcError) { 
@@ -329,6 +315,7 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
                   content_type: chunk.content_type,
                   content_title: chunk.content_title || 'Document',
                   citation: citation,
+                  content_chunk: chunk.content_chunk,
               });
           });
       } else {
@@ -343,7 +330,6 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
 
 ${contextString}`;
 
-      // We don't load general history for document-specific chats
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
         { role: "model", parts: [{ text: "I'm ready to answer questions about this document. What would you like to know?" }] },
@@ -352,13 +338,9 @@ ${contextString}`;
           parts: [{ text: msg.text }],
         })),
       ];
-    // --- END NEW BRANCH ---
-
     } else if (context?.type === 'essay' && context.id) {
-      // --- BRANCH C: ESSAY FOLLOW-UP ---
       console.log(`[Chat API] Handling Essay Follow-up for essay: ${context.id}`);
 
-      // --- ADDED: Save user message with context ---
       await saveChatHistory(userId, 'user', message, context);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
@@ -391,63 +373,73 @@ ${JSON.stringify(gradedEssay.feedback)}
           parts: [{ text: msg.text }],
         })),
       ];
-      // This branch falls through to the common streaming logic
     } else {
       // --- BRANCH D: DEFAULT RAG (Retrieval-Augmented Generation) ---
       console.log(`[Chat API] Handling Default RAG for user: ${user.id}`);
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
       
-      // --- MODIFIED: Save user message with NULL context ---
       await saveChatHistory(userId, 'user', message, null);
       
       const queryEmbedding = await generateQueryEmbedding(message);
-      // --- MODIFIED RPC CALL: Pass NULL for p_content_id ---
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7,
           match_count: 5,
           p_user_id: user.id,
-          p_content_id: null // <-- This ensures it searches ALL documents
+          p_content_id: null
       });
       if (rpcError) { 
         console.error("Error matching chunks:", rpcError);
         throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
       }
-
-      let contextString = "--- START OF RELEVANT STUDY MATERIALS ---\n\n";
+      
+      // --- MODIFICATION: Logic switch based on RAG results ---
       if (chunks && chunks.length > 0) {
-          chunks.forEach((chunk: any, index: number) => {
-              const citation = index + 1;
-              contextString += `[${citation}] Source (Title: ${chunk.content_title || 'Untitled'}):\n`;
-              contextString += `${chunk.content_chunk}\n\n`;
-              sources.push({
-                  content_id: chunk.content_id,
-                  content_type: chunk.content_type,
-                  content_title: chunk.content_title || 'Untitled',
-                  citation: citation,
-              });
-          });
-      } else {
-          contextString += "No specific study materials were found related to your question.\n";
-      }
-      contextString += "--- END OF RELEVANT STUDY MATERIALS ---";
+        // SCENARIO 1: Chunks found. Use strict RAG prompt.
+        console.log(`[Chat API] ${chunks.length} RAG chunks found. Using strict RAG prompt.`);
+        let contextString = "--- START OF RELEVANT STUDY MATERIALS ---\n\n";
+        chunks.forEach((chunk: any, index: number) => {
+            const citation = index + 1;
+            contextString += `[${citation}] Source (Title: ${chunk.content_title || 'Untitled'}):\n`;
+            contextString += `${chunk.content_chunk}\n\n`;
+            sources.push({
+                content_id: chunk.content_id,
+                content_type: chunk.content_type,
+                content_title: chunk.content_title || 'Untitled',
+                citation: citation,
+                content_chunk: chunk.content_chunk,
+            });
+        });
+        contextString += "--- END OF RELEVANT STUDY MATERIALS ---";
 
-      systemPrompt = `You are a helpful AI tutor for an app called QuizCraft. Your task is to answer the user's questions based ONLY on the provided "RELEVANT STUDY MATERIALS". 
+        systemPrompt = `You are a helpful AI tutor for an app called QuizCraft. Your task is to answer the user's questions based ONLY on the provided "RELEVANT STUDY MATERIALS". 
 - Do not use any external knowledge. 
 - You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence or paragraph that uses that source.
 - If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't answer that question based on the relevant sections of your study materials."
 
 ${contextString}`;
+      
+      } else {
+        // SCENARIO 2: No chunks found. Use general knowledge prompt.
+        console.log("[Chat API] No RAG chunks found. Switching to general knowledge prompt.");
+        
+        systemPrompt = `You are a helpful AI tutor for an app called QuizCraft. The user's study materials did not contain a specific answer to their question.
+- Your task is to answer the user's question using your general knowledge.
+- You MUST clearly state that this information is from your general knowledge, not their study materials. (e.g., "Based on my general knowledge...").
+- If the question seems unrelated to academics or studying (e.g., 'what's the weather?', 'who won the game?'), you should politely decline to answer and remind them you are a study tutor.
+- If the question is academic (e.g., "What is mitosis?"), provide a helpful, educational answer.
+- Do not add any citations.`;
+      }
+      // --- END MODIFICATION ---
 
-      // --- NEW: Load general (null context) chat history ---
       const generalHistory = await prisma.chat_history.findMany({
           where: { 
             user_id: user.id,
-            context_id: null // <-- Only get general chat
+            context_id: null 
           },
           orderBy: { created_at: 'asc' },
-          takeLast: 10, // Get last 10 messages
+          takeLast: 10, 
       });
 
       const formattedHistory = generalHistory.map(h => ({
@@ -458,29 +450,23 @@ ${contextString}`;
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
         { role: "model", parts: [{ text: "Of course! I'm ready to help you with your study materials. What's your question?" }] },
-        ...formattedHistory, // Add the loaded history
-        // Note: The *current* user message is not in history, it's sent separately.
+        ...formattedHistory, 
       ];
-      // This branch falls through to the common streaming logic
     }
 
-    // --- 5. MODIFIED STREAMING LOGIC (Handles Tool Calling) ---
     const chat = model.startChat({
       history: chatHistory,
     });
     
-    // Start the first stream
     const resultStream = await chat.sendMessageStream(message);
-    let fullModelResponse = ""; // To save full response for history
+    let fullModelResponse = ""; 
     
-    // We must return a new stream that intercepts the tool calls
     const outputStream = new ReadableStream({
       async start(controller) {
         for await (const chunk of resultStream) {
           const functionCalls = chunk.functionCalls();
 
           if (functionCalls && functionCalls.length > 0) {
-            // --- Tool Call Detected ---
             console.log("[Chat API] Tool call detected:", functionCalls.map(c => c.name));
             const functionResponseParts: Part[] = [];
 
@@ -510,25 +496,21 @@ ${contextString}`;
               });
             }
 
-            // Send tool results back to the model and stream *that* response
             const toolResponseStream = await chat.sendMessageStream(functionResponseParts);
 
             for await (const finalChunk of toolResponseStream) {
               const chunkText = finalChunk.text();
-              fullModelResponse += chunkText; // Add to full response
+              fullModelResponse += chunkText; 
               controller.enqueue(new TextEncoder().encode(chunkText));
             }
 
           } else {
-            // --- No Tool Call, just text ---
             const chunkText = chunk.text();
-            fullModelResponse += chunkText; // Add to full response
+            fullModelResponse += chunkText; 
             controller.enqueue(new TextEncoder().encode(chunkText));
           }
         }
         
-        // --- MODIFIED: Save model response to history ---
-        // Save the full response with the correct context
         await saveChatHistory(userId, 'model', fullModelResponse, requestContext);
 
         controller.close();
@@ -538,7 +520,7 @@ ${contextString}`;
     return new Response(outputStream, {
       headers: { 
         'Content-Type': 'text/plain; charset=utf-8',
-        'X-Ai-Sources': JSON.stringify(sources), // Send sources
+        'X-Ai-Sources': JSON.stringify(sources), 
       },
     });
 
@@ -546,7 +528,6 @@ ${contextString}`;
     if (error instanceof Response) return error;
     console.error("Error in /api/chat:", error);
     
-    // --- MODIFIED: Save error to history with context ---
     if (userId && userMessageContent) {
         await saveChatHistory(userId, 'model', `Error: ${error.message || "An internal server error occurred."}`, requestContext);
     }

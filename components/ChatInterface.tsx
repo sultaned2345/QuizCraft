@@ -1,11 +1,12 @@
+[sultanedfdes/quizcraft/QuizCraft-ffcf70073b78b0737a8f5650237092eb6659972b/components/ChatInterface.tsx]
 // components/ChatInterface.tsx
-'use client'; // <-- THIS IS THE FIX
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea'; // <-- IMPORT Textarea
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -25,9 +26,16 @@ import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"; // <-- IMPORT Tooltip
 
-// (Types and helper functions remain the same)
-type Source = Pick<RelatedItem, 'content_id' | 'content_type' | 'content_title' | 'citation'>;
+// --- UPDATED Source TYPE ---
+type Source = Pick<RelatedItem, 'content_id' | 'content_type' | 'content_title' | 'citation' | 'content_chunk'>;
+
 interface Message {
   role: 'user' | 'model';
   text: string;
@@ -41,10 +49,10 @@ interface ChatInterfaceProps {
 }
 function getSourceHref(source: Source): string {
     if (source.content_type === 'note') {
-        return `/notes`; 
+        return `/notes/${source.content_id}`; // <-- FIX: Link to specific note
     }
     if (source.content_type === 'document') {
-        return `/documents`;
+        return `/documents/${source.content_id}`; // <-- FIX: Link to specific document
     }
     return '#';
 }
@@ -65,13 +73,13 @@ export function ChatInterface({
   isLoadingHistory: isHistoryLoadingProp = false,
   className
 }: ChatInterfaceProps) {
-  // (All state and hooks remain the same)
   const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(isHistoryLoadingProp);
   const { session } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // <-- Ref for textarea
   const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
   const [proactiveActions, setProactiveActions] = useState<React.ReactNode | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -247,6 +255,14 @@ export function ChatInterface({
     }
   }, [messages, isHistoryLoading]);
 
+  // --- Auto-resize logic for textarea ---
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'; // Reset height
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // Set to scroll height
+    }
+  }, [input]);
+
   const sendMessage = async (messageText: string) => {
     if (!messageText || !session || isLoading) return;
 
@@ -327,6 +343,14 @@ export function ChatInterface({
     sendMessage(question);
   };
 
+  // --- Handle Enter/Shift+Enter for Textarea ---
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleFormSubmit(e as any);
+    }
+  };
+
   return (
     <div className={cn("flex flex-col h-full", className)}>
       <ScrollArea className="h-full flex-1 my-4 pr-1" ref={scrollAreaRef as any}>
@@ -382,41 +406,55 @@ export function ChatInterface({
                 </div>
               )}
               
-              {messages.map((msg, index) => (
-                <div key={index} className={cn("flex flex-col", msg.role === 'user' ? 'items-end' : 'items-start')}>
-                  <div className={`flex items-start gap-3 w-full ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                    {msg.role === 'model' && (
-                      <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
-                        <Bot className="w-5 h-5" />
+              <TooltipProvider delayDuration={100}>
+                {messages.map((msg, index) => (
+                  <div key={index} className={cn("flex flex-col", msg.role === 'user' ? 'items-end' : 'items-start')}>
+                    <div className={`flex items-start gap-3 w-full ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                      {msg.role === 'model' && (
+                        <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
+                          <Bot className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div className={cn(
+                        "rounded-lg p-3 max-w-[85%]", 
+                        msg.role === 'user' ? 'bg-muted' : 'bg-secondary border' // <-- ADDED BORDER
+                      )}>
+                        <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                       </div>
-                    )}
-                    <div className={`rounded-lg p-3 max-w-[85%] ${msg.role === 'user' ? 'bg-muted' : 'bg-secondary'}`}>
-                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                      {msg.role === 'user' && (
+                        <div className="bg-muted rounded-full p-2 flex-shrink-0">
+                          <UserIcon className="w-5 h-5" />
+                        </div>
+                      )}
                     </div>
-                    {msg.role === 'user' && (
-                      <div className="bg-muted rounded-full p-2 flex-shrink-0">
-                        <UserIcon className="w-5 h-5" />
+                    {msg.role === 'model' && msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2 ml-12 pl-1">
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">Sources:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.sources.map((source) => (
+                            <Tooltip key={source.citation}>
+                              <TooltipTrigger asChild>
+                                <Button asChild variant="outline" size="sm" className="h-7 text-xs px-2 py-1 bg-background">
+                                  <Link href={getSourceHref(source)} title={source.content_title} target="_blank">
+                                    {getSourceIcon(source)}
+                                    <span className="ml-1.5 mr-1 font-mono">[{source.citation}]</span>
+                                    <span className="truncate max-w-28">{source.content_title}</span>
+                                  </Link>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-xs text-muted-foreground line-clamp-3">
+                                  {source.content_chunk}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
-                  {msg.role === 'model' && msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 ml-12 pl-1">
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-1">Sources:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {msg.sources.map((source) => (
-                          <Button key={source.citation} variant="outline" size="sm" asChild className="h-7 text-xs px-2 py-1 bg-background">
-                            <Link href={getSourceHref(source)} title={source.content_title}>
-                              {getSourceIcon(source)}
-                              <span className="ml-1.5 mr-1 font-mono">[{source.citation}]</span>
-                              <span className="truncate max-w-28">{source.content_title}</span>
-                            </Link>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))}
+              </TooltipProvider>
             </>
           )}
           {isLoading && (
@@ -431,12 +469,16 @@ export function ChatInterface({
           )}
         </div>
       </ScrollArea>
-      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 pt-4 border-t">
-        <Input
+      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 pt-4 border-t items-start">
+        <Textarea
+          ref={textareaRef}
+          rows={1}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Type your question..."
           disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading}
+          className="min-h-0 h-10 max-h-36 resize-none" // <-- APPLIED STYLING
         />
         <Button type="submit" disabled={isLoading || isHistoryLoading || isActionLoading || isSuggestionsLoading || !input.trim()}>
           <Send className="w-4 h-4" />
