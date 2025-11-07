@@ -430,19 +430,23 @@ ${contextString}`;
 - Do not add any citations.`;
       }
 
+      // --- THIS IS THE FIX ---
       const generalHistory = await prisma.chat_history.findMany({
           where: { 
             user_id: user.id,
             context_id: null 
           },
-          orderBy: { created_at: 'asc' },
-          takeLast: 10, 
+          orderBy: { created_at: 'desc' }, // Get newest first
+          take: 10, // Take 10 newest
       });
 
-      const formattedHistory = generalHistory.map(h => ({
-          role: h.role,
-          parts: [{ text: h.content }]
-      })) as Content[];
+      const formattedHistory = generalHistory
+          .map(h => ({ // Map them
+              role: h.role,
+              parts: [{ text: h.content }]
+          }))
+          .reverse() as Content[]; // Reverse to get oldest-to-newest order
+      // --- END OF FIX ---
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
