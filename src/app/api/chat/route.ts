@@ -14,36 +14,38 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { generateQueryEmbedding } from '@/lib/embedding';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+// --- 1. IMPORT REAL AI HELPERS ---
+import { 
+  callAIToGenerateQuiz,
+  callAIToGenerateNote, // We'll add this just in case we want a `createNote` tool later
+  callAIToGenerateFlashcards 
+} from '@/lib/aiGeneration';
+import { incrementAIGenerationUsage, checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 
 export const runtime = "nodejs";
 
 const MODEL_NAME = "gemini-2.5-flash-lite";
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 
-// Define the source structure
+// (Interfaces and base configs)
 interface AISource {
   content_id: string;
-  content_type: 'note' | 'document';
+  content_type: 'note' | 'document' | 'project';
   content_title: string;
   citation: number;
   content_chunk: string;
 }
-
-// Define Context type
 interface PageContext {
-  type: 'quiz' | 'essay' | 'page' | 'document';
+  type: 'quiz' | 'essay' | 'page' | 'document' | 'project';
   id?: string;
   name?: string;
 }
-
-// Base generation config (can be overridden)
 const generationConfig = {
   temperature: 0.6,
   topK: 1,
   topP: 1,
   maxOutputTokens: 4096,
 };
-
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -51,7 +53,7 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// --- (Tool Schemas and Handlers remain unchanged) ---
+// --- (Tool Schemas) ---
 const tools: { spec: FunctionDeclaration }[] = [
   {
     spec: {
@@ -124,9 +126,55 @@ const tools: { spec: FunctionDeclaration }[] = [
         required: ["questionId"]
       }
     }
+  },
+  {
+    spec: {
+      name: "createQuizFromContext",
+      description: "Creates a new quiz from a specific note or document.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          contentType: { type: SchemaType.STRING, enum: ["note", "document"] },
+          contentId: { type: SchemaType.STRING, description: "The ID of the note or document." },
+          numQuestions: { type: SchemaType.NUMBER, description: "The number of questions to generate (e.g., 5, 10)." },
+          title: { type: SchemaType.STRING, description: "The title for the new quiz." }
+        },
+        required: ["contentType", "contentId", "numQuestions", "title"]
+      }
+    }
+  },
+  {
+    spec: {
+      name: "createFlashcardsFromContext",
+      description: "Creates a new flashcard deck from a specific note or document.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          contentType: { type: SchemaType.STRING, enum: ["note", "document"] },
+          contentId: { type: SchemaType.STRING, description: "The ID of the note or document." },
+          numCards: { type: SchemaType.NUMBER, description: "The number of flashcards to generate (e.g., 10, 20)." },
+          title: { type: SchemaType.STRING, description: "The title for the new deck." }
+        },
+        required: ["contentType", "contentId", "numCards", "title"]
+      }
+    }
+  },
+  {
+    spec: {
+      name: "getStudyQueueSummary",
+      description: "Fetches a summary of the user's current study queue, including due flashcards and low-scoring quizzes.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {},
+        required: []
+      }
+    }
   }
 ];
 
+// --- 2. REAL TOOL HANDLERS ---
+
+// (Quiz Edit Handlers)
 async function handleAddQuestionToQuiz(args: {
   quizId: string;
   question_text: string;
@@ -198,6 +246,139 @@ async function handleDeleteQuestionFromQuiz(args: { questionId: string }) {
   }
 }
 
+// (New Tool Handlers)
+async function checkUsageForTool(userId: string): Promise<{ success: true } | { success: false, error: string }> {
+  const usageCheck = await checkAIGenerationUsageLimit(userId);
+  if (!usageCheck.isValid) {
+    return { success: false, error: usageCheck.message || "AI generation limit reached." };
+  }
+  return { success: true };
+}
+
+async function getContentForTool(contentType: 'note' | 'document', contentId: string, userId: string): Promise<{ success: true, text: string, title: string } | { success: false, error: string }> {
+  let textContent: string | null | undefined = null;
+  let title: string | null | undefined = null;
+
+  if (contentType === 'note') {
+    const note = await prisma.notes.findFirst({
+      where: { id: contentId, user_id: userId },
+      select: { content: true, title: true }
+    });
+    // Simple text extraction from HTML content
+    textContent = note?.content?.replace(/<[^>]+>/g, ' ');
+    title = note?.title;
+  } else if (contentType === 'document') {
+    const doc = await prisma.documents.findFirst({
+      where: { id: contentId, user_id: userId },
+      select: { extracted_text: true, file_name: true }
+    });
+    textContent = doc?.extracted_text;
+    title = doc?.file_name;
+  }
+  
+  if (!textContent || !title) {
+    return { success: false, error: `${contentType} not found or access denied.` };
+  }
+  if (textContent.length < 50) {
+    return { success: false, error: `Content is too short to generate materials.` };
+  }
+  return { success: true, text: textContent, title };
+}
+
+async function handleCreateQuizFromContext(args: {
+  contentType: 'note' | 'document';
+  contentId: string;
+  numQuestions: number;
+  title: string;
+}, userId: string) {
+  try {
+    const usage = await checkUsageForTool(userId);
+    if (!usage.success) return usage;
+
+    const content = await getContentForTool(args.contentType, args.contentId, userId);
+    if (!content.success) return content;
+
+    const aiQuizData = await callAIToGenerateQuiz(content.text, args.numQuestions); 
+
+    const newQuiz = await prisma.quiz.create({
+      data: {
+        title: args.title || aiQuizData.title || `Quiz from ${content.title}`,
+        userId: userId,
+        immediate_feedback: true,
+        questions: {
+          create: aiQuizData.questions.map(q => ({
+            question_text: q.question_text,
+            question_type: q.question_type,
+            correct_answer: q.correct_answer,
+            options: q.options || Prisma.JsonNull,
+            prompts: q.prompts || Prisma.JsonNull,
+            explanation: q.explanation || "",
+          })),
+        },
+      },
+    });
+
+    await incrementAIGenerationUsage(userId, 1);
+    return { success: true, quizId: newQuiz.id, title: newQuiz.title, message: `Successfully created quiz "${newQuiz.title}".` };
+  } catch (e: any) {
+    console.error("Error in handleCreateQuizFromContext:", e);
+    return { success: false, error: e.message || "Failed to create quiz." };
+  }
+}
+
+async function handleCreateFlashcardsFromContext(args: {
+  contentType: 'note' | 'document';
+  contentId: string;
+  numCards: number;
+  title: string;
+}, userId: string) {
+  try {
+    const usage = await checkUsageForTool(userId);
+    if (!usage.success) return usage;
+    
+    const content = await getContentForTool(args.contentType, args.contentId, userId);
+    if (!content.success) return content;
+
+    const aiCardsData = await callAIToGenerateFlashcards(content.text, args.numCards);
+
+    const newDeck = await prisma.flashcard_decks.create({
+      data: {
+        user_id: userId,
+        title: args.title || `Flashcards from ${content.title}`,
+        flashcards: {
+          create: aiCardsData.map(c => ({
+            front_content: c.front_content,
+            back_content: c.back_content
+          }))
+        }
+      }
+    });
+    
+    await incrementAIGenerationUsage(userId, 1);
+    return { success: true, deckId: newDeck.id, title: newDeck.title, message: `Successfully created deck "${newDeck.title}".` };
+  } catch (e: any) {
+    console.error("Error in handleCreateFlashcardsFromContext:", e);
+    return { success: false, error: e.message || "Failed to create flashcards." };
+  }
+}
+
+async function handleGetStudyQueueSummary(userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_study_queue_summary', { p_user_id: userId });
+    
+    if (error) throw error;
+
+    const summary = data?.[0];
+    if (!summary) throw new Error("No summary data returned.");
+
+    return { success: true, data: summary };
+  } catch (e: any) {
+    console.error("Error in handleGetStudyQueueSummary:", e);
+    return { success: false, error: e.message || "Failed to fetch study queue." };
+  }
+}
+
+// (saveChatHistory is unchanged)
 async function saveChatHistory(userId: string, role: 'user' | 'model', content: string, context?: PageContext | null) {
     if (!content.trim()) return; 
     try {
@@ -243,6 +424,7 @@ export async function POST(request: NextRequest) {
     let sources: AISource[] = [];
     let model: any; 
     
+    // --- Context A: Quiz Refinement ---
     if (context?.type === 'quiz' && context.id) {
       console.log(`[Chat API] Handling Quiz Refinement for quiz: ${context.id}`);
       
@@ -252,28 +434,27 @@ export async function POST(request: NextRequest) {
         where: { id: context.id, userId: user.id },
         include: { questions: true }
       });
-
-      if (!quiz) {
-        throw new Error("Quiz not found or access denied.");
-      }
+      if (!quiz) throw new Error("Quiz not found or access denied.");
 
       model = genAI.getGenerativeModel({ 
           model: MODEL_NAME, 
           generationConfig, 
           safetySettings,
-          tools: [{ functionDeclarations: tools.map(t => t.spec) }]
+          tools: [{ functionDeclarations: tools.filter(t => t.spec.name.includes("Question")).map(t => t.spec) }]
       });
 
-      systemPrompt = `You are an expert quiz editor. The user wants to modify their quiz.
-Use the provided tools to add, update, or delete questions as requested.
-The user's quiz JSON is provided below for context (including question IDs).
-Always confirm the action you've taken (e.g., "I've updated question 2." or "I've added a new question.").
-If the user's request is unclear (e.g., "delete question 10" on a 5-question quiz), ask for clarification instead of calling a tool.
-Do not mention RAG or study materials. Your context is *only* this quiz.`;
+      // --- FRIENDLY PROMPT ---
+      systemPrompt = `You're an expert quiz editor and a helpful study assistant! The user wants to fine-tune their quiz.
+- Use the provided tools to add, update, or delete questions as requested.
+- The user's quiz JSON is provided below for context (including question IDs).
+- Always be encouraging and clear (e.g., 'Great, I've updated question 2 for you!' or 'Got it, I've added that new true/false question.').
+- If the user's request is unclear (e.g., "delete question 10" on a 5-question quiz), ask for clarification instead of calling a tool.
+- Do not mention RAG or study materials. Your context is *only* this quiz.`;
       
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "I'm ready to help you edit this quiz. The quiz JSON is loaded. What would you like to change?" }] },
+        // --- FRIENDLY GREETING ---
+        { role: "model", parts: [{ text: "I've got your quiz loaded up! What changes can I help you make?" }] },
         ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
           role: msg.role,
           parts: [{ text: msg.text }],
@@ -281,13 +462,13 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
         { role: "user", parts: [{ text: `Here is the current quiz JSON for context:\n${JSON.stringify(quiz)}\n\nMy new request is: ${message}` }] }
       ];
 
+    // --- Context B: Document-Specific RAG ---
     } else if (context?.type === 'document' && context.id) {
       console.log(`[Chat API] Handling Document-Specific RAG for doc: ${context.id}`);
       
       await saveChatHistory(userId, 'user', message, context); 
       
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
-
       const queryEmbedding = await generateQueryEmbedding(message);
       
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
@@ -297,11 +478,7 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
           p_user_id: user.id,
           p_content_id: context.id
       });
-
-      if (rpcError) { 
-        console.error("Error matching document chunks:", rpcError);
-        throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
-      }
+      if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
 
       let contextString = `--- START: Relevant excerpts from document --- \n\n`;
       if (chunks && chunks.length > 0) {
@@ -322,39 +499,40 @@ Do not mention RAG or study materials. Your context is *only* this quiz.`;
       }
       contextString += "--- END: Relevant excerpts from document ---";
 
-      systemPrompt = `You are a helpful AI tutor. Your task is to answer the user's questions based ONLY on the provided "RELEVANT EXCERPTS" from the document they are currently viewing.
+      // --- FRIENDLY PROMPT ---
+      systemPrompt = `You are a helpful and friendly AI tutor. Your task is to answer the user's questions based *only* on the provided "RELEVANT EXCERPTS" from the document they are currently viewing.
+- Be conversational and encouraging!
 - Do not use any external knowledge. 
 - You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence.
-- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't answer that based on the provided excerpts from this document."
+- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that specific information in this document. Could you try rephrasing?"
 
 ${contextString}`;
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "I'm ready to answer questions about this document. What would you like to know?" }] },
+        // --- FRIENDLY GREETING ---
+        { role: "model", parts: [{ text: "I'm ready to help you with this document. What's on your mind?" }] },
         ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
           role: msg.role,
           parts: [{ text: msg.text }],
         })),
       ];
+
+    // --- Context C: Essay Follow-up ---
     } else if (context?.type === 'essay' && context.id) {
       console.log(`[Chat API] Handling Essay Follow-up for essay: ${context.id}`);
-
       await saveChatHistory(userId, 'user', message, context);
-      
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
-
       const gradedEssay = await prisma.graded_essays.findFirst({
         where: { id: context.id, user_id: user.id }
       });
+      if (!gradedEssay) throw new Error("Graded essay not found or access denied.");
 
-      if (!gradedEssay) {
-        throw new Error("Graded essay not found or access denied.");
-      }
-
-      systemPrompt = `You are a helpful writing tutor. The user has just received AI-generated feedback on their essay and has a follow-up question.
-Use the provided original essay and its feedback to answer the user's question conversationally.
-DO NOT mention the JSON. Just act as the tutor who provided the original feedback.
+      // --- FRIENDLY PROMPT ---
+      systemPrompt = `You are an encouraging and helpful writing tutor. The user has just received AI-generated feedback on their essay and has a follow-up question.
+- Use the provided original essay and its feedback to answer the user's question conversationally, like you're the one who provided the original feedback.
+- Be supportive and clear in your explanations.
+- DO NOT mention the JSON. Just act as the tutor.
 
 --- ORIGINAL ESSAY ---
 ${gradedEssay.essay_content}
@@ -366,17 +544,78 @@ ${JSON.stringify(gradedEssay.feedback)}
 `;
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "I see you've reviewed my feedback on your essay. What follow-up questions do you have?" }] },
+        // --- FRIENDLY GREETING ---
+        { role: "model", parts: [{ text: "I see you've had a chance to look over my feedback on your essay. What follow-up questions do you have? I'm here to help!" }] },
         ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
           role: msg.role,
           parts: [{ text: msg.text }],
         })),
       ];
+
+    // --- Context D: Project-Scoped RAG ---
+    } else if (context?.type === 'project' && context.id) {
+      console.log(`[Chat API] Handling Project-Scoped RAG for project: ${context.id}`);
+      await saveChatHistory(userId, 'user', message, context); 
+      model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
+      const queryEmbedding = await generateQueryEmbedding(message);
+      
+      const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_project_content_chunks', {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.7, 
+          match_count: 5,
+          p_user_id: user.id,
+          p_project_id: context.id
+      });
+      if (rpcError) throw new Error(`Failed to retrieve project materials: ${rpcError.message}`);
+
+      let contextString = `--- START: Relevant excerpts from project "${context.name || 'Project'}" --- \n\n`;
+      if (chunks && chunks.length > 0) {
+          chunks.forEach((chunk: any, index: number) => {
+            const citation = index + 1;
+            contextString += `[${citation}] Excerpt (from ${chunk.content_title || 'Content'}):\n`;
+            contextString += `${chunk.content_chunk}\n\n`;
+            sources.push({
+                content_id: chunk.content_id,
+                content_type: chunk.content_type,
+                content_title: chunk.content_title || 'Content',
+                citation: citation,
+                content_chunk: chunk.content_chunk,
+            });
+          });
+      } else {
+          contextString += "No specific excerpts were found for your question in this project.\n";
+      }
+      contextString += `--- END: Relevant excerpts from project ---`;
+
+      // --- FRIENDLY PROMPT ---
+      systemPrompt = `You are a helpful and friendly AI tutor. Your task is to answer the user's questions based *only* on the provided "RELEVANT EXCERPTS" from the project they are currently viewing.
+- Be conversational and encouraging!
+- Do not use any external knowledge. 
+- You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence.
+- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that specific information in this project. Could you try rephrasing?"
+
+${contextString}`;
+
+      chatHistory = [
+        { role: "user", parts: [{ text: systemPrompt }] },
+        // --- FRIENDLY GREETING ---
+        { role: "model", parts: [{ text: `I've got your '${context.name || 'Project'}' materials open! What can I help you find?` }] },
+        ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
+          role: msg.role,
+          parts: [{ text: msg.text }],
+        })),
+      ];
+    
+    // --- Context E: Default RAG (All Tools, Proactive Greeting) ---
     } else {
-      // --- BRANCH D: DEFAULT RAG (Retrieval-Augmented Generation) ---
       console.log(`[Chat API] Handling Default RAG for user: ${user.id}`);
       
-      model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
+      model = genAI.getGenerativeModel({ 
+          model: MODEL_NAME, 
+          generationConfig, 
+          safetySettings,
+          tools: [{ functionDeclarations: tools.filter(t => !t.spec.name.includes("QuestionInQuiz")).map(t => t.spec) }]
+      });
       
       await saveChatHistory(userId, 'user', message, null);
       
@@ -388,13 +627,10 @@ ${JSON.stringify(gradedEssay.feedback)}
           p_user_id: user.id,
           p_content_id: null
       });
-      if (rpcError) { 
-        console.error("Error matching chunks:", rpcError);
-        throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
-      }
+      if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
       
       if (chunks && chunks.length > 0) {
-        // SCENARIO 1: Chunks found. Use strict RAG prompt.
+        // SCENARIO 1: Chunks found.
         console.log(`[Chat API] ${chunks.length} RAG chunks found. Using strict RAG prompt.`);
         let contextString = "--- START OF RELEVANT STUDY MATERIALS ---\n\n";
         chunks.forEach((chunk: any, index: number) => {
@@ -411,50 +647,65 @@ ${JSON.stringify(gradedEssay.feedback)}
         });
         contextString += "--- END OF RELEVANT STUDY MATERIALS ---";
 
-        systemPrompt = `You are a helpful AI tutor for an app called QuizCraft. Your task is to answer the user's questions based ONLY on the provided "RELEVANT STUDY MATERIALS". 
-- Do not use any external knowledge. 
-- You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence or paragraph that uses that source.
-- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't answer that question based on the relevant sections of your study materials."
+        // --- FRIENDLY PROMPT ---
+        systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. 
+- Your task is to answer the user's questions based *only* on their "RELEVANT STUDY MATERIALS". 
+- Be conversational and encouraging.
+- You MUST cite your sources by adding the citation number (e.g., [1], [2]).
+- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that in your study materials. Is there another way I can help?"
+- You can also help the user by:
+  - Creating new quizzes or flashcard decks from their notes or documents using the 'createQuizFromContext' or 'createFlashcardsFromContext' tools.
+  - Answering questions about their study queue using the 'getStudyQueueSummary' tool.
 
 ${contextString}`;
       
       } else {
-        // SCENARIO 2: No chunks found. Use general knowledge prompt.
+        // SCENARIO 2: No chunks found.
         console.log("[Chat API] No RAG chunks found. Switching to general knowledge prompt.");
         
-        systemPrompt = `You are a helpful AI tutor for an app called QuizCraft. The user's study materials did not contain a specific answer to their question.
-- Your task is to answer the user's question using your general knowledge.
-- You MUST clearly state that this information is from your general knowledge, not their study materials. (e.g., "Based on my general knowledge...").
-- If the question seems unrelated to academics or studying (e.g., 'what's the weather?', 'who won the game?'), you should politely decline to answer and remind them you are a study tutor.
-- If the question is academic (e.g., "What is mitosis?"), provide a helpful, educational answer.
-- Do not add any citations.`;
+        // --- FRIENDLY PROMPT ---
+        systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. The user's study materials didn't seem to have the answer to their question.
+- Your first priority is to use a tool if they ask to create content (like a quiz or flashcards) or check their study queue.
+- If they ask a general knowledge question (like 'What is mitosis?'), be helpful and answer it, but *always* let them know you're using your general knowledge (e.g., 'I couldn't find that in your notes, but from my general knowledge...').
+- If the question is off-topic (like 'what's the weather?'), politely decline and remind them you're here to help them study.
+- Be conversational and encouraging!`;
       }
 
-      // --- THIS IS THE FIX ---
       const generalHistory = await prisma.chat_history.findMany({
-          where: { 
-            user_id: user.id,
-            context_id: null 
-          },
-          orderBy: { created_at: 'desc' }, // Get newest first
-          take: 10, // Take 10 newest
+          where: { user_id: user.id, context_id: null },
+          orderBy: { created_at: 'desc' },
+          take: 10,
       });
+      const formattedHistory = generalHistory.map(h => ({ role: h.role, parts: [{ text: h.content }] })).reverse() as Content[];
 
-      const formattedHistory = generalHistory
-          .map(h => ({ // Map them
-              role: h.role,
-              parts: [{ text: h.content }]
-          }))
-          .reverse() as Content[]; // Reverse to get oldest-to-newest order
-      // --- END OF FIX ---
+      // --- FRIENDLY GREETING (Proactive) ---
+      let modelGreeting = "Hi! I'm ready to help you study. What's on your mind?";
+      
+      if (formattedHistory.length === 0) { // Only be proactive on a new chat
+        try {
+          const { data, error } = await supabaseAdmin.rpc('get_study_queue_summary', { p_user_id: userId });
+          if (error) throw error;
+          const summary = data?.[0];
+
+          if (summary && summary.due_card_count > 0) {
+            modelGreeting = `Hi there! Just letting you know, you have ${summary.due_card_count} flashcard${summary.due_card_count > 1 ? 's' : ''} due for review, starting with your deck "${summary.first_due_deck_title}".\n\nWhat can I help you with? You can ask me to start a review, get a summary of your study queue, or ask any other question!`;
+          } else if (summary && summary.low_score_quiz_count > 0) {
+            modelGreeting = `Hey! I noticed you recently took the "${summary.lowest_score_quiz_title}" quiz. Don't worry, we can review the tough spots together!\n\nWhat can I help you with? You can ask me to help you review that topic, or ask any other question.`;
+          }
+        } catch (e) {
+          console.error("Failed to fetch study queue for proactive greeting:", e);
+        }
+      }
+      // --- END GREETING ---
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "Of course! I'm ready to help you with your study materials. What's your question?" }] },
+        { role: "model", parts: [{ text: modelGreeting }] }, 
         ...formattedHistory, 
       ];
     }
 
+    // --- (Chat Execution Logic) ---
     const chat = model.startChat({
       history: chatHistory,
     });
@@ -464,7 +715,6 @@ ${contextString}`;
     
     const outputStream = new ReadableStream({
       async start(controller) {
-        // --- FIX #1: Iterate over resultStream.stream ---
         for await (const chunk of resultStream.stream) {
           const functionCalls = chunk.functionCalls();
 
@@ -483,6 +733,12 @@ ${contextString}`;
                   apiResponse = await handleUpdateQuestionInQuiz(args as any);
                 } else if (call.name === 'deleteQuestionFromQuiz') {
                   apiResponse = await handleDeleteQuestionFromQuiz(args as any);
+                } else if (call.name === 'createQuizFromContext') {
+                  apiResponse = await handleCreateQuizFromContext(args as any, userId);
+                } else if (call.name === 'createFlashcardsFromContext') {
+                  apiResponse = await handleCreateFlashcardsFromContext(args as any, userId);
+                } else if (call.name === 'getStudyQueueSummary') {
+                  apiResponse = await handleGetStudyQueueSummary(userId);
                 } else {
                   apiResponse = { success: false, error: `Unknown tool: ${call.name}` };
                 }
@@ -500,7 +756,6 @@ ${contextString}`;
 
             const toolResponseStream = await chat.sendMessageStream(functionResponseParts);
 
-            // --- FIX #2: Iterate over toolResponseStream.stream ---
             for await (const finalChunk of toolResponseStream.stream) {
               const chunkText = finalChunk.text();
               fullModelResponse += chunkText; 
