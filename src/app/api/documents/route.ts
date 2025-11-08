@@ -1,4 +1,6 @@
 // src/app/api/documents/route.ts
+// MODIFIED FILE
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@supabase/supabase-js';
@@ -11,7 +13,7 @@ import { generateEmbeddingsForContent } from '@/lib/embedding';
 // --- DYNAMIC: Import the new server-side helper ---
 import { extractTextFromServerFile } from '@/lib/file-parser.server';
 // --- NEW: Import Google AI ---
-import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runtime = 'nodejs';
 
@@ -20,7 +22,9 @@ const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 
 // ... (Constants and Interfaces remain the same) ...
-const MAX_FILE_SIZE = 3 * 1024 * 1024;
+// --- MODIFICATION: Increased file size limit to 10MB ---
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// ---
 const ALLOWED_MIME_TYPES = [
     'application/pdf', 
     'text/plain',
@@ -170,6 +174,7 @@ export async function POST(request: NextRequest) {
              console.warn(`Invalid file type: name=${file.name}, type=${file.type}, probable=${probableType}`);
              return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid file type. Only PDF, TXT, DOCX, and PPTX allowed.' }, { status: 400 });
          }
+        // --- MODIFICATION: Check new MAX_FILE_SIZE ---
         if (file.size > MAX_FILE_SIZE) return NextResponse.json<ApiResponse>({ success: false, error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.` }, { status: 400 }); //
 
         const fileBuffer = Buffer.from(await file.arrayBuffer()); //
@@ -182,10 +187,23 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: textError.message || 'Failed to process file content.' }, { status: 400 }); //
         }
 
-        // --- DYNAMIC: Generate summary AND insights in parallel ---
-        const summaryPromise = generateAISummary(extractedText);
-        const insightsPromise = generateAIDocumentInsights(extractedText); // <-- ADD THIS
-        // --- END DYNAMIC ---
+        // --- MODIFICATION: Run AI generation but don't fail upload if they error ---
+        // This is crucial for large files that might time out the AI.
+        const [summaryResult, insightsResult] = await Promise.allSettled([
+            generateAISummary(extractedText),
+            generateAIDocumentInsights(extractedText)
+        ]);
+        
+        const aiSummary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
+        const aiInsights = insightsResult.status === 'fulfilled' ? insightsResult.value : null;
+
+        if (summaryResult.status === 'rejected') {
+            console.error("Failed to generate summary (non-blocking):", summaryResult.reason);
+        }
+        if (insightsResult.status === 'rejected') {
+            console.error("Failed to generate insights (non-blocking):", insightsResult.reason);
+        }
+        // --- END MODIFICATION ---
 
         storagePath = `${user.id}/${Date.now()}-${file.name}`; //
         const { data: uploadData, error: uploadError } = await supabaseForUser.storage
@@ -197,12 +215,6 @@ export async function POST(request: NextRequest) {
         }
         if (!uploadData?.path) { throw new Error('File uploaded but no path returned from storage.'); } //
 
-        // --- DYNAMIC: Wait for both summary and insights ---
-        const [aiSummary, aiInsights] = await Promise.all([
-          summaryPromise,
-          insightsPromise
-        ]);
-        // --- END DYNAMIC ---
 
         const newDocumentData = await prisma.documents.create({
             data: {
@@ -212,13 +224,14 @@ export async function POST(request: NextRequest) {
                 file_size: file.size,
                 storage_path: uploadData.path,
                 extracted_text: extractedText,
-                ai_summary: aiSummary, // <-- Save the summary
-                ai_insights: aiInsights as Prisma.JsonValue | undefined, // <-- SAVE INSIGHTS
+                ai_summary: aiSummary, // <-- Save the summary (or null)
+                ai_insights: aiInsights as Prisma.JsonValue | undefined, // <-- SAVE INSIGHTS (or null)
             },
             select: { id: true, file_name: true, file_type: true, file_size: true, created_at: true, storage_path: true, ai_summary: true, ai_insights: true } // <-- Select insights
         }); //
 
         // --- NEW: Asynchronously generate embeddings ---
+        // This is "fire-and-forget" so it doesn't block the API response
         generateEmbeddingsForContent(newDocumentData.id, 'document', extractedText, user.id)
           .catch(err => {
             console.error(`Failed to generate embeddings for document ${newDocumentData.id}:`, err);

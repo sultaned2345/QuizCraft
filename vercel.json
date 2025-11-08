@@ -1,0 +1,11 @@
+// vercel.json
+// NEW FILE
+
+{
+  "crons": [
+    {
+      "path": "/api/generation-jobs/process",
+      "schedule": "* * * * *"
+    }
+  ]
+}

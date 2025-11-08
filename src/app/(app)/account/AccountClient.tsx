@@ -1,6 +1,11 @@
-'use client';
 // src/app/(app)/account/AccountClient.tsx
+// MODIFIED FILE
 
+'use client';
+
+import { useState } from 'react'; // <-- ADD
+import { useAuth } from '@/contexts/AuthContext'; // <-- ADD
+import { useRouter } from 'next/navigation'; // <-- ADD
 import {
   Card,
   CardContent,
@@ -12,9 +17,13 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { Check, Infinity, Zap, AlertCircle } from 'lucide-react'; // <-- Import AlertCircle
+import { Check, Infinity, Zap, AlertCircle, Loader2 } from 'lucide-react'; // <-- ADD Loader2
 import { USAGE_LIMITS, getUserUsage } from '@/lib/usage-limits';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch'; // <-- ADD
+import { Label } from '@/components/ui/label'; // <-- ADD
+import { useToast } from '@/hooks/use-toast'; // <-- ADD
+import { ApiResponse } from '@/types/database'; // <-- ADD
 
 // Get the return type from our helper function
 type UsageData = Awaited<ReturnType<typeof getUserUsage>>;
@@ -23,7 +32,7 @@ interface AccountClientProps {
   initialData: UsageData;
 }
 
-// Helper component for rendering a single usage bar
+// Helper component (unchanged)
 function UsageBar({
   title,
   usage,
@@ -70,8 +79,16 @@ function UsageBar({
 // Main client component for rendering the UI
 export function AccountClient({ initialData }: AccountClientProps) {
   const { openModal } = useUpgradeModal();
-  const { plan, ...usageStats } = initialData;
-  const isPro = plan === 'pro';
+  const { session } = useAuth(); // <-- ADD
+  const { toast } = useToast(); // <-- ADD
+  const router = useRouter(); // <-- ADD
+
+  // --- ADDED STATE ---
+  const [plan, setPlan] = useState(initialData.plan);
+  const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
+  const { ...usageStats } = initialData;
+  const isPro = plan === 'pro'; // <-- MODIFIED: Use state
+  // ---
 
   const proFeatures = [
     'Unlimited Document Uploads',
@@ -82,12 +99,43 @@ export function AccountClient({ initialData }: AccountClientProps) {
     'AI Essay Grader Access',
   ];
 
+  // --- ADDED HANDLER ---
+  const handlePlanChange = async (isChecked: boolean) => {
+    const newPlan = isChecked ? 'pro' : 'free';
+    setIsUpdatingPlan(true);
+
+    try {
+      const response = await fetch('/api/account/plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ newPlan })
+      });
+
+      const result: ApiResponse = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to update plan.');
+      }
+
+      setPlan(newPlan); // Update local state
+      toast({ title: 'Plan Updated!', description: `You are now on the ${newPlan} plan.` });
+      router.refresh(); // Force a server-side data refresh
+    } catch (error: any) {
+      toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUpdatingPlan(false);
+    }
+  };
+  // ---
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <h1 className="text-3xl font-bold">Usage & Plan</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Usage Card */}
+        {/* Usage Card (unchanged) */}
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Current Usage</CardTitle>
@@ -111,7 +159,7 @@ export function AccountClient({ initialData }: AccountClientProps) {
           </CardContent>
         </Card>
 
-        {/* Plan Card */}
+        {/* Plan Card (modified to use 'isPro' from state) */}
         {isPro ? (
           // --- PRO CARD ---
           <Card
@@ -190,6 +238,35 @@ export function AccountClient({ initialData }: AccountClientProps) {
           </Card>
         )}
       </div>
+
+      {/* --- ADDED TOGGLER CARD --- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Developer: Plan Toggler</CardTitle>
+          <CardDescription>
+            For testing purposes, manually toggle your account plan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-3">
+            <Switch
+              id="plan-toggle"
+              checked={isPro}
+              onCheckedChange={handlePlanChange}
+              disabled={isUpdatingPlan}
+              aria-label="Toggle plan"
+            />
+            <Label htmlFor="plan-toggle" className="font-semibold text-base">
+              {isPro ? 'Pro Plan' : 'Free Plan'}
+            </Label>
+            {isUpdatingPlan && <Loader2 className="h-4 w-4 animate-spin" />}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Toggling this will immediately apply the new plan and its limits.
+          </p>
+        </CardContent>
+      </Card>
+      {/* --- END ADDED CARD --- */}
     </div>
   );
 }
