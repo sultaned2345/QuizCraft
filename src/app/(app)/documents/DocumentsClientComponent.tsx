@@ -5,7 +5,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApiResponse, DocumentMetadata, GeneratedDeckInfo } from '@/types/database'; 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,22 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
-import { motion } from 'framer-motion'; // <-- 1. Import motion
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
+import { motion } from 'framer-motion';
+import { useUpgradeModal } from '@/components/UpgradeModalContext';
+// --- 1. IMPORT NEW DIALOGS & UTILS ---
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+// ---
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];
@@ -41,14 +55,16 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const [totalPages, setTotalPages] = useState(initialData.totalPages);
   const documentsPerPage = 9;
 
+  // --- 2. ADD IS_DELETING STATE ---
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { setPageContext } = usePageContext();
-  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+  const { openModal } = useUpgradeModal();
 
-  // --- 2. Define animation variants ---
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -67,7 +83,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       transition: { type: 'spring', stiffness: 100 }
     },
   };
-  // ---
 
   const fetchMoreDocuments = useCallback(async (page: number) => {
     // ... (function remains the same)
@@ -97,37 +112,36 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
        const response = await fetch('/api/documents', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }); 
        const result: ApiResponse<DocumentMetadata> = await response.json(); 
        if (!response.ok || !result.success || !result.data) {
-         // --- 3. CATCH LIMIT ERROR ---
          if (result.error === 'limit_exceeded') {
            openModal();
            throw new Error(result.message || 'Document limit reached.');
          }
-         // ---
          throw new Error(result.error || `Upload failed ${response.status}`);
        }
        toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); 
        setSelectedFile(null); 
        if(fileInputRef.current) fileInputRef.current.value = ''; 
-       await refreshFirstPage(); // Refresh to show new item
-       router.push(`/documents/${result.data.id}`); // Navigate to new page
+       await refreshFirstPage();
+       router.push(`/documents/${result.data.id}`);
      } catch (error: any) { 
-       // --- 4. AVOID DOUBLE-TOASTING ---
        if (!error.message.includes('limit reached')) {
          setUploadError(error.message || 'Upload error.'); 
          toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' });
        }
-       // ---
      } finally { 
        setIsUploading(false); 
      }
    };
    
+  // --- 3. MODIFY handleDeleteDocument ---
   const handleDeleteDocument = async (docId: string, docName: string) => { 
-    // This function is already optimistic, so no changes needed.
-    if (!session || !confirm(`Delete "${docName}"?`)) return; 
+    if (!session) return; // Removed confirm()
+    
     const originalDocuments = [...documents];
     setDocuments(prevDocs => prevDocs.filter(d => d.id !== docId));
     setUsage(prev => ({ ...prev, count: (prev.count ?? 1) - 1 }));
+    setIsDeleting(true); // <-- Set loading state
+    
     try { 
       const response = await fetch(`/api/documents/${docId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } }); 
       const result: ApiResponse = await response.json(); 
@@ -137,11 +151,14 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' }); 
       setDocuments(originalDocuments);
       setUsage(prev => ({ ...prev, count: (prev.count ?? 0) + 1 }));
-    } 
+    } finally {
+      setIsDeleting(false); // <-- Unset loading state
+    }
   };
+  // ---
   
   const handleGenerateQuiz = async (docId: string) => { 
-    // This action just navigates, the 'create' page will handle the limit check
+    // ... (function remains the same)
     if(!session) return; 
     setIsGenerating({type:'quiz', docId}); 
     toast({title:'Preparing Quiz...'}); 
@@ -153,8 +170,8 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
     } 
   };
   
-  // --- MODIFIED: handleGenerateNotes to catch limit error ---
   const handleGenerateNotes = async (docId: string) => { 
+    // ... (function remains the same)
     if(!session) return; 
     setIsGenerating({type:'notes', docId}); 
     toast({title:'Generating Notes...'}); 
@@ -162,60 +179,47 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       const cRes = await fetch(`/api/documents/${docId}/content`, {headers:{Authorization:`Bearer ${session.access_token}`}}); 
       const cResult: ApiResponse<{extracted_text:string|null}> = await cRes.json(); 
       if(!cResult.success || !cResult.data?.extracted_text) throw new Error(cResult.error||'Failed content fetch.'); 
-      
       const gRes = await fetch(`/api/generate-notes`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({text: cResult.data.extracted_text})}); 
       const gResult: ApiResponse = await gRes.json(); 
-      
       if(!gRes.ok || !gResult.success) {
-        // --- CATCH LIMIT ERROR ---
-        if (gResult.error === 'limit_exceeded') {
+         if (gResult.error === 'limit_exceeded') {
           openModal();
           throw new Error(gResult.message || 'AI generation limit reached.');
         }
-        // ---
         throw new Error(gResult.error||'Failed generate.'); 
       }
-      
       toast({title:'Notes Generated!'}); 
       router.push('/notes'); 
     } catch(e:any){ 
-      // --- AVOID DOUBLE-TOASTING ---
       if (!e.message.includes('limit reached')) {
         toast({title:'Note Gen Failed', description:e.message, variant:'destructive'}); 
       }
-      // ---
     } finally { 
       setIsGenerating(null); 
     } 
   };
   
-  // --- MODIFIED: handleGenerateFlashcards to catch limit error ---
   const handleGenerateFlashcards = async (docId: string) => { 
+    // ... (function remains the same)
     if(!session) return; 
     setIsGenerating({type:'flashcards', docId}); 
     toast({title:'Generating Flashcards...'}); 
     try { 
       const response = await fetch(`/api/generate-flashcards`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}`}, body: JSON.stringify({documentId:docId, numberOfCards:15})}); 
       const result: ApiResponse<GeneratedDeckInfo> = await response.json(); 
-      
       if(!response.ok || !result.success || !result.data) {
-        // --- CATCH LIMIT ERROR (checks for AI limit or Deck limit) ---
          if (result.error === 'limit_exceeded') {
           openModal();
           throw new Error(result.message || 'Limit reached.');
         }
-        // ---
         throw new Error(result.error||'Failed generate.'); 
       }
-
       toast({title:'Flashcards Generated!', description:`Deck "${result.data.title}" created.`}); 
       router.push(`/flashcards/${result.data.id}`); 
     } catch(e:any){ 
-      // --- AVOID DOUBLE-TOASTING ---
       if (!e.message.includes('limit reached')) {
         toast({title:'Card Gen Failed', description:e.message, variant:'destructive'}); 
       }
-      // ---
     } finally { 
       setIsGenerating(null); 
     } 
@@ -259,7 +263,6 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
       {documents.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload PDF, TXT, DOCX, or PPTX.</p></div>
       ) : (
-          // --- 3. Wrap grid in motion.div ---
           <motion.div 
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             variants={containerVariants}
@@ -267,18 +270,46 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
             animate="visible"
           >
               {documents.map((doc) => (
-                // --- 4. Wrap Card in motion.div ---
                 <motion.div key={doc.id} variants={itemVariants}>
-                  <Card className="flex flex-col h-full"> {/* Added h-full */}
+                  <Card className="flex flex-col h-full">
                     <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
                       <div className="space-y-1 overflow-hidden">
                         <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
                         <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
                         <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleDeleteDocument(doc.id, doc.file_name)} disabled={isGenerating?.docId === doc.id}>
-                        <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
-                      </Button>
+                      {/* --- 4. REPLACE DELETE BUTTON WITH ALERT DIALOG --- */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" disabled={isGenerating?.docId === doc.id || isDeleting}>
+                            <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete the document:
+                              <br />
+                              <strong className="py-2 inline-block">{doc.file_name}</strong>
+                              <br />
+                              All associated data (summaries, insights, embeddings) will also be deleted. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className={cn(buttonVariants({ variant: 'destructive' }))}
+                              disabled={isDeleting}
+                              onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
+                            >
+                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      {/* --- END OF REPLACEMENT --- */}
                     </CardHeader>
                     <CardContent className="flex-grow">
                         <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
@@ -286,13 +317,13 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                         </p>
                     </CardContent>
                     <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
-                      <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id}>
+                      <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id || isDeleting}>
                         <Eye className="w-4 h-4 mr-2" /> View & Chat
                       </Button>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                        <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                        <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
+                        <Button title="Gen Quiz" variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
+                        <Button title="Gen Notes" variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
+                        <Button title="Gen Cards" variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/>:<Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
                       </div>
                     </CardFooter>
                   </Card>

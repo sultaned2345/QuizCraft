@@ -1,63 +1,67 @@
-// src/app/api/usage/ai/route.ts
+// src/app/api/graded-essays/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
-import { ApiResponse } from '@/types/database';
+import { ApiResponse, GradedEssay } from '@/types/database';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; // Ensures the route is always treated as dynamic
+export const dynamic = 'force-dynamic'; // Ensure it's re-fetched
 
-interface AIUsageStatus {
-    currentCount: number | undefined;
-    limit: number | typeof Infinity;
-    remaining: number | typeof Infinity;
-    isPro: boolean;
-}
+// Define the slimmed-down type for the list
+type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 
+/**
+ * @route GET /api/graded-essays
+ * @description Fetches a paginated list of the user's graded essays (metadata only).
+ */
 export async function GET(request: NextRequest) {
-    try {
-        // requireAuth reads headers, making this route dynamic
-        const user = await requireAuth(request);
+  try {
+    const user = await requireAuth(request);
 
-        // Use the existing check function to get current count and limit
-        const usageCheck = await checkAIGenerationUsageLimit(user.id);
+    // Fetch the list, sorted by most recent
+    const essays = await prisma.graded_essays.findMany({
+      where: {
+        user_id: user.id, // RLS/Policy check
+      },
+      select: {
+        id: true,
+        essay_title: true,
+        score: true,
+        graded_at: true,
+      },
+      orderBy: {
+        graded_at: 'desc',
+      },
+      take: 20, // Limit to the 20 most recent
+    });
 
-        let remaining: number | typeof Infinity;
-        if (usageCheck.limit === Infinity) {
-            remaining = Infinity;
-        } else if (usageCheck.currentCount !== undefined) {
-            remaining = Math.max(0, usageCheck.limit - usageCheck.currentCount);
-        } else {
-            // If count is undefined (e.g., error during fetch), assume limit remains
-            remaining = usageCheck.limit;
-        }
-
-        const responseData: AIUsageStatus = {
-            currentCount: usageCheck.currentCount,
-            limit: usageCheck.limit,
-            remaining: remaining,
-            isPro: usageCheck.limit === Infinity, // Determine if user is Pro based on limit
-        };
-
-        return NextResponse.json<ApiResponse<AIUsageStatus>>({
-            success: true,
-            data: responseData,
-        });
-
-    } catch (error: any) {
-        if (error instanceof Response) return error; // Handle requireAuth errors
-
-        console.error('Error fetching AI usage status:', error);
-        // Return a default "error" state or default free limits
-        const errorResponse: AIUsageStatus = {
-            currentCount: undefined,
-            limit: 5, // Default free limit <-- MODIFIED
-            remaining: 0,
-            isPro: false,
-        };
-        return NextResponse.json<ApiResponse<AIUsageStatus>>(
-            { success: false, data: errorResponse, error: error.message || 'Failed to fetch AI usage.' },
-            { status: 500 }
-        );
+    if (!essays) {
+      return NextResponse.json<ApiResponse<GradedEssayListItem[]>>({
+        success: true,
+        data: [], // Return empty array if none found
+      });
     }
+
+    // Serialize data for client
+    const responseData: GradedEssayListItem[] = essays.map(essay => ({
+        id: essay.id,
+        essay_title: essay.essay_title || 'Untitled Essay', // Provide fallback
+        score: essay.score || null,
+        graded_at: essay.graded_at?.toISOString() || '',
+    }));
+
+    return NextResponse.json<ApiResponse<GradedEssayListItem[]>>({
+      success: true,
+      data: responseData,
+    });
+
+  } catch (error: any) {
+    if (error instanceof Response) return error; // Handle requireAuth errors
+
+    console.error(`[API /api/graded-essays] Error:`, error);
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Failed to fetch essay history.' },
+      { status: 500 }
+    );
+  }
 }

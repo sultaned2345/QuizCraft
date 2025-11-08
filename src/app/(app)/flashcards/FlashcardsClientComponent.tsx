@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { FlashcardDeck, ApiResponse } from '@/types/database';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // <-- Import buttonVariants
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -27,20 +27,33 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
-// --- 1. IMPORT DROPDOWN ---
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+// --- 1. IMPORT ALERT DIALOG ---
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+// ---
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play, ChevronDown, CheckCircle, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
+import { cn } from '@/lib/utils'; // <-- Import cn
 
-// --- (Interfaces remain the same) ---
+// (Interfaces and StudyQueueCard remain the same)
 interface DeckWithStats extends FlashcardDeck {
   cardCount: number;
   dueCount: number;
@@ -61,7 +74,6 @@ interface FlashcardsClientComponentProps {
   initialData: FlashcardsPageData;
 }
 
-// --- (StudyQueueCard remains the same) ---
 function StudyQueueCard({
   dueCount,
   firstDueDeckId,
@@ -75,8 +87,6 @@ function StudyQueueCard({
   }
   const handleStudyClick = () => {
     if (firstDueDeckId) {
-      // --- 2. UPDATE UNIFIED STUDY LINK ---
-      // This links to the session page, defaulting to 'due'
       router.push(`/flashcards/${firstDueDeckId}?mode=due`);
     } else {
       router.push('/flashcards');
@@ -105,7 +115,6 @@ function StudyQueueCard({
 }
 
 export function FlashcardsClientComponent({ initialData }: FlashcardsClientComponentProps) {
-  // --- (All state and functions remain the same) ---
   const [decks, setDecks] = useState<DeckWithStats[]>(initialData.decks);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number; limit: number | typeof Infinity }>({
@@ -123,6 +132,8 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingDeck, setEditingDeck] = useState<DeckWithStats | null>(null);
   const [editDeckTitle, setEditDeckTitle] = useState('');
+  // --- 2. ADD IS_DELETING STATE ---
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { session } = useAuth();
   const router = useRouter();
@@ -138,6 +149,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
   };
 
+  // (fetchMoreDecks, handleLoadMore, refreshFirstPage, handleCreateDeck, handleOpenEditDialog, handleEditDeck remain the same)
   const fetchMoreDecks = useCallback(async (page: number) => {
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
@@ -255,11 +267,15 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   };
 
+  // --- 3. MODIFY handleDeleteDeck ---
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
-    if (!session || !confirm(`Delete "${deckTitle}"? All cards within will be deleted.`)) return;
+    if (!session) return; // Removed confirm()
+    
     const originalDecks = [...decks];
     setDecks((prevDecks) => prevDecks.filter((d) => d.id !== deckId));
     setUsage(prev => ({ ...prev, count: prev.count - 1 }));
+    setIsDeleting(true); // <-- Set loading state
+
     try {
       const response = await fetch(`/api/decks/${deckId}`, {
         method: 'DELETE',
@@ -272,15 +288,19 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
     } catch (error: any) {
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-      setDecks(originalDecks); 
-      setUsage(prev => ({ ...prev, count: prev.count + 1 }));
+      setDecks(originalDecks); // Rollback
+      setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
+    } finally {
+      setIsDeleting(false); // <-- Unset loading state
     }
   };
+  // ---
 
   return (
     <>
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
       
+      {/* (Header and Create Dialog remain the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Flashcard Decks</h1>
@@ -330,6 +350,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
+      {/* (Empty State and Deck Grid) */}
       {decks.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -350,7 +371,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
             <motion.div key={deck.id} variants={itemVariants}>
               <Card className="flex flex-col h-full">
                 <CardHeader>
-                  {/* --- 3. MAKE TITLE A LINK --- */}
                   <Link href={`/flashcards/${deck.id}?mode=due`} className="hover:underline">
                     <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
                   </Link>
@@ -378,10 +398,9 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                   )}
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2">
-                  {/* --- 4. CONVERT STUDY BUTTON TO DROPDOWN --- */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" disabled={deck.cardCount === 0}>
+                      <Button variant="outline" size="sm" disabled={deck.cardCount === 0 || isDeleting}>
                         <BookCopy className="w-4 h-4 mr-2" /> Study
                         <ChevronDown className="w-4 h-4 ml-1" />
                       </Button>
@@ -413,19 +432,49 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => handleOpenEditDialog(deck)}
+                    disabled={isDeleting} // <-- Disable on delete
                   >
                     <Edit className="w-4 h-4" />
                     <span className="sr-only">Edit</span>
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleDeleteDeck(deck.id, deck.title)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="sr-only">Delete</span>
-                  </Button>
+                  {/* --- 4. REPLACE DELETE BUTTON --- */}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                       <Button
+                        variant="destructive"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={isDeleting} // <-- Disable on delete
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete the deck:
+                          <br />
+                          <strong className="py-2 inline-block">{deck.title}</strong>
+                          <br />
+                          All {deck.cardCount} flashcards inside it will also be deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className={cn(buttonVariants({ variant: 'destructive' }))}
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteDeck(deck.id, deck.title)}
+                        >
+                          {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Delete Deck
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {/* --- END REPLACEMENT --- */}
                 </CardFooter>
               </Card>
             </motion.div>
@@ -433,7 +482,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </motion.div>
       )}
 
-      {/* --- (Load More and Edit Dialog remain the same) --- */}
+      {/* (Load More and Edit Dialog remain the same) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>

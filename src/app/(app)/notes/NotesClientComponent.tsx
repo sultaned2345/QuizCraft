@@ -5,18 +5,30 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note, ApiResponse } from '@/types/database';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // <-- Import buttonVariants
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X } from 'lucide-react';
-// import { GenerateNotesDialog } from '@/components/GenerateNotesDialog'; // <-- 1. REMOVE STATIC IMPORT
+// import { GenerateNotesDialog } from '@/components/GenerateNotesDialog'; // <-- REMOVED
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import dynamic from 'next/dynamic'; // <-- 2. IMPORT DYNAMIC
+import dynamic from 'next/dynamic';
+// --- 1. IMPORT ALERT DIALOG ---
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+// ---
 
-// --- 3. LAZY-LOAD THE GENERATE NOTES DIALOG ---
 const GenerateNotesDialog = dynamic(
   () => import('@/components/GenerateNotesDialog').then((mod) => mod.GenerateNotesDialog),
   {
@@ -27,7 +39,7 @@ const GenerateNotesDialog = dynamic(
     ),
   }
 );
-// --- (Interfaces remain the same) ---
+
 interface NoteListItem {
   id: string;
   user_id: string;
@@ -49,7 +61,6 @@ interface NotesClientComponentProps {
 
 
 export function NotesClientComponent({ initialData }: NotesClientComponentProps) {
-  // --- (State and hooks remain the same) ---
   const [notes, setNotes] = useState<NoteListItem[]>(initialData.notes);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
@@ -60,6 +71,8 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const notesPerPage = 9;
   const [allTags, setAllTags] = useState<Set<string>>(new Set());
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  // --- 2. ADD IS_DELETING STATE ---
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { session } = useAuth();
   const router = useRouter();
@@ -134,15 +147,18 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         }
     }, [session, toast, notesPerPage]);
 
+  // --- 3. MODIFY handleDeleteNote ---
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
-     if (!session || !confirm(`Are you sure you want to delete "${noteTitle}"?`)) return;
+     if (!session) return; // Removed confirm()
 
      const originalNotes = [...notes];
      setNotes(prevNotes => prevNotes.filter(n => n.id !== noteId));
      setUsage(prev => ({ ...prev, count: prev.count - 1 }));
+     setIsDeleting(true); // <-- Set loading state
 
      try {
-       const response = await fetch(`/api/notes?id=${noteId}`, { 
+       // Use new noteId route
+       const response = await fetch(`/api/notes/${noteId}`, { 
          method: 'DELETE', 
          headers: { 'Authorization': `Bearer ${session.access_token}` } 
        });
@@ -153,14 +169,19 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
        }
        
        toast({ title: "Note Deleted" });
-       refreshFirstPage();
+       // No need to refresh full page on success, optimistic update is fine
+       // But we'll refresh to ensure pagination and tags are correct
+       refreshFirstPage(); 
        
      } catch (error: any) {
        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
-       setNotes(originalNotes);
-       setUsage(prev => ({ ...prev, count: prev.count + 1 }));
+       setNotes(originalNotes); // Rollback
+       setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
+     } finally {
+       setIsDeleting(false); // <-- Unset loading state
      }
   };
+  // ---
 
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
@@ -271,13 +292,43 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                       variant="outline" 
                       size="sm" 
                       onClick={() => router.push(`/notes/${note.id}`)} 
+                      disabled={isDeleting} // <-- Disable on delete
                     >
                         <Edit className="w-4 h-4 mr-2" />
                         Edit
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteNote(note.id, note.title)}>
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                    </Button>
+                    {/* --- 4. REPLACE DELETE BUTTON --- */}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" disabled={isDeleting}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete the note:
+                            <br />
+                            <strong className="py-2 inline-block">{note.title}</strong>
+                            <br />
+                            All associated data (like embeddings) will also be deleted.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className={cn(buttonVariants({ variant: 'destructive' }))}
+                            disabled={isDeleting}
+                            onClick={() => handleDeleteNote(note.id, note.title)}
+                          >
+                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Delete Note
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    {/* --- END REPLACEMENT --- */}
                 </CardFooter>
               </Card>
             </motion.div>
@@ -297,7 +348,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
-      {/* --- 4. RENDER THE LAZY-LOADED DIALOG --- */}
+      {/* (Generate Dialog) */}
       {isGeneratorOpen && (
         <GenerateNotesDialog
           isOpen={isGeneratorOpen}

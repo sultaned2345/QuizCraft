@@ -2,12 +2,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-// --- 1. IMPORT useSearchParams ---
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Flashcard, ApiResponse, DeckWithCardsResponse, CreateFlashcardData, UpdateFlashcardData } from '@/types/database';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // <-- Import buttonVariants
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,11 +21,24 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
+// --- 1. IMPORT ALERT DIALOG ---
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+// ---
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, ArrowRight, RotateCcw, Plus, Edit, Trash2, FlipVertical, Layers, Check, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// --- (FlashcardViewer and FlashcardEditorDialog components are unchanged) ---
+// (FlashcardViewer and FlashcardEditorDialog components are unchanged)
 interface FlashcardViewerProps {
   card: Flashcard;
   isFlipped: boolean;
@@ -144,17 +156,14 @@ function FlashcardEditorDialog({ deckId, cardToEdit, isOpen, onOpenChange, onSav
         </Dialog>
     );
 }
-// --- (End of unchanged components) ---
 
 
-// --- Main Deck View Page Component ---
-type StudyMode = 'due' | 'new' | 'cram' | 'all'; // 'all' is fallback
+type StudyMode = 'due' | 'new' | 'cram' | 'all';
 type ViewState = 'loading' | 'error' | 'studying' | 'complete';
 
 export default function DeckViewPage() {
     const [deckTitle, setDeckTitle] = useState('');
     const [studyCards, setStudyCards] = useState<Flashcard[]>([]);
-    // --- 2. UPDATE DEFAULT VIEWSTATE ---
     const [viewState, setViewState] = useState<ViewState>('loading');
     const [error, setError] = useState('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -162,10 +171,11 @@ export default function DeckViewPage() {
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [cardToEdit, setCardToEdit] = useState<Flashcard | null>(null);
     const [isReviewing, setIsReviewing] = useState(false);
+    // --- 2. ADD IS_DELETING STATE ---
+    const [isDeleting, setIsDeleting] = useState(false);
     
-    // --- 3. ADD searchParams and studyMode ---
     const searchParams = useSearchParams();
-    const studyMode = (searchParams.get('mode') || 'due') as StudyMode; // Default to 'due'
+    const studyMode = (searchParams.get('mode') || 'due') as StudyMode; 
 
     const { user, session, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -173,7 +183,7 @@ export default function DeckViewPage() {
     const { toast } = useToast();
     const deckId = params.deckId as string;
 
-    // --- 4. MODIFIED useEffect to auto-start study session ---
+    // (useEffect, startStudySession, handleReview, goToNextCard remain the same)
     useEffect(() => {
         if (!authLoading && !user) {
             router.push('/login');
@@ -182,7 +192,6 @@ export default function DeckViewPage() {
         if (user && deckId && session) {
             setViewState('loading');
             
-            // Fetch deck title first (or get it from the study session API)
             fetch(`/api/decks/${deckId}`, { 
                  headers: { Authorization: `Bearer ${session.access_token}` },
             })
@@ -192,8 +201,6 @@ export default function DeckViewPage() {
                     throw new Error(data.error || 'Failed to load deck title.');
                 }
                 setDeckTitle(data.data.title);
-                
-                // Now, immediately start the study session based on the URL param
                 startStudySession(studyMode);
             })
             .catch(err => {
@@ -201,7 +208,7 @@ export default function DeckViewPage() {
                 setViewState('error');
             });
         }
-    }, [user, authLoading, deckId, session, router, studyMode]); // Add studyMode dependency
+    }, [user, authLoading, deckId, session, router, studyMode]);
 
     
     const startStudySession = async (mode: StudyMode) => {
@@ -209,7 +216,6 @@ export default function DeckViewPage() {
         setViewState('loading');
         setError('');
         try {
-            // Use 'cram' if mode is 'cram', otherwise use the mode (due, new)
             const apiUrlMode = mode === 'cram' ? 'all' : mode;
             const response = await fetch(`/api/decks/${deckId}/study?mode=${apiUrlMode}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
@@ -232,15 +238,13 @@ export default function DeckViewPage() {
         const card = currentCard;
         if (!card || !session || isReviewing) return;
         setIsReviewing(true);
-        
-        // --- 5. ADD isCramming FLAG ---
         const isCramming = studyMode === 'cram';
         
         try {
             const response = await fetch(`/api/flashcards/${card.id}/review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({ quality, isCramming }), // Send cram flag
+                body: JSON.stringify({ quality, isCramming }),
             });
             const result: ApiResponse<Flashcard> = await response.json();
             if (!result.success) throw new Error(result.error || 'Failed to save review.');
@@ -261,14 +265,29 @@ export default function DeckViewPage() {
             setIsFlipped(false);
         }
     };
-    
+
+    // --- 3. MODIFY handleDeleteCard ---
     const handleDeleteCard = async (cardId: string) => {
         if (!session) return;
+        
         const cardToDelete = studyCards.find(c => c.id === cardId);
-        if (!cardToDelete || !confirm(`Delete card "${cardToDelete.front_content.substring(0, 20)}..."? This will remove it permanently.`)) return;
+        if (!cardToDelete) return; // Removed confirm()
+
         const originalStudyCards = [...studyCards];
+        // Optimistically remove card and move to next
         setStudyCards(prev => prev.filter(c => c.id !== cardId));
         setIsFlipped(false);
+        setIsDeleting(true); // <-- Set loading state
+
+        // If we deleted the last card, end the session
+        if (studyCards.length === 1) {
+            setViewState('complete');
+        } else if (currentCardIndex >= studyCards.length - 1) {
+            // If we deleted the last card in the index, go back one
+            setCurrentCardIndex(prev => Math.max(0, prev - 1));
+        }
+        // If we delete from the middle, the next card will just slide in
+
         try {
             const response = await fetch(`/api/flashcards/${cardId}`, {
                 method: 'DELETE',
@@ -279,13 +298,16 @@ export default function DeckViewPage() {
             toast({ title: 'Card Deleted' });
         } catch (error: any) {
             toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-            setStudyCards(originalStudyCards);
+            setStudyCards(originalStudyCards); // Rollback
+        } finally {
+            setIsDeleting(false); // <-- Unset loading state
         }
     };
+    // ---
 
+    const currentCard = studyCards[currentCardIndex];
 
-    // --- RENDER LOGIC ---
-
+    // (Loading, Error, and Complete states remain the same)
     if (viewState === 'loading' || authLoading) {
         return <div className="flex h-[calc(100vh-8rem)] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
@@ -302,8 +324,6 @@ export default function DeckViewPage() {
             </div>
         );
     }
-
-    // --- 6. REMOVE 'menu' VIEWSTATE ---
     
     if (viewState === 'complete') {
          return (
@@ -316,7 +336,6 @@ export default function DeckViewPage() {
                         <Check className="w-16 h-16 text-green-500 mb-4" />
                         <p className="text-xl font-medium mb-4">Session Complete!</p>
                         <p className="text-sm mb-6">You've finished this batch of cards.</p>
-                        {/* --- 7. UPDATE BUTTON to go back to deck list --- */}
                         <Button onClick={() => router.push('/flashcards')}>
                             <ArrowLeft className="w-4 h-4 mr-2" />
                             Back to All Decks
@@ -327,7 +346,6 @@ export default function DeckViewPage() {
          );
     }
     
-    const currentCard = studyCards[currentCardIndex];
     if (!currentCard) {
         setViewState('complete');
         return null; 
@@ -336,12 +354,11 @@ export default function DeckViewPage() {
     return (
         <>
             <div className="flex items-center justify-between mb-6">
-                {/* --- 8. UPDATE BUTTON to go back to deck list --- */}
-                <Button variant="ghost" onClick={() => router.push('/flashcards')}>
+                <Button variant="ghost" onClick={() => router.push('/flashcards')} disabled={isDeleting || isReviewing}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Decks
                 </Button>
-                 <Button onClick={() => { setCardToEdit(null); setIsEditorOpen(true); }}>
+                 <Button onClick={() => { setCardToEdit(null); setIsEditorOpen(true); }} disabled={isDeleting || isReviewing}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Card
                 </Button>
@@ -362,29 +379,56 @@ export default function DeckViewPage() {
                 <div className="flex justify-between items-center mt-6">
                     {isFlipped ? (
                         <div className="w-full grid grid-cols-3 gap-2 sm:gap-4">
-                            <Button variant="outline" className="bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400" onClick={() => handleReview('again')} disabled={isReviewing}>
-                                Again
+                            <Button variant="outline" className="bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400" onClick={() => handleReview('again')} disabled={isReviewing || isDeleting}>
+                                {isReviewing && <Loader2 className="w-4 h-4 animate-spin" />} {!isReviewing && 'Again'}
                             </Button>
-                            <Button variant="outline" className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400" onClick={() => handleReview('good')} disabled={isReviewing}>
-                                Good
+                            <Button variant="outline" className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400" onClick={() => handleReview('good')} disabled={isReviewing || isDeleting}>
+                                {isReviewing && <Loader2 className="w-4 h-4 animate-spin" />} {!isReviewing && 'Good'}
                             </Button>
-                             <Button variant="outline" className="bg-green-50 hover:bg-green-100 dark:bg-green-900/30 dark:hover:bg-green-900/50 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400" onClick={() => handleReview('easy')} disabled={isReviewing}>
-                                Easy
+                             <Button variant="outline" className="bg-green-50 hover:bg-green-100 dark:bg-green-900/30 dark:hover:bg-green-900/50 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400" onClick={() => handleReview('easy')} disabled={isReviewing || isDeleting}>
+                                {isReviewing && <Loader2 className="w-4 h-4 animate-spin" />} {!isReviewing && 'Easy'}
                             </Button>
                         </div>
                     ) : (
                         <div className="w-full grid grid-cols-3 gap-4">
-                            <Button variant="ghost" size="sm" onClick={() => { setCardToEdit(currentCard); setIsEditorOpen(true); }} disabled={!currentCard || isReviewing}>
+                            <Button variant="ghost" size="sm" onClick={() => { setCardToEdit(currentCard); setIsEditorOpen(true); }} disabled={!currentCard || isReviewing || isDeleting}>
                                 <Edit className="w-4 h-4 mr-2" /> Edit Card
                             </Button>
                             <div className="flex justify-center">
-                                <Button className="w-full" onClick={() => setIsFlipped(true)}>
+                                <Button className="w-full" onClick={() => setIsFlipped(true)} disabled={isDeleting}>
                                     Show Answer
                                 </Button>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => currentCard && handleDeleteCard(currentCard.id)} disabled={!currentCard || isReviewing} className="text-destructive hover:text-destructive">
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                            </Button>
+                            {/* --- 4. REPLACE DELETE BUTTON --- */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" disabled={!currentCard || isReviewing || isDeleting} className="text-destructive hover:text-destructive">
+                                  <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete this flashcard:
+                                    <br />
+                                    <strong className="py-2 inline-block truncate max-w-full">{currentCard.front_content}</strong>
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className={cn(buttonVariants({ variant: 'destructive' }))}
+                                    disabled={isDeleting}
+                                    onClick={() => handleDeleteCard(currentCard.id)}
+                                  >
+                                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Delete Card
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                            {/* --- END REPLACEMENT --- */}
                         </div>
                     )}
                 </div>
@@ -402,8 +446,6 @@ export default function DeckViewPage() {
                         );
                         toast({ title: "Card Updated!" });
                     } else {
-                        // We added a new card.
-                        // Don't add to the current session, just toast.
                         toast({ title: "Card Added!", description: "It will appear in your next new card session." });
                     }
                 }}

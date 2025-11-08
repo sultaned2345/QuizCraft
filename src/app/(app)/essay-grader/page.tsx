@@ -60,6 +60,15 @@ interface AIUsageStatus {
     remaining: number | typeof Infinity;
     isPro: boolean;
 }
+
+// --- 1. ADD WORD LIMIT AND COUNTER ---
+const WORD_LIMIT = 3000;
+const countWords = (text: string): number => {
+  if (!text.trim()) return 0;
+  return text.trim().split(/\s+/).length; // Splits on one or more whitespace characters
+};
+// ---
+
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -99,6 +108,8 @@ export default function EssayGraderPage() {
   const [history, setHistory] = useState<GradedEssayListItem[] | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [outputTab, setOutputTab] = useState<'feedback' | 'history'>('feedback');
+  // --- 2. ADD WORD COUNT STATE ---
+  const [wordCount, setWordCount] = useState(0);
 
   const { session } = useAuth();
   const { toast } = useToast();
@@ -173,6 +184,8 @@ export default function EssayGraderPage() {
        }
        setSelectedFile(file);
        setEssayText('');
+       // --- 3. RESET WORD COUNT ON FILE CHANGE ---
+       setWordCount(0); 
        setGradedEssay(null);
        setOutputTab('history');
      } else {
@@ -180,12 +193,26 @@ export default function EssayGraderPage() {
      }
    };
 
+   // --- 4. MODIFY handleTextChange ---
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-     setEssayText(e.target.value); 
+     const newText = e.target.value;
+     const newWordCount = countWords(newText);
+     
+     setEssayText(newText);
+     setWordCount(newWordCount);
+     
      if(selectedFile) setSelectedFile(null); 
-     setError(null); 
      setGradedEssay(null);
      setOutputTab('history');
+
+     // Check for word limit error
+     if (newWordCount > WORD_LIMIT) {
+       setError(`Word limit exceeded: ${newWordCount} / ${WORD_LIMIT} words.`);
+     } else if (error && error.startsWith('Word limit exceeded')) {
+       setError(null); // Clear only the word limit error
+     } else if (error && error.startsWith('Essay text is too short')) {
+       setError(null); // Clear short text error as user types
+     }
    };
    
    const handleViewHistoryItem = async (essayId: string) => {
@@ -195,7 +222,7 @@ export default function EssayGraderPage() {
         setGradedEssay(null);
         setEssayText('');
         setSelectedFile(null);
-        setOutputTab('feedback'); // Switch to feedback tab on click
+        setOutputTab('feedback');
         
         try {
             const response = await fetch(`/api/graded-essays/${essayId}`, {
@@ -218,19 +245,27 @@ export default function EssayGraderPage() {
             setGradedEssay(responseData);
             setEssayText(result.data.essay_content);
             setRubricText(result.data.rubric_or_criteria || '');
+            // --- 5. UPDATE WORD COUNT WHEN LOADING HISTORY ---
+            setWordCount(countWords(result.data.essay_content)); 
             
             toast({ title: "History Loaded", description: `Displaying feedback for "${result.data.essay_title || 'graded essay'}".` });
 
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred while fetching history.');
             toast({ title: "Failed to Load History", description: err.message, variant: "destructive" });
-            setOutputTab('history'); // Switch back on error
+            setOutputTab('history');
         } finally {
             setIsLoading(false);
         }
    };
 
   const handleSubmit = async () => {
+    // --- 6. ADD WORD COUNT CHECK TO SUBMIT ---
+    if (inputMode === 'text' && wordCount > WORD_LIMIT) {
+        setError(`Word limit exceeded: ${wordCount} / ${WORD_LIMIT} words.`);
+        return;
+    }
+    // (Rest of the function is unchanged)
     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
       setError('Please provide an essay by pasting text or uploading a file.');
       return;
@@ -269,10 +304,14 @@ export default function EssayGraderPage() {
           throw new Error(result.message || 'AI generation limit reached.');
         }
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
+         // --- 7. CATCH NEW SERVER-SIDE WORD LIMIT ERROR ---
+         if (result.error?.includes("word limit exceeded")) {
+             throw new Error(result.error);
+         }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
       setGradedEssay(result.data);
-      setOutputTab('feedback'); // Switch to feedback tab on success
+      setOutputTab('feedback');
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
       
       if (history) {
@@ -304,7 +343,9 @@ export default function EssayGraderPage() {
     }
   };
   
+  // (renderHighlightedEssay and renderFeedback are unchanged)
   const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
+    // ...
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     let parts: (string | React.ReactNode)[] = [text];
     const colors = {
@@ -355,6 +396,7 @@ export default function EssayGraderPage() {
   };
 
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
+    // ...
     if (!fb) return null;
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     
@@ -408,6 +450,8 @@ export default function EssayGraderPage() {
   };
   
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
+  // --- 8. ADD WORD COUNT TO isOverTextLimit ---
+  const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
   return (
     <>
@@ -431,10 +475,8 @@ export default function EssayGraderPage() {
           </div>
       </div>
       
-      {/* --- NEW 2-COLUMN LAYOUT --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* --- COLUMN 1: INPUT --- */}
         <div className="lg:col-span-1 space-y-6">
            <Card>
                 <CardHeader>
@@ -444,16 +486,29 @@ export default function EssayGraderPage() {
                 <CardContent>
                     <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
                         <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
-                        <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
+                        <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setWordCount(0); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
                     </div>
                     {inputMode === 'text' && (
-                        <Textarea
-                            placeholder="Paste your essay here..."
-                            value={essayText}
-                            onChange={handleTextChange}
-                            className="min-h-[250px] text-base border rounded-md"
-                            disabled={isLoading}
-                        />
+                        // --- 9. ADD WRAPPER AND WORD COUNT DISPLAY ---
+                        <div className="relative">
+                            <Textarea
+                                placeholder="Paste your essay here..."
+                                value={essayText}
+                                onChange={handleTextChange}
+                                className={cn(
+                                    "min-h-[250px] text-base border rounded-md",
+                                    wordCount > WORD_LIMIT ? "border-destructive focus-visible:ring-destructive" : ""
+                                )}
+                                disabled={isLoading}
+                            />
+                            <p className={cn(
+                                "text-xs text-right mt-1.5",
+                                wordCount > WORD_LIMIT ? "text-destructive" : "text-muted-foreground"
+                            )}>
+                                {wordCount} / {WORD_LIMIT} words
+                            </p>
+                        </div>
+                        // ---
                     )}
                     {inputMode === 'file' && (
                         <div className="space-y-2">
@@ -506,7 +561,14 @@ export default function EssayGraderPage() {
              <Button
                 size="lg"
                 onClick={handleSubmit}
-                disabled={isLoading || isUsageLoading || isOverLimit || (inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)}
+                // --- 10. UPDATE DISABLED LOGIC ---
+                disabled={
+                    isLoading || 
+                    isUsageLoading || 
+                    isOverLimit || 
+                    (inputMode === 'text' && (isOverTextLimit || wordCount === 0)) || 
+                    (inputMode === 'file' && !selectedFile)
+                }
                 className="w-full"
              >
                 {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
@@ -517,7 +579,7 @@ export default function EssayGraderPage() {
              )}
         </div>
         
-        {/* --- COLUMN 2: OUTPUT (TABS) --- */}
+        {/* (Column 2 Output remains unchanged) */}
         <div className="lg:col-span-1">
            <Card className="min-h-[400px] flex flex-col"> 
                 <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col">
