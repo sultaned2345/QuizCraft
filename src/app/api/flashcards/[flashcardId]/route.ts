@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
-// --- Helper function to verify flashcard ownership ---
+// --- Helper function (Still needed for PUT) ---
 async function verifyFlashcardOwnership(flashcardId: string, userId: string): Promise<boolean> {
     try {
         const flashcard = await prisma.flashcards.findUnique({
@@ -35,7 +35,7 @@ async function verifyFlashcardOwnership(flashcardId: string, userId: string): Pr
 }
 
 
-// --- PUT Handler: Update a flashcard ---
+// --- PUT Handler: Update a flashcard (Unchanged) ---
 export async function PUT(
     request: NextRequest,
     { params }: { params: { flashcardId: string } }
@@ -118,7 +118,7 @@ export async function PUT(
     }
 }
 
-// --- DELETE Handler: Delete a flashcard ---
+// --- DELETE Handler: Delete a flashcard (Refactored) ---
 export async function DELETE(
     request: NextRequest,
     { params }: { params: { flashcardId: string } }
@@ -131,21 +131,20 @@ export async function DELETE(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard ID is required.' }, { status: 400 });
         }
 
-        // 1. Verify Ownership before proceeding
-        const isOwner = await verifyFlashcardOwnership(flashcardId, user.id);
-        if (!isOwner) {
-            console.warn(`User ${user.id} attempt to delete flashcard ${flashcardId} denied.`);
-            // Return 404 even if it exists but isn't owned by user, for security
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard not found or access denied.' }, { status: 404 });
-        }
-
-        // 2. Delete the flashcard using Prisma
-        await prisma.flashcards.delete({
+        // 1. Delete the flashcard using deleteMany with a nested ownership check
+        const deleteResult = await prisma.flashcards.deleteMany({
             where: {
-                id: flashcardId
-                 // Ownership already verified
+                id: flashcardId,
+                deck: {
+                    user_id: user.id // Ensures user owns the deck this card is in
+                }
             },
         });
+
+        // 2. Check if any card was actually deleted
+        if (deleteResult.count === 0) {
+            return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard not found or access denied.' }, { status: 404 });
+        }
 
         return NextResponse.json<ApiResponse>({
             success: true,
@@ -157,10 +156,7 @@ export async function DELETE(
 
         // Handle specific Prisma errors
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
-             if (error.code === 'P2025') { // Record to delete not found (should be caught by verifyOwnership)
-                return NextResponse.json<ApiResponse>({ success: false, error: 'Flashcard not found.' }, { status: 404 });
-             }
-             if (error.code === 'P2023') { // Invalid UUID format (should be caught by verifyOwnership)
+             if (error.code === 'P2023') { // Invalid UUID
                  return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Flashcard ID format.' }, { status: 400 });
              }
              console.error('Prisma Error deleting flashcard:', { code: error.code, meta: error.meta });

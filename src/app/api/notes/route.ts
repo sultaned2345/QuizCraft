@@ -6,7 +6,7 @@ import { USAGE_LIMITS, validateNoteCreation } from '@/lib/usage-limits';
 import { ApiResponse, CreateNoteData, UpdateNoteData, Note, NoteListItem, PaginatedNotesResponse } from '@/types/database';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
-import { generateEmbeddingsForContent } from '@/lib/embedding'; // <-- NEW IMPORT
+import { generateEmbeddingsForContent } from '@/lib/embedding';
 
 // --- GET function (Unchanged) ---
 export async function GET(request: NextRequest) {
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// --- POST function (Uses Prisma) ---
+// --- POST function (Unchanged) ---
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
 }
 
 
-// --- PUT function (Uses Prisma) ---
+// --- PUT function (Unchanged) ---
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -221,7 +221,7 @@ export async function PUT(request: NextRequest) {
 
 
     return NextResponse.json<ApiResponse<Note>>({ success: true, data: updatedNote, message: 'Note updated successfully' });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) return error;
     console.error('[PUT /api/notes] Error updating note:', error);
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -242,53 +242,5 @@ export async function PUT(request: NextRequest) {
 }
 
 
-// --- DELETE function (Uses Prisma) ---
-export async function DELETE(request: NextRequest) {
-  try {
-    const user = await requireAuth(request); //
-    const url = new URL(request.url);
-    const noteId = url.searchParams.get('id'); //
-
-    if (!noteId) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Note ID is required' }, { status: 400 }); //
-    }
-
-    // ... (ownership verification remains the same) ...
-     const existingNote = await prisma.notes.findUnique({
-        where: { id: noteId },
-        select: { user_id: true }
-    });
-
-     if (!existingNote) {
-         return NextResponse.json<ApiResponse>({ success: true, message: 'Note not found or already deleted' });
-     }
-    if (existingNote.user_id !== user.id) {
-       return NextResponse.json<ApiResponse>({ success: false, error: 'Access denied' }, { status: 403 }); //
-    }
-
-    // --- NEW: Delete embeddings associated with this note ---
-    // We can do this asynchronously without awaiting.
-    prisma.content_embeddings.deleteMany({
-      where: { content_id: noteId, content_type: 'note', user_id: user.id }
-    }).catch(err => {
-      console.error(`Failed to delete embeddings for note ${noteId}:`, err);
-    });
-    // --- END NEW ---
-
-    await prisma.notes.delete({
-        where: { id: noteId }
-    }); //
-
-    return NextResponse.json<ApiResponse>({ success: true, message: 'Note deleted successfully' }); //
-  } catch (error) {
-    // ... (error handling remains the same) ...
-    if (error instanceof Response) return error;
-    console.error('[DELETE /api/notes] Unexpected error deleting note:', error);
-     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-         console.error('Prisma Error deleting note:', { code: error.code, meta: error.meta });
-         return NextResponse.json<ApiResponse>({ success: false, error: 'Database error deleting note.' }, { status: 500 });
-     }
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete note';
-    return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
-  }
-}
+// --- DELETED: DELETE function ---
+// (The DELETE function has been removed from this file)
