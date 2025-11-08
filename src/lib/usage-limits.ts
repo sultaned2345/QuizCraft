@@ -17,7 +17,7 @@ export const USAGE_LIMITS = {
   // Free Tier Limits
   FREE_NOTES: 10,
   FREE_QUIZZES: 5,
-  FREE_AI_GENERATIONS: 3, // Per calendar month
+  FREE_AI_GENERATIONS: 5, // Per calendar month <-- MODIFIED
   FREE_FLASHCARD_DECKS: 5,
   FREE_TOTAL_FLASHCARDS: 100,
   FREE_DOCUMENTS: 5,

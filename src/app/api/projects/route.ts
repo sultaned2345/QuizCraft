@@ -1,5 +1,4 @@
 // src/app/api/projects/route.ts
-// NEW FILE
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -35,7 +34,15 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     if (error instanceof Response) return error;
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to fetch projects.' }, { status: 500 });
+    
+    // --- ADDED DETAILED LOGGING ---
+    console.error('[API /api/projects GET] Detailed Error:', error);
+    // --- END LOGGING ---
+    
+    return NextResponse.json<ApiResponse>({ 
+      success: false, 
+      error: 'Failed to fetch projects. Check server logs.' // Modified error message
+    }, { status: 500 });
   }
 }
 
@@ -56,6 +63,15 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         description: description?.trim() || null,
       },
+      // --- MODIFICATION: Include _count on creation ---
+      // This ensures the returned object matches the 'Project' type
+      // which is expected by the client component's state.
+      include: {
+        _count: {
+          select: { links: true }
+        }
+      }
+      // --- END MODIFICATION ---
     });
 
     return NextResponse.json<ApiResponse<Project>>({
@@ -71,6 +87,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     if (error instanceof Response) return error;
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to create project.' }, { status: 500 });
+
+    // --- ADDED DETAILED LOGGING ---
+    console.error('[API /api/projects POST] Detailed Error:', error);
+    // --- END LOGGING ---
+    
+    return NextResponse.json<ApiResponse>({ 
+      success: false, 
+      error: 'Failed to create project. Check server logs.' // Modified error message
+    }, { status: 500 });
   }
 }
