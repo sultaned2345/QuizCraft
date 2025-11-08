@@ -1,7 +1,7 @@
 // src/app/(app)/projects/loading.tsx
 // NEW FILE
 
-'use client';
+'use client'; // <-- ADD THIS DIRECTIVE
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";

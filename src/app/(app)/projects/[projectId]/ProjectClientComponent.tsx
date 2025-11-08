@@ -1,5 +1,4 @@
-// src/app/(app)/projects/[projectId]/ProjectClientComponent.tsx
-// NEW FILE
+// src/app/(app)/projects/ProjectsClientComponent.tsx
 
 'use client';
 
@@ -7,8 +6,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { Project, ProjectContentDetails, ApiResponse } from '@/types/database';
+import { Project, ApiResponse } from '@/types/database';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
@@ -22,9 +24,17 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
   DialogDescription,
   DialogTrigger,
+  DialogClose,
 } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+// --- MODIFICATION: Import FolderKanban directly ---
+import { Loader2, Plus, ArrowRight, Trash2 } from 'lucide-react';
+import FolderKanban from 'lucide-react/dist/esm/icons/folder-kanban'; // <-- FIX
+// --- END MODIFICATION ---
+import { motion } from 'framer-motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,43 +46,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, ArrowLeft, Trash2, FileText, FileQuestion, StickyNote, Layers, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 
-interface ProjectClientComponentProps {
-  initialProject: Project;
-  initialContent: ProjectContentDetails;
+interface ProjectsClientComponentProps {
+  initialData: Project[];
 }
 
-// Helper to get the right icon
-const getIcon = (type: string) => {
-  switch (type) {
-    case 'document': return <FileText className="w-5 h-5 text-blue-500" />;
-    case 'quiz': return <FileQuestion className="w-5 h-5 text-green-500" />;
-    case 'note': return <StickyNote className="w-5 h-5 text-yellow-500" />;
-    case 'deck': return <Layers className="w-5 h-5 text-purple-500" />;
-    default: return <FileText className="w-5 h-5" />;
-  }
-};
-
-// Helper to get the correct link
-const getHref = (type: string, id: string) => {
-   switch (type) {
-    case 'document': return `/documents/${id}`;
-    case 'quiz': return `/quiz/${id}`;
-    case 'note': return `/notes/${id}`;
-    case 'deck': return `/flashcards/${id}`;
-    default: return '#';
-  }
-};
-
-export function ProjectClientComponent({ initialProject, initialContent }: ProjectClientComponentProps) {
-  const [project, setProject] = useState(initialProject);
-  const [content, setContent] = useState(initialContent);
+export function ProjectsClientComponent({ initialData }: ProjectsClientComponentProps) {
+  const [projects, setProjects] = useState<Project[]>(initialData);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isLinking, setIsLinking] = useState(false);
 
   const { session } = useAuth();
   const router = useRouter();
@@ -87,128 +73,128 @@ export function ProjectClientComponent({ initialProject, initialContent }: Proje
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
   };
 
-  /**
-   * Removes a content item *link* from the project.
-   * This does not delete the content itself.
-   * NOTE: This API route /api/projects/links/[linkId] does not exist yet.
-   */
-  const handleRemoveLink = async (linkId: string, title: string) => {
-    if (!session) return;
-    
-    const originalLinks = [...content.links];
-    setContent(prev => ({ ...prev, links: prev.links.filter(l => l.id !== linkId) }));
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectTitle.trim() || !session) return;
+    setIsSaving(true);
 
     try {
-      // const response = await fetch(`/api/projects/links/${linkId}`, {
-      //   method: 'DELETE',
-      //   headers: { Authorization: `Bearer ${session.access_token}` },
-      // });
-      // const result: ApiResponse = await response.json();
-      // if (!result.success) throw new Error(result.error);
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ title: newProjectTitle, description: newProjectDesc }),
+      });
+      const result: ApiResponse<Project> = await response.json();
+      
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Failed to create project.');
+      }
 
-      console.warn(`API route /api/projects/links/${linkId} (DELETE) not implemented.`);
-      toast({ title: 'Link Removed (UI)', description: `Removed "${title}" from project.` });
+      toast({ title: 'Project Created!', description: `"${result.data.title}" added.` });
+      // Add new project to top of the list
+      setProjects(prev => [result.data!, ...prev.filter(p => p.id !== result.data!.id)]);
+      setNewProjectTitle('');
+      setNewProjectDesc('');
+      setIsCreateDialogOpen(false);
+      
     } catch (error: any) {
-      toast({ title: 'Failed to Remove Link', description: error.message, variant: 'destructive' });
-      setContent(prev => ({ ...prev, links: originalLinks })); // Rollback
+      toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  /**
-   * Deletes the entire project.
-   * NOTE: This API route /api/projects/[projectId] (DELETE) does not exist yet.
-   */
-  const handleDeleteProject = async () => {
+  // Note: This needs /api/projects/[projectId] DELETE route to be created
+  // I will add that in a future batch if you'd like.
+  const handleDeleteProject = async (projectId: string, projectTitle: string) => {
     if (!session || isDeleting) return;
     setIsDeleting(true);
 
+    const originalProjects = [...projects];
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+
     try {
-      // const response = await fetch(`/api/projects/${project.id}`, {
+      // We need to create this API route
+      // const response = await fetch(`/api/projects/${projectId}`, {
       //   method: 'DELETE',
       //   headers: { Authorization: `Bearer ${session.access_token}` },
       // });
       // const result: ApiResponse = await response.json();
-      // if (!result.success) throw new Error(result.error);
+      // if (!result.success) {
+      //   throw new Error(result.error || 'Failed to delete project.');
+      // }
       
-      console.warn(`API route /api/projects/${project.id} (DELETE) not implemented.`);
-      toast({ title: 'Project Deleted (UI)' });
-      router.push('/projects');
+      // Placeholder toast until API is built
+      toast({ title: 'Project Deleted (UI)', description: `"${projectTitle}" removed.` });
+      console.warn(`Delete API route for /api/projects/${projectId} not yet implemented.`);
 
     } catch (error: any) {
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
+      setProjects(originalProjects); // Rollback
+    } finally {
       setIsDeleting(false);
     }
   };
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6 gap-4">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/projects')}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Projects
-        </Button>
-        <div className="flex gap-2">
-          {/* TODO: Add Content Dialog */}
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> Add Content</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Content to Project</DialogTitle>
-                <DialogDescription>
-                  This feature is not yet implemented. This modal will show a list
-                  of your existing documents, quizzes, and notes to link.
-                </DialogDescription>
-              </DialogHeader>
-            </DialogContent>
-          </Dialog>
-
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="icon">
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete "{project.title}"?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action is permanent and only deletes the project folder. 
-                  Your documents, quizzes, and notes inside it will NOT be deleted.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className={cn(buttonVariants({ variant: 'destructive' }))}
-                  disabled={isDeleting}
-                  onClick={handleDeleteProject}
-                >
-                  {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Delete Project
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">Projects ({projects.length})</h1>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> New Project
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Create New Project</DialogTitle>
+              <DialogDescription>Group your study materials by topic or course.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateProject} className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="project-title">Title</Label>
+                <Input
+                  id="project-title"
+                  value={newProjectTitle}
+                  onChange={(e) => setNewProjectTitle(e.target.value)}
+                  placeholder="e.g., Biology Midterm"
+                  disabled={isSaving}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="project-desc">Description (Optional)</Label>
+                <Textarea
+                  id="project-desc"
+                  value={newProjectDesc}
+                  onChange={(e) => setNewProjectDesc(e.target.value)}
+                  placeholder="Notes and materials for..."
+                  disabled={isSaving}
+                  className="min-h-[100px]"
+                />
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="ghost" disabled={isSaving}>Cancel</Button>
+                </DialogClose>
+                <Button type="submit" disabled={isSaving || !newProjectTitle.trim()}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Project Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">{project.title}</h1>
-        <p className="text-lg text-muted-foreground mt-1">{project.description || 'No description.'}</p>
-      </div>
-
-      {/* Content Grid */}
-      {content.links.length === 0 ? (
+      {projects.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <FolderKanban className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">Project is Empty</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Click "Add Content" to get started.</p>
+          <h3 className="mt-4 text-lg font-semibold">No Projects Yet</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Create a project to organize your materials.</p>
+          <Button className="mt-6" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Create a Project
+          </Button>
         </div>
       ) : (
         <motion.div
@@ -217,38 +203,54 @@ export function ProjectClientComponent({ initialProject, initialContent }: Proje
           initial="hidden"
           animate="visible"
         >
-          {content.links.map((link) => (
-            <motion.div key={link.id} variants={itemVariants}>
+          {projects.map((project) => (
+            <motion.div key={project.id} variants={itemVariants}>
               <Card className="flex flex-col h-full">
-                <CardHeader className="flex-row items-start gap-4 space-y-0 pb-2">
-                  <span className="mt-1">{getIcon(link.content_type)}</span>
-                  <div className="flex-1 overflow-hidden">
-                    <CardTitle className="text-base truncate" title={link.title}>
-                      {link.title}
-                    </CardTitle>
-                    <CardDescription className="text-xs capitalize">{link.content_type}</CardDescription>
-                  </div>
+                <CardHeader>
+                  <CardTitle className="text-lg truncate">{project.title}</CardTitle>
+                  <CardDescription>
+                    {project._count?.links || 0} items
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
-                  <p className="text-sm text-muted-foreground italic line-clamp-2">
-                    {link.description || 'No details available.'}
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {project.description || 'No description.'}
                   </p>
                 </CardContent>
-                <CardFooter className="justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-destructive hover:text-destructive"
-                    onClick={() => handleRemoveLink(link.id, link.title)}
-                    title="Remove from project"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={getHref(link.content_type, link.content_id)}>
-                      View
+                <CardFooter className="flex justify-between">
+                  <Button asChild>
+                    {/* This link will 404 until we build the [projectId] page, but is correct */}
+                    <Link href={`/projects/${project.id}`}>
+                      View Project <ArrowRight className="w-4 h-4 ml-2" />
                     </Link>
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-9 w-9">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will delete the project "{project.title}". 
+                          The items inside it (documents, quizzes, etc.) will NOT be deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className={cn(buttonVariants({ variant: 'destructive' }))}
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteProject(project.id, project.title)}
+                        >
+                          {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Delete Project
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardFooter>
               </Card>
             </motion.div>

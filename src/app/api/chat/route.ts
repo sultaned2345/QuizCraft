@@ -464,7 +464,8 @@ ${contextString}`;
     
     const outputStream = new ReadableStream({
       async start(controller) {
-        for await (const chunk of resultStream) {
+        // --- FIX #1: Iterate over resultStream.stream ---
+        for await (const chunk of resultStream.stream) {
           const functionCalls = chunk.functionCalls();
 
           if (functionCalls && functionCalls.length > 0) {
@@ -499,7 +500,8 @@ ${contextString}`;
 
             const toolResponseStream = await chat.sendMessageStream(functionResponseParts);
 
-            for await (const finalChunk of toolResponseStream) {
+            // --- FIX #2: Iterate over toolResponseStream.stream ---
+            for await (const finalChunk of toolResponseStream.stream) {
               const chunkText = finalChunk.text();
               fullModelResponse += chunkText; 
               controller.enqueue(new TextEncoder().encode(chunkText));

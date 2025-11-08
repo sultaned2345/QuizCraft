@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
+// --- MODIFICATION: Import FolderKanban directly ---
 import {
   Sparkles,
   LogOut,
@@ -17,9 +18,10 @@ import {
   FileText,
   User,
   CreditCard,
-  FolderKanban,
   Loader2,
 } from 'lucide-react';
+import FolderKanban from 'lucide-react/dist/esm/icons/folder-kanban'; // <-- FIX
+// --- END MODIFICATION ---
 import { useState } from 'react';
 import { PageProvider } from '@/contexts/PageContext';
 import {
