@@ -78,7 +78,17 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
 
     if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0) { throw new Error("Invalid JSON structure or zero notes returned."); }
 
-    const validNotes = parsed.notes.filter((note: any) => note && note.title?.trim() && note.content?.trim().length > 10);
+    // --- THIS IS THE FIX ---
+    // The previous filter `note.content?.trim().length > 10` would crash
+    // if `note.content` was null or undefined.
+    const validNotes = parsed.notes.filter((note: any) => 
+        note && 
+        note.title?.trim() && 
+        note.content && // Ensure content key exists
+        note.content.trim().length > 10 // Then check its length
+    );
+    // --- END FIX ---
+
     if (validNotes.length === 0) { throw new Error(`AI generated invalid note content (missing title or content).`); }
 
     console.log(`AI note generation successful using ${AI_MODEL_NAME}. Generated ${validNotes.length} valid note(s).`);

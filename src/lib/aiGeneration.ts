@@ -186,9 +186,20 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0 || !parsed.notes[0].title || !parsed.notes[0].content) {
-    throw new Error("AI failed to return a valid note structure.");
+  // --- THIS IS THE FIX ---
+  // Safely check for the existence and content of the first note.
+  if (
+    !parsed.notes || 
+    !Array.isArray(parsed.notes) || 
+    parsed.notes.length === 0 || 
+    !parsed.notes[0].title || 
+    !parsed.notes[0].content || // Check for existence
+    parsed.notes[0].content.trim().length === 0 // Check for empty string
+  ) {
+    throw new Error("AI failed to return a valid note structure with title and content.");
   }
+  // --- END FIX ---
+  
   return parsed.notes[0];
 }
 
