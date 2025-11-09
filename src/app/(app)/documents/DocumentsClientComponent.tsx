@@ -78,7 +78,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
   const handleUpload = async () => { if (!selectedFile || !session) return; setIsUploading(true); setUploadError(''); const formData = new FormData(); formData.append('file', selectedFile); try { const response = await fetch('/api/documents', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }); const result: ApiResponse<DocumentMetadata> = await response.json(); if (!response.ok || !result.success || !result.data) { if (result.error === 'limit_exceeded') { openModal(); throw new Error(result.message || 'Document limit reached.'); } throw new Error(result.error || `Upload failed ${response.status}`); } toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; await refreshFirstPage(); router.push(`/documents/${result.data.id}`); } catch (error: any) { if (!error.message.includes('limit reached')) { setUploadError(error.message || 'Upload error.'); toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' }); } } finally { setIsUploading(false); } };
   const handleDeleteDocument = async (docId: string, docName: string) => { if (!session) return; const originalDocuments = [...documents]; setDocuments(prevDocs => prevDocs.filter(d => d.id !== docId)); setUsage(prev => ({ ...prev, count: (prev.count ?? 1) - 1 })); setIsDeleting(true); try { const response = await fetch(`/api/documents/${docId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } }); const result: ApiResponse = await response.json(); if (!result.success) { throw new Error(result.error || 'Delete failed.'); } toast({ title: 'Deleted', description: `"${docName}" removed.` }); } catch (error: any) { toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' }); setDocuments(originalDocuments); setUsage(prev => ({ ...prev, count: (prev.count ?? 0) + 1 })); } finally { setIsDeleting(false); } };
 
-  // --- (Generic Job Starter Function is unchanged) ---
+  // --- NEW: Generic Job Starter Function ---
   const handleStartGenerationJob = async (docId: string, jobType: GenerationType, jobName: string) => {
     if (!session) return;
     const jobKey = `${docId}-${jobType}`;
@@ -128,7 +128,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
     }
   };
   
-  // --- (Handlers are unchanged) ---
+  // --- MODIFIED: Update handlers to use the new job starter ---
   const handleGenerateQuiz = (docId: string) => { 
     handleStartGenerationJob(docId, 'quiz', 'Quiz');
   };
@@ -191,7 +191,7 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
             animate="visible"
           >
               {documents.map((doc) => {
-                // --- (isQueued logic is unchanged) ---
+                // --- NEW: Check if job is queued for this doc ---
                 const isQuizQueued = recentlyQueued.has(`${doc.id}-quiz`);
                 const isNoteQueued = recentlyQueued.has(`${doc.id}-note`);
                 const isCardQueued = recentlyQueued.has(`${doc.id}-flashcard`);
@@ -246,15 +246,11 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                           <Eye className="w-4 h-4 mr-2" /> View & Chat
                         </Button>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {/* --- (Button 1: Quiz - Unchanged) --- */}
+                          {/* --- MODIFIED BUTTONS (THE FIX) --- */}
                           <Button title={isQuizQueued ? "Quiz is being generated" : "Generate Quiz"} variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isQuizQueued}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                          
-                          {/* --- THIS IS THE FIX (Line 1) --- */}
                           <Button title={isNoteQueued ? "Note is being generated" : "Generate Notes"} variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isNoteQueued}>{isGenerating?.type === 'note' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                          
-                          {/* --- THIS IS THE FIX (Line 2) --- */}
                           <Button title={isCardQueued ? "Cards are being generated" : "Generate Cards"} variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isCardQueued}>{isGenerating?.type === 'flashcard' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isCardQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
-                          {/* --- END OF FIXES --- */}
+                          {/* --- END MODIFIED BUTTONS --- */}
                         </div>
                       </CardFooter>
                     </Card>
