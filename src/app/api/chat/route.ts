@@ -499,14 +499,16 @@ export async function POST(request: NextRequest) {
       }
       contextString += "--- END: Relevant excerpts from document ---";
 
-      // --- FRIENDLY PROMPT ---
-      systemPrompt = `You are a helpful and friendly AI tutor. Your task is to answer the user's questions based *only* on the provided "RELEVANT EXCERPTS" from the document they are currently viewing.
+      // --- MODIFICATION: Updated System Prompt ---
+      systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. Your task is to answer the user's questions.
+- **First, ALWAYS try to answer using *only* the provided "RELEVANT EXCERPTS"** from the document.
+- If you use the excerpts, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]) at the end of the sentence.
+- **If the answer cannot be found in the excerpts**, you may use your general knowledge to answer. When you do, you should state it (e.g., "I couldn't find that in this document, but from my general knowledge...").
+- **If the question is off-topic** (like asking for the weather, jokes, or personal opinions), you MUST politely decline and remind the user you are here to help them with their study materials.
 - Be conversational and encouraging!
-- Do not use any external knowledge. 
-- You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence.
-- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that specific information in this document. Could you try rephrasing?"
 
 ${contextString}`;
+      // --- END MODIFICATION ---
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
@@ -587,14 +589,16 @@ ${JSON.stringify(gradedEssay.feedback)}
       }
       contextString += `--- END: Relevant excerpts from project ---`;
 
-      // --- FRIENDLY PROMPT ---
-      systemPrompt = `You are a helpful and friendly AI tutor. Your task is to answer the user's questions based *only* on the provided "RELEVANT EXCERPTS" from the project they are currently viewing.
+      // --- MODIFICATION: Updated System Prompt ---
+      systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. Your task is to answer the user's questions about their project.
+- **First, ALWAYS try to answer using *only* the provided "RELEVANT EXCERPTS"** from the project.
+- If you use the excerpts, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]) at the end of the sentence.
+- **If the answer cannot be found in the excerpts**, you may use your general knowledge to answer. When you do, you should state it (e.g., "I couldn't find that in this project, but from my general knowledge...").
+- **If the question is off-topic** (like asking for the weather, jokes, or personal opinions), you MUST politely decline and remind the user you are here to help them with their study materials.
 - Be conversational and encouraging!
-- Do not use any external knowledge. 
-- You MUST cite your sources by adding the citation number (e.g., [1], [2]) at the end of the sentence.
-- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that specific information in this project. Could you try rephrasing?"
 
 ${contextString}`;
+      // --- END MODIFICATION ---
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },

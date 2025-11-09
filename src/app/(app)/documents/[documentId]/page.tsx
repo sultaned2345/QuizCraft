@@ -190,10 +190,11 @@ export default function DocumentViewPage() {
           <div className="w-32"></div> 
         </div>
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden h-full">
+        {/* --- MODIFICATION: Changed lg:grid-cols-2 to lg:grid-cols-5 --- */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 overflow-hidden h-full">
           
-          {/* Left Column: Document Viewer + Insights */}
-          <Card className="flex flex-col h-full overflow-hidden">
+          {/* --- MODIFICATION: Added lg:col-span-3 --- */}
+          <Card className="flex flex-col h-full overflow-hidden lg:col-span-3">
             <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
               <CardHeader className="pb-0">
                 <TabsList className="grid w-full grid-cols-2">
@@ -301,8 +302,8 @@ export default function DocumentViewPage() {
             </Tabs>
           </Card>
 
-          {/* Right Column: Chat Interface (unchanged) */}
-          <Card className="flex flex-col h-full overflow-hidden">
+          {/* --- MODIFICATION: Added lg:col-span-2 --- */}
+          <Card className="flex flex-col h-full overflow-hidden lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                  <Sparkles className="w-5 h-5 text-primary" />
