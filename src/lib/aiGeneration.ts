@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
+const MAX_INPUT_LENGTH = 10000; // --- ADDED THIS ---
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -28,6 +29,7 @@ function buildQuizPrompt({
   difficulty: Difficulty;
   questionType: QuestionTypeOption;
 }) {
+  // ... (prompt function is unchanged)
   const questionTypes =
     questionType === 'MIXED'
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
@@ -95,14 +97,17 @@ export async function callAIToGenerateQuiz(
     },
   });
 
-  const prompt = buildQuizPrompt({ text, numQuestions, difficulty, questionType });
+  // --- ADDED SNIPPET ---
+  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
+  const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
+  // --- END SNIPPET ---
+
   const result = await model.generateContent(prompt);
   const response = await result.response;
   const content = response.text();
 
   if (!content) throw new Error('Empty response from Gemini');
 
-  // (Add light cleanup/fallback parsing if needed)
   let parsed: any;
   try {
     parsed = JSON.parse(content);
@@ -121,7 +126,6 @@ export async function callAIToGenerateQuiz(
     throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
   }
 
-  // Sanitize and format questions
   const sanitizedQuestions = parsed.questions.map((q: any) => ({
     question_text: q.question_text || "Untitled Question",
     question_type: q.question_type || "MULTIPLE_CHOICE",
@@ -138,6 +142,7 @@ export async function callAIToGenerateQuiz(
 // --- Helper for Note Generation ---
 
 function buildNotePrompt({ text }: { text: string }): string {
+  // --- PROMPT IS UNCHANGED ---
   return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
 
 Content:
@@ -167,7 +172,11 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     },
   });
 
-  const prompt = buildNotePrompt({ text });
+  // --- THIS IS THE FIX ---
+  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
+  const prompt = buildNotePrompt({ text: textSnippet });
+  // --- END FIX ---
+
   const result = await model.generateContent(prompt);
   const response = await result.response;
   const content = response.text();
@@ -186,20 +195,18 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- THIS IS THE FIX ---
-  // Safely check for the existence and content of the first note.
+  // --- (Safety check from previous fix) ---
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
     !parsed.notes[0].title || 
-    !parsed.notes[0].content || // 1. Check that 'content' key exists
-    typeof parsed.notes[0].content !== 'string' || // 2. Check that it's a string
-    parsed.notes[0].content.trim().length === 0 // 3. NOW it's safe to check length
+    !parsed.notes[0].content || 
+    typeof parsed.notes[0].content !== 'string' || 
+    parsed.notes[0].content.trim().length === 0
   ) {
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
-  // --- END FIX ---
   
   return parsed.notes[0];
 }
@@ -208,6 +215,7 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
 // --- Helper for Flashcard Generation ---
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
+  // --- PROMPT IS UNCHANGED ---
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.
 
 For each flashcard:
@@ -238,7 +246,11 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
     },
   });
 
-  const prompt = buildFlashcardPrompt(text, numCards);
+  // --- THIS IS THE FIX ---
+  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
+  const prompt = buildFlashcardPrompt(textSnippet, numCards);
+  // --- END FIX ---
+  
   const result = await model.generateContent(prompt);
   const response = await result.response;
   const content = response.text();

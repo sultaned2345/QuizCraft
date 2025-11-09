@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 const MIN_CONTENT_LENGTH = 50;
+const MAX_INPUT_LENGTH = 10000; // --- ADDED THIS ---
 
 // --- Helper Functions ---
 function extractTextFromHtml(html: string): string {
@@ -22,6 +23,7 @@ function extractTextFromHtml(html: string): string {
 }
 
 function buildPrompt({ text }: { text: string }): string {
+  // --- PROMPT IS UNCHANGED ---
   return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
 
 Content:
@@ -44,16 +46,20 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
   if (!process.env.GOOGLE_AI_API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY");
   const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-  const prompt = buildPrompt({ text });
+  
+  // --- ADDED SNIPPET ---
+  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
+  const prompt = buildPrompt({ text: textSnippet });
+  // --- END SNIPPET ---
 
   try {
-    console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for detailed notes...`);
+    console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for detailed notes (snippet length: ${textSnippet.length})...`);
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const rawContent = response.text();
 
     console.log("----- RAW AI Response START -----");
-    console.log(rawContent);
+    console.log(rawContent.substring(0, 1000) + (rawContent.length > 1000 ? "\n... (truncated log) ..." : ""));
     console.log("----- RAW AI Response END -----");
 
     if (!rawContent) { throw new Error("Empty response from AI model"); }
@@ -69,16 +75,13 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
 
     if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0) { throw new Error("Invalid JSON structure or zero notes returned."); }
 
-    // --- THIS IS THE FIX ---
-    // Safely check for content existence AND length
     const validNotes = parsed.notes.filter((note: any) => 
         note && 
         note.title?.trim() && 
-        note.content && // 1. Check that 'content' key exists
-        typeof note.content === 'string' && // 2. Check that it's a string
-        note.content.trim().length > 10 // 3. NOW it's safe to check length
+        note.content && 
+        typeof note.content === 'string' &&
+        note.content.trim().length > 10
     );
-    // --- END FIX ---
 
     if (validNotes.length === 0) { throw new Error(`AI generated invalid note content (missing title or content).`); }
 
@@ -90,6 +93,7 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
     throw new Error(`Failed to generate notes: ${e.message}`);
   }
 }
+
 
 /**
  * POST handler for the /api/generate-notes route.
@@ -124,10 +128,9 @@ export async function POST(request: NextRequest) {
             }
             
             const html = await response.text();
-            console.log(`DEBUG: Fetched HTML (first 500 chars): ${html.substring(0, 500)}...`);
             
             sourceContent = extractTextFromHtml(html); 
-            console.log(`DEBUG: Extracted text (first 500 chars): ${sourceContent.substring(0, 500)}...`);
+            console.log(`DEBUG: Extracted text (length: ${sourceContent.length})`);
 
         } catch (e: any) { 
             console.error(`DEBUG: URL process error for ${url}:`, e.message);
@@ -168,7 +171,12 @@ export async function POST(request: NextRequest) {
     console.log("DEBUG: Usage limit check passed.");
 
     // 3. Call AI
-    const generatedNotes = await callAIToGenerateNotes(sourceContent.trim());
+    // --- THIS IS THE FIX ---
+    // Pass the (already trimmed) and truncated source content to the AI helper
+    const textSnippet = sourceContent.trim().substring(0, MAX_INPUT_LENGTH);
+    const generatedNotes = await callAIToGenerateNotes(textSnippet);
+    // --- END FIX ---
+    
     const actualGeneratedCount = generatedNotes.length;
     console.log("DEBUG: AI Note generation successful.");
 
