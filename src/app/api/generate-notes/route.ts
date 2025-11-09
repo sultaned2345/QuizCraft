@@ -6,12 +6,14 @@ import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
 import { Note, ApiResponse } from '@/types/database';
+// --- 1. IMPORT THE CENTRALIZED AI HELPER ---
+import { callAIToGenerateNote } from '@/lib/aiGeneration';
 
 export const runtime = "nodejs";
 
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 const MIN_CONTENT_LENGTH = 50;
-const MAX_INPUT_LENGTH = 10000; // --- ADDED THIS ---
+const MAX_INPUT_LENGTH = 10000;
 
 // --- Helper Functions ---
 function extractTextFromHtml(html: string): string {
@@ -22,77 +24,9 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
-function buildPrompt({ text }: { text: string }): string {
-  // --- PROMPT IS UNCHANGED ---
-  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
+// --- 2. REMOVED local buildPrompt function ---
 
-Content:
-"""
-${text}
-"""
-
-Return ONLY valid JSON in this exact shape:
-{
-  "notes": [
-    {
-      "title": "Concise Title Reflecting Main Topic",
-      "content": "Detailed structured notes covering key points, definitions, examples etc. Use markdown for formatting like headings (# Heading 1, ## Heading 2) or bullet points (- Point)."
-    }
-  ]
-}`;
-}
-
-async function callAIToGenerateNotes(text: string): Promise<Array<{ title: string; content: string; }>> {
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
-  if (!process.env.GOOGLE_AI_API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY");
-  const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-  
-  // --- ADDED SNIPPET ---
-  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
-  const prompt = buildPrompt({ text: textSnippet });
-  // --- END SNIPPET ---
-
-  try {
-    console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for detailed notes (snippet length: ${textSnippet.length})...`);
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const rawContent = response.text();
-
-    console.log("----- RAW AI Response START -----");
-    console.log(rawContent.substring(0, 1000) + (rawContent.length > 1000 ? "\n... (truncated log) ..." : ""));
-    console.log("----- RAW AI Response END -----");
-
-    if (!rawContent) { throw new Error("Empty response from AI model"); }
-
-    let parsed;
-    try { parsed = JSON.parse(rawContent); }
-    catch (parseError) {
-        console.error(`AI Error: Failed to parse JSON response. Snippet:`, rawContent.substring(0, 500));
-        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) { try { parsed = JSON.parse(jsonMatch[0]); } catch (fallbackError){ throw new Error(`Invalid JSON structure, even after fallback.`);}}
-        else { throw new Error(`Invalid JSON structure. No JSON object found.`); }
-    }
-
-    if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0) { throw new Error("Invalid JSON structure or zero notes returned."); }
-
-    const validNotes = parsed.notes.filter((note: any) => 
-        note && 
-        note.title?.trim() && 
-        note.content && 
-        typeof note.content === 'string' &&
-        note.content.trim().length > 10
-    );
-
-    if (validNotes.length === 0) { throw new Error(`AI generated invalid note content (missing title or content).`); }
-
-    console.log(`AI note generation successful using ${AI_MODEL_NAME}. Generated ${validNotes.length} valid note(s).`);
-    return validNotes.slice(0, 1);
-
-  } catch (e: any) {
-    console.error(`Error during AI call/parsing using ${AI_MODEL_NAME}:`, e);
-    throw new Error(`Failed to generate notes: ${e.message}`);
-  }
-}
+// --- 3. REMOVED local callAIToGenerateNotes function ---
 
 
 /**
@@ -170,45 +104,47 @@ export async function POST(request: NextRequest) {
     }
     console.log("DEBUG: Usage limit check passed.");
 
-    // 3. Call AI
-    // --- THIS IS THE FIX ---
-    // Pass the (already trimmed) and truncated source content to the AI helper
-    const textSnippet = sourceContent.trim().substring(0, MAX_INPUT_LENGTH);
-    const generatedNotes = await callAIToGenerateNotes(textSnippet);
-    // --- END FIX ---
+    // --- 4. CALL THE IMPORTED HELPER ---
+    // The imported helper already handles truncation
+    const generatedNote = await callAIToGenerateNote(sourceContent.trim());
+    // ---
     
-    const actualGeneratedCount = generatedNotes.length;
     console.log("DEBUG: AI Note generation successful.");
 
-    // 4. Save note(s) using Prisma
-    let savedNotesResult;
+    // --- 5. SAVE THE SINGLE NOTE ---
+    let savedNote;
     try {
-        console.log("DEBUG: Attempting to save generated notes to DB...");
-        const notesToSave = generatedNotes.map(note => ({ user_id: user.id, title: note.title.trim(), content: note.content.trim() }));
-        savedNotesResult = await prisma.notes.createMany({ data: notesToSave });
-        console.log(`DEBUG: Saved ${savedNotesResult.count} note(s).`);
+        console.log("DEBUG: Attempting to save generated note to DB...");
+        savedNote = await prisma.notes.create({ 
+            data: { 
+                user_id: user.id, 
+                title: generatedNote.title.trim(), 
+                content: generatedNote.content.trim() 
+            } 
+        });
+        console.log(`DEBUG: Saved 1 note.`);
     } catch (dbError: any) {
-        console.error("DEBUG: Error during prisma.notes.createMany:", dbError);
+        console.error("DEBUG: Error during prisma.notes.create:", dbError);
         if (dbError instanceof Prisma.PrismaClientInitializationError || (dbError.message && dbError.message.includes("Can't reach database server"))) {
             throw dbError; 
         }
-        throw new Error(`Failed to save notes to database: ${dbError.message}`);
+        throw new Error(`Failed to save note to database: ${dbError.message}`);
     }
 
-    // 5. Update usage count
+    // 6. Update usage count
     try {
         console.log("DEBUG: Attempting to update AI usage count...");
-        await incrementAIGenerationUsage(user.id, actualGeneratedCount);
+        await incrementAIGenerationUsage(user.id, 1); // Increment by 1
         console.log("DEBUG: Updated AI usage count.");
     } catch (usageError: any) {
         console.error("CRITICAL DEBUG: Failed to update AI usage count AFTER saving note:", usageError);
     }
 
-    // 6. Return success
+    // 7. Return success
     return NextResponse.json<ApiResponse<{ count: number }>>({
         success: true,
-        data: { count: savedNotesResult.count },
-        message: `Notes generated successfully.`
+        data: { count: 1 }, // We only save 1 note
+        message: `Note generated successfully.`
     }, { status: 201 });
 
   } catch (error: any) {

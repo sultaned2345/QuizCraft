@@ -1,6 +1,4 @@
 // src/app/api/generation-jobs/process/route.ts
-// NEW FILE
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -8,66 +6,27 @@ import { generateQueryEmbedding } from '@/lib/embedding';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Prisma } from '@prisma/client';
 import { Quiz, Note, FlashcardDeck, Question } from '@/types/database';
+// --- 1. IMPORT CENTRALIZED AI HELPERS ---
+import {
+  callAIToGenerateQuiz,
+  callAIToGenerateNote,
+  callAIToGenerateFlashcards,
+} from '@/lib/aiGeneration';
+// ---
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Ensure this route is always dynamic
 
 // --- AI Configuration ---
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-const AI_MODEL_NAME = "gemini-2.5-flash-lite";
-const genAI = new GoogleGenerativeAI(API_KEY);
+const AI_MODEL_NAME = "gemini-2.5-flash-lite"; // This is a fallback, helpers use their own
+const genAI = new GoogleGenerativeAI(API_KEY); // This is a fallback, helpers use their own
 
-// --- AI Helper Functions (Extracted from other routes) ---
-
-// From /api/generate-quiz
-async function callAIToGenerateQuiz(text: string, numQuestions: number): Promise<{ title: string; questions: Question[] }> {
-    const prompt = `Based ONLY on the provided text, generate exactly ${numQuestions} questions (MULTIPLE_CHOICE or TRUE_FALSE). Focus on the most important concepts. For each, provide a brief explanation.
-    Text: """${text}"""
-    Return ONLY valid JSON: { "title": "...", "questions": [ { "question_text": "...", "question_type": "...", "options": [...], "correct_answer": "...", "explanation": "..." } ] }`;
-
-    const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const content = JSON.parse(response.text());
-    
-    // Add basic validation
-    if (!content.questions || !Array.isArray(content.questions) || content.questions.length === 0) {
-        throw new Error("AI failed to return valid questions.");
-    }
-    return content as { title: string; questions: Question[] };
-}
-
-// From /api/generate-notes
-async function callAIToGenerateNote(text: string): Promise<{ title: string; content: string; }> {
-    const prompt = `Based on the following content, generate structured notes summarizing the key concepts. Return ONLY valid JSON: { "notes": [ { "title": "...", "content": "..." } ] }`;
-    
-    const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const parsed = JSON.parse(response.text());
-
-    if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0 || !parsed.notes[0].title || !parsed.notes[0].content) {
-         throw new Error("AI failed to return a valid note structure.");
-    }
-    return parsed.notes[0]; // Return just the first note
-}
-
-// From /api/generate-flashcards
-async function callAIToGenerateFlashcards(text: string, numCards: number): Promise<{ front_content: string; back_content: string; }[]> {
-     const prompt = `Based strictly on the following text, generate exactly ${numCards} flashcards (key terms, concepts).
-     Text: """${text}"""
-     Return ONLY valid JSON: { "flashcards": [ { "front_content": "...", "back_content": "..." } ] }`;
-     
-    const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const parsed = JSON.parse(response.text());
-
-    if (!parsed.flashcards || !Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) {
-        throw new Error("AI failed to return valid flashcards.");
-    }
-    return parsed.flashcards;
-}
+// --- 2. REMOVE ALL LOCAL AI HELPER FUNCTIONS ---
+// (Removed callAIToGenerateQuiz)
+// (Removed callAIToGenerateNote)
+// (Removed callAIToGenerateFlashcards)
+// ---
 
 // --- Main Job Processing Function ---
 
@@ -119,14 +78,15 @@ async function processJob(job: any) {
         // 5. Run the specific job type
         switch (job.job_type) {
             case 'quiz':
-                const quizData = await callAIToGenerateQuiz(contextText, 10); // Generate 10 questions
+                // --- 3. CALL IMPORTED HELPER ---
+                const quizData = await callAIToGenerateQuiz(contextText, 10, 'medium', 'MIXED'); // Generate 10 questions
                 const newQuiz = await prisma.quiz.create({
                     data: {
                         title: quizData.title || `Quiz for ${document.file_name}`,
                         userId: job.user_id,
                         immediate_feedback: true,
                         questions: {
-                            create: quizData.questions.map(q => ({
+                            create: quizData.questions.map((q: any) => ({ // Use 'any' as imported type is broader
                                 question_text: q.question_text,
                                 question_type: q.question_type,
                                 correct_answer: q.correct_answer,
@@ -141,7 +101,8 @@ async function processJob(job: any) {
                 break;
             
             case 'note':
-                const noteData = await callAIToGenerateNote(contextText);
+                 // --- 3. CALL IMPORTED HELPER ---
+                const noteData = await callAIToGenerateNote(contextText); // Returns { title, content }
                 const newNote = await prisma.notes.create({
                     data: {
                         user_id: job.user_id,
@@ -153,6 +114,7 @@ async function processJob(job: any) {
                 break;
                 
             case 'flashcard':
+                 // --- 3. CALL IMPORTED HELPER ---
                 const cards = await callAIToGenerateFlashcards(contextText, 15); // Generate 15 cards
                 const newDeck = await prisma.flashcard_decks.create({
                     data: {
