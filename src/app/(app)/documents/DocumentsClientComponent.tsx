@@ -1,6 +1,4 @@
 // src/app/(app)/documents/DocumentsClientComponent.tsx
-// MODIFIED FILE
-
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
@@ -43,7 +41,7 @@ interface DocumentsClientComponentProps {
 }
 
 // --- NEW TYPE ---
-type GenerationType = 'quiz' | 'notes' | 'flashcards';
+type GenerationType = 'quiz' | 'note' | 'flashcard';
 
 export function DocumentsClientComponent({ initialData }: DocumentsClientComponentProps) {
   const [documents, setDocuments] = useState<DocumentMetadata[]>(initialData.documents);
@@ -248,10 +246,10 @@ export function DocumentsClientComponent({ initialData }: DocumentsClientCompone
                           <Eye className="w-4 h-4 mr-2" /> View & Chat
                         </Button>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {/* --- MODIFIED BUTTONS --- */}
+                          {/* --- MODIFIED BUTTONS (THE FIX) --- */}
                           <Button title={isQuizQueued ? "Quiz is being generated" : "Generate Quiz"} variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isQuizQueued}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                          <Button title={isNoteQueued ? "Note is being generated" : "Generate Notes"} variant="secondary" size="sm" onClick={() => handleGenerateNotes(docId)} disabled={isGenerating?.docId === doc.id || isDeleting || isNoteQueued}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                          <Button title={isCardQueued ? "Cards are being generated" : "Generate Cards"} variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(docId)} disabled={isGenerating?.docId === doc.id || isDeleting || isCardQueued}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isCardQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
+                          <Button title={isNoteQueued ? "Note is being generated" : "Generate Notes"} variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isNoteQueued}>{isGenerating?.type === 'notes' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
+                          <Button title={isCardQueued ? "Cards are being generated" : "Generate Cards"} variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isCardQueued}>{isGenerating?.type === 'flashcards' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isCardQueued ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
                           {/* --- END MODIFIED BUTTONS --- */}
                         </div>
                       </CardFooter>

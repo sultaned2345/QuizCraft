@@ -1,14 +1,10 @@
 // src/app/api/generate-notes/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
-// Use the shared Prisma client again
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client'; // Import Prisma namespace for types if needed
+import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
-// --- MODIFIED IMPORTS ---
-// import { supabaseAdmin } from '@/lib/supabaseAdmin'; // REMOVED
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-// --- END MODIFICATION ---
 import { Note, ApiResponse } from '@/types/database';
 
 export const runtime = "nodejs";
@@ -18,7 +14,6 @@ const MIN_CONTENT_LENGTH = 50;
 
 // --- Helper Functions ---
 function extractTextFromHtml(html: string): string {
-    // ... (keep existing function) ...
     let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
     cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
     cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
@@ -26,9 +21,7 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
-// Prompt for detailed, structured notes (same as before)
 function buildPrompt({ text }: { text: string }): string {
-  // ... (keep existing prompt) ...
   return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
 
 Content:
@@ -47,9 +40,7 @@ Return ONLY valid JSON in this exact shape:
 }`;
 }
 
-// callAIToGenerateNotes function (with logging, same as before)
 async function callAIToGenerateNotes(text: string): Promise<Array<{ title: string; content: string; }>> {
-  // ... (keep existing function with raw response logging) ...
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
   if (!process.env.GOOGLE_AI_API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY");
   const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
@@ -79,13 +70,13 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
     if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0) { throw new Error("Invalid JSON structure or zero notes returned."); }
 
     // --- THIS IS THE FIX ---
-    // The previous filter `note.content?.trim().length > 10` would crash
-    // if `note.content` was null or undefined.
+    // Safely check for content existence AND length
     const validNotes = parsed.notes.filter((note: any) => 
         note && 
         note.title?.trim() && 
-        note.content && // Ensure content key exists
-        note.content.trim().length > 10 // Then check its length
+        note.content && // 1. Check that 'content' key exists
+        typeof note.content === 'string' && // 2. Check that it's a string
+        note.content.trim().length > 10 // 3. NOW it's safe to check length
     );
     // --- END FIX ---
 
@@ -99,9 +90,6 @@ async function callAIToGenerateNotes(text: string): Promise<Array<{ title: strin
     throw new Error(`Failed to generate notes: ${e.message}`);
   }
 }
-
-// --- REMOVED LOCAL updateAIUsage HELPER ---
-
 
 /**
  * POST handler for the /api/generate-notes route.
@@ -120,13 +108,11 @@ export async function POST(request: NextRequest) {
     
     let sourceContent = text;
 
-    // --- FIX: Add User-Agent to fetch and improve logging ---
     if (url) { 
         console.log(`DEBUG: Attempting to fetch URL: ${url}`);
         try { 
             const response = await fetch(url, {
                 headers: {
-                    // Set a common User-Agent to avoid simple bot blockers
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                 }
             });
@@ -148,7 +134,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json<ApiResponse>({ success: false, error: `URL process error: ${e.message}` }, { status: 400 }); 
         } 
     }
-    // --- END FIX ---
     
     if (!sourceContent || sourceContent.trim().length < MIN_CONTENT_LENGTH) { 
         console.warn(`DEBUG: Source content too short after processing. Length: ${sourceContent?.trim().length || 0}`);
@@ -160,12 +145,12 @@ export async function POST(request: NextRequest) {
     let usage;
     try {
         console.log("DEBUG: Attempting to check usage limits...");
-        usage = await checkAIGenerationUsageLimit(user.id); // This function uses prisma internally
+        usage = await checkAIGenerationUsageLimit(user.id);
         console.log("DEBUG: Usage limit check result:", usage);
     } catch (dbError: any) {
         console.error("DEBUG: Error during checkAIGenerationUsageLimit:", dbError);
         if (dbError instanceof Prisma.PrismaClientInitializationError || (dbError.message && dbError.message.includes("Can't reach database server"))) {
-            throw dbError; // Let the main catch block handle it
+            throw dbError; 
         }
         throw new Error(`Failed to check usage limits: ${dbError.message}`);
     }
@@ -174,13 +159,11 @@ export async function POST(request: NextRequest) {
     if (!usage.canGenerate || (usage.currentCount !== undefined && usage.limit !== Infinity && (usage.currentCount + incrementCount) > usage.limit)) {
       const remaining = usage.limit !== Infinity && usage.currentCount !== undefined ? Math.max(0, usage.limit - usage.currentCount) : 0;
       console.warn("Usage limit exceeded.");
-      // --- MODIFICATION: Ensure standardized error is returned ---
       return NextResponse.json<ApiResponse>({ 
           success: false, 
-          error: usage.error, // This will be "limit_exceeded"
+          error: usage.error, 
           message: usage.message || `Usage limit exceeded. ${remaining} generations left.`
       }, { status: 403 });
-      // --- END MODIFICATION ---
     }
     console.log("DEBUG: Usage limit check passed.");
 
@@ -199,22 +182,19 @@ export async function POST(request: NextRequest) {
     } catch (dbError: any) {
         console.error("DEBUG: Error during prisma.notes.createMany:", dbError);
         if (dbError instanceof Prisma.PrismaClientInitializationError || (dbError.message && dbError.message.includes("Can't reach database server"))) {
-            throw dbError; // Let the main catch block handle it
+            throw dbError; 
         }
         throw new Error(`Failed to save notes to database: ${dbError.message}`);
     }
 
-
-    // 5. Update usage count (Uses supabaseAdmin, should be less prone to Vercel connection issues)
+    // 5. Update usage count
     try {
         console.log("DEBUG: Attempting to update AI usage count...");
-        // --- MODIFIED CALL ---
         await incrementAIGenerationUsage(user.id, actualGeneratedCount);
         console.log("DEBUG: Updated AI usage count.");
     } catch (usageError: any) {
         console.error("CRITICAL DEBUG: Failed to update AI usage count AFTER saving note:", usageError);
     }
-
 
     // 6. Return success
     return NextResponse.json<ApiResponse<{ count: number }>>({

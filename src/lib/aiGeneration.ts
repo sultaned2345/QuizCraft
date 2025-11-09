@@ -193,8 +193,9 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
     !parsed.notes[0].title || 
-    !parsed.notes[0].content || // Check for existence
-    parsed.notes[0].content.trim().length === 0 // Check for empty string
+    !parsed.notes[0].content || // 1. Check that 'content' key exists
+    typeof parsed.notes[0].content !== 'string' || // 2. Check that it's a string
+    parsed.notes[0].content.trim().length === 0 // 3. NOW it's safe to check length
   ) {
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
