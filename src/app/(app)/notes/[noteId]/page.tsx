@@ -1,22 +1,19 @@
 // src/app/(app)/notes/[noteId]/page.tsx
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/getServerSession';
-// import { NoteEditor } from '@/components/NoteEditor'; // <-- 1. REMOVE STATIC IMPORT
+// import { NoteEditor } from '@/components/NoteEditor'; // (Static import already removed)
 import { redirect } from 'next/navigation';
-import dynamic from 'next/dynamic'; // <-- 2. IMPORT DYNAMIC
-import NoteEditorLoading from './loading'; // <-- 3. IMPORT LOADING COMPONENT
+import dynamic from 'next/dynamic';
+import NoteEditorLoading from './loading';
 
-// --- 4. LAZY-LOAD THE NOTE EDITOR ---
 const NoteEditor = dynamic(
   () => import('@/components/NoteEditor').then((mod) => mod.NoteEditor),
   {
-    // Use the specific loading component for the editor
     loading: () => <NoteEditorLoading />,
-    // Disable SSR for this heavy client component
     ssr: false, 
   }
 );
-// --- (getNoteData function is unchanged) ---
+
 async function getNoteData(noteId: string, userId: string) {
   try {
     const note = await prisma.notes.findFirst({
@@ -34,7 +31,7 @@ async function getNoteData(noteId: string, userId: string) {
     return {
       ...note,
       tags: note.tags || [],
-      linked_note_ids: note.linked_note_ids || null,
+      linked_note_ids: note.linked_note_ids || [], // <-- FIX: Changed from null to []
       created_at: note.created_at?.toISOString() || '',
       updated_at: note.updated_at?.toISOString() || '',
     };
@@ -56,9 +53,5 @@ export default async function EditNotePage({ params }: { params: { noteId: strin
     redirect('/notes');
   }
 
-  // --- 5. RENDER THE LAZY-LOADED EDITOR ---
-  // Note: We don't need Suspense here because 'loading.tsx'
-  // in this route segment will handle the initial server load,
-  // and the dynamic import's `loading` prop handles the client-side load.
   return <NoteEditor note={note} />;
 }

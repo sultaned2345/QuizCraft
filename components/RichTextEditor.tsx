@@ -1,7 +1,7 @@
 // components/RichTextEditor.tsx
 'use client';
 
-import * as React from 'react'; // <-- ADD THIS IMPORT
+import * as React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { cn } from '@/lib/utils';
@@ -118,12 +118,13 @@ export function RichTextEditor({
     }
   }, [editor, editable]);
 
-  // Update editor content if the note prop changes (e.g., loading)
-  React.useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, false);
-    }
-  }, [content, editor]);
+  // --- REMOVED THE PROBLEMATIC useEffect SYNC HOOK ---
+  // React.useEffect(() => {
+  //   if (editor && content !== editor.getHTML()) {
+  //     editor.commands.setContent(content, false);
+  //   }
+  // }, [content, editor]);
+  // --- END REMOVAL ---
 
   return (
     <div className={cn('rounded-md border', className)}>

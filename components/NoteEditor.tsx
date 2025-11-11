@@ -14,7 +14,8 @@ import NextLink from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { BacklinksWidget } from '@/components/BacklinksWidget';
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
+import { useUpgradeModal } from '@/components/UpgradeModalContext';
+import { Skeleton } from '@/components/ui/skeleton'; // <-- 1. IMPORT SKELETON
 
 // RelatedContentWidget (copied from old file, with minor update)
 function RelatedContentWidget({ note, onLinkClick }: { note: Note | null; onLinkClick: () => void }) {
@@ -119,7 +120,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+  const { openModal } = useUpgradeModal();
   const isUpdating = !!note;
 
   useEffect(() => {
@@ -181,7 +182,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
 
       const result: ApiResponse<Note> = await response.json();
       if (!response.ok || !result.success || !result.data) {
-        // --- 3. CATCH LIMIT ERROR ---
+        // --- CATCH LIMIT ERROR ---
         if (result.error === 'limit_exceeded') {
           openModal();
           throw new Error(result.message || 'Note limit reached.');
@@ -199,7 +200,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
         router.refresh(); // Refresh server component data
       }
     } catch (error: any) {
-      // --- 4. AVOID DOUBLE-TOASTING ---
+      // --- AVOID DOUBLE-TOASTING ---
       if (!error.message.includes('limit reached')) {
         toast({
           title: 'Save Failed',
@@ -262,14 +263,20 @@ export function NoteEditor({ note }: NoteEditorProps) {
               disabled={isDisabled}
             />
           </div>
+          {/* --- 2. ADD CONDITIONAL RENDER --- */}
           <div className="grid gap-2 flex-1">
             <Label className="text-base">Content</Label>
-            <RichTextEditor
-              content={content}
-              onChange={setContent}
-              editable={!isDisabled}
-            />
+            {isLoaded ? (
+              <RichTextEditor
+                content={content}
+                onChange={setContent}
+                editable={!isDisabled}
+              />
+            ) : (
+              <Skeleton className="w-full min-h-[300px] rounded-md" />
+            )}
           </div>
+          {/* --- END MODIFICATION --- */}
         </div>
 
         {/* Sidebar */}
