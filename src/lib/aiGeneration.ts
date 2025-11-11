@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
-const MAX_INPUT_LENGTH = 10000; // --- ADDED THIS ---
+const MAX_INPUT_LENGTH = 10000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -13,7 +13,7 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// --- Helper for Quiz Generation ---
+// --- Helper for Quiz Generation (unchanged) ---
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
@@ -97,10 +97,8 @@ export async function callAIToGenerateQuiz(
     },
   });
 
-  // --- ADDED SNIPPET ---
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
-  // --- END SNIPPET ---
 
   const result = await model.generateContent(prompt);
   const response = await result.response;
@@ -142,23 +140,24 @@ export async function callAIToGenerateQuiz(
 // --- Helper for Note Generation ---
 
 function buildNotePrompt({ text }: { text: string }): string {
-  // --- PROMPT IS UNCHANGED ---
-  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes should be detailed enough to capture the essential information from the text. The output must include a main "title" for the notes and the detailed "content".
+  // --- PROMPT MODIFIED ---
+  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape:
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a detailed, multi-point summary and MUST NOT be empty.
 {
   "notes": [
     {
       "title": "Concise Title Reflecting Main Topic",
-      "content": "Detailed structured notes covering key points, definitions, examples etc. Use markdown for formatting like headings (# Heading 1, ## Heading 2) or bullet points (- Point)."
+      "content": "Detailed structured notes covering key points, definitions, examples etc. Use markdown for formatting like headings (# Heading 1, ## Heading 2) or bullet points (- Point). THIS MUST NOT BE AN EMPTY STRING or just <p></p>."
     }
   ]
 }`;
+  // --- END MODIFICATION ---
 }
 
 export async function callAIToGenerateNote(text: string): Promise<{ title: string; content: string; }> {
@@ -172,10 +171,8 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     },
   });
 
-  // --- THIS IS THE FIX ---
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildNotePrompt({ text: textSnippet });
-  // --- END FIX ---
 
   const result = await model.generateContent(prompt);
   const response = await result.response;
@@ -195,31 +192,27 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- THIS IS THE FIX: Adjusted Validation Logic ---
+  // --- MODIFIED VALIDATION ---
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
     !parsed.notes[0].title ||
-    // Check if content is missing, null, or not a string
-    typeof parsed.notes[0].content !== 'string' || 
-    // Check if content (after trimming) is empty
-    parsed.notes[0].content.trim().length === 0
+    // Only check if content is missing, null, or undefined (not a string)
+    typeof parsed.notes[0].content !== 'string' 
   ) {
-    // If we have a title but no content, return the title with an "empty" marker
-    // This assumes the API route will handle saving this.
-    // Let's re-evaluate. The API route *will* save this.
-    // We should throw an error instead so the user is notified.
-    console.warn("AI returned invalid note structure or empty content:", parsed.notes[0]);
+    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
-  // --- END FIX ---
   
+  // Return the note, even if content is "" or "<p></p>".
+  // The API route will perform the final meaningfulness check.
   return parsed.notes[0];
+  // --- END MODIFICATION ---
 }
 
 
-// --- Helper for Flashcard Generation ---
+// --- Helper for Flashcard Generation (unchanged) ---
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
   // --- PROMPT IS UNCHANGED ---
@@ -253,10 +246,8 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
     },
   });
 
-  // --- THIS IS THE FIX ---
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildFlashcardPrompt(textSnippet, numCards);
-  // --- END FIX ---
   
   const result = await model.generateContent(prompt);
   const response = await result.response;

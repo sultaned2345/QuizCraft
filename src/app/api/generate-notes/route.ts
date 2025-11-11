@@ -24,6 +24,18 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
+// --- NEW HELPER: Check for meaningful content ---
+/**
+ * Strips HTML tags and checks if the remaining text is meaningful.
+ */
+function isContentMeaningful(content: string): boolean {
+    if (!content) return false;
+    // Strip HTML tags and normalize whitespace
+    const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length > 20; // Require at least 20 characters of *actual text*
+}
+// --- END NEW HELPER ---
+
 // --- 2. REMOVED local buildPrompt function ---
 
 // --- 3. REMOVED local callAIToGenerateNotes function ---
@@ -109,6 +121,13 @@ export async function POST(request: NextRequest) {
     const generatedNote = await callAIToGenerateNote(sourceContent.trim());
     // ---
     
+    // --- 4.5. ADDED VALIDATION ---
+    if (!isContentMeaningful(generatedNote.content)) {
+        console.warn(`[generate-notes] AI returned a valid title ("${generatedNote.title}") but content was empty or meaningless.`);
+        throw new Error("AI failed to generate meaningful content for this note.");
+    }
+    // --- END ADDED VALIDATION ---
+    
     console.log("DEBUG: AI Note generation successful.");
 
     // --- 5. SAVE THE SINGLE NOTE ---
@@ -155,7 +174,8 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error in /api/generate-notes POST handler:", error);
 
-    if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid") || error.message?.includes("Invalid JSON")) {
+    // --- MODIFIED: Catch our new error message ---
+    if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid") || error.message?.includes("Invalid JSON") || error.message?.includes("AI failed to return a valid note structure") || error.message?.includes("AI failed to generate meaningful content")) {
         return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 });
     }
     if (error instanceof Prisma.PrismaClientInitializationError || (error.message && error.message.includes("Can't reach database server"))) {
