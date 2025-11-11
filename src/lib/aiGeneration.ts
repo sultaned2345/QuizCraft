@@ -13,6 +13,18 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+// --- NEW HELPER ---
+/**
+ * Strips HTML tags and checks if the remaining text is meaningful.
+ */
+function isContentMeaningful(content: string): boolean {
+    if (!content) return false;
+    // Strip HTML tags and normalize whitespace
+    const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length > 20; // Require at least 20 characters of *actual text*
+}
+// --- END NEW HELPER ---
+
 // --- Helper for Quiz Generation (unchanged) ---
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -191,21 +203,24 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- FIX: UPDATED VALIDATION ---
+  // --- FIX: FINAL, STRICT VALIDATION ---
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
     !parsed.notes[0].title ||
-    // Check if content is missing, null, or not a string
     typeof parsed.notes[0].content !== 'string'
   ) {
     console.warn("AI failed to return valid note structure with title/content keys:", parsed);
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
+
+  // Check for meaningful content
+  if (!isContentMeaningful(parsed.notes[0].content)) {
+     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
+     throw new Error("AI failed to generate meaningful content for this note.");
+  }
   
-  // Return the note, even if content is "" or "<p></p>".
-  // The API route will perform the final meaningfulness check.
   return parsed.notes[0];
   // --- END FIX ---
 }
