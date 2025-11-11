@@ -21,7 +21,8 @@ function isContentMeaningful(content: string): boolean {
     if (!content) return false;
     // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    return text.length > 20; // Require at least 20 characters of *actual text*
+    // Check if the remaining text has at least 20 characters
+    return text.length > 20; 
 }
 // --- END NEW HELPER ---
 
