@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
 import { Note, ApiResponse } from '@/types/database';
-// --- 1. IMPORT THE CENTRALIZED AI HELPER ---
+// 1. IMPORT THE CENTRALIZED AI HELPER
 import { callAIToGenerateNote } from '@/lib/aiGeneration';
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
-// --- NEW HELPER: Check for meaningful content ---
+// --- FIX: ADDED NEW HELPER ---
 /**
  * Strips HTML tags and checks if the remaining text is meaningful.
  */
@@ -35,11 +35,6 @@ function isContentMeaningful(content: string): boolean {
     return text.length > 20; // Require at least 20 characters of *actual text*
 }
 // --- END NEW HELPER ---
-
-// --- 2. REMOVED local buildPrompt function ---
-
-// --- 3. REMOVED local callAIToGenerateNotes function ---
-
 
 /**
  * POST handler for the /api/generate-notes route.
@@ -116,21 +111,19 @@ export async function POST(request: NextRequest) {
     }
     console.log("DEBUG: Usage limit check passed.");
 
-    // --- 4. CALL THE IMPORTED HELPER ---
-    // The imported helper already handles truncation
+    // 4. CALL THE IMPORTED HELPER
     const generatedNote = await callAIToGenerateNote(sourceContent.trim());
-    // ---
     
-    // --- 4.5. ADDED VALIDATION ---
+    // --- FIX: ADDED VALIDATION ---
     if (!isContentMeaningful(generatedNote.content)) {
         console.warn(`[generate-notes] AI returned a valid title ("${generatedNote.title}") but content was empty or meaningless.`);
         throw new Error("AI failed to generate meaningful content for this note.");
     }
-    // --- END ADDED VALIDATION ---
+    // --- END FIX ---
     
     console.log("DEBUG: AI Note generation successful.");
 
-    // --- 5. SAVE THE SINGLE NOTE ---
+    // 5. SAVE THE SINGLE NOTE
     let savedNote;
     try {
         console.log("DEBUG: Attempting to save generated note to DB...");
@@ -174,7 +167,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("Error in /api/generate-notes POST handler:", error);
 
-    // --- MODIFIED: Catch our new error message ---
+    // --- FIX: CATCH NEW ERROR ---
     if (error.message?.startsWith("Failed to generate notes") || error.message?.includes("AI generated invalid") || error.message?.includes("Invalid JSON") || error.message?.includes("AI failed to return a valid note structure") || error.message?.includes("AI failed to generate meaningful content")) {
         return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 502 });
     }

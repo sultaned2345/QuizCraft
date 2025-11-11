@@ -29,7 +29,6 @@ function buildQuizPrompt({
   difficulty: Difficulty;
   questionType: QuestionTypeOption;
 }) {
-  // ... (prompt function is unchanged)
   const questionTypes =
     questionType === 'MIXED'
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
@@ -140,15 +139,15 @@ export async function callAIToGenerateQuiz(
 // --- Helper for Note Generation ---
 
 function buildNotePrompt({ text }: { text: string }): string {
-  // --- PROMPT MODIFIED ---
-  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, potentially using headings or bullet points using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes must be detailed and capture the essential information.
+  // --- FIX: UPDATED PROMPT ---
+  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a detailed, multi-point summary and MUST NOT be empty.
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a detailed, multi-point summary (at least 20 words) and MUST NOT be empty.
 {
   "notes": [
     {
@@ -157,7 +156,7 @@ Return ONLY valid JSON in this exact shape. The "content" field MUST be a detail
     }
   ]
 }`;
-  // --- END MODIFICATION ---
+  // --- END FIX ---
 }
 
 export async function callAIToGenerateNote(text: string): Promise<{ title: string; content: string; }> {
@@ -192,14 +191,14 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- MODIFIED VALIDATION ---
+  // --- FIX: UPDATED VALIDATION ---
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
     !parsed.notes[0].title ||
-    // Only check if content is missing, null, or undefined (not a string)
-    typeof parsed.notes[0].content !== 'string' 
+    // Check if content is missing, null, or not a string
+    typeof parsed.notes[0].content !== 'string'
   ) {
     console.warn("AI failed to return valid note structure with title/content keys:", parsed);
     throw new Error("AI failed to return a valid note structure with title and content.");
@@ -208,14 +207,13 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   // Return the note, even if content is "" or "<p></p>".
   // The API route will perform the final meaningfulness check.
   return parsed.notes[0];
-  // --- END MODIFICATION ---
+  // --- END FIX ---
 }
 
 
 // --- Helper for Flashcard Generation (unchanged) ---
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
-  // --- PROMPT IS UNCHANGED ---
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.
 
 For each flashcard:
