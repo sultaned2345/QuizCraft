@@ -25,6 +25,7 @@ function isContentMeaningful(content: string): boolean {
 }
 // --- END NEW HELPER ---
 
+
 // --- Helper for Quiz Generation (unchanged) ---
 
 type Difficulty = 'easy' | 'medium' | 'hard';
