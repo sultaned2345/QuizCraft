@@ -55,6 +55,27 @@ const safetySettings = [
 
 // --- (Tool Schemas) ---
 const tools: { spec: FunctionDeclaration }[] = [
+  // --- 1. ADD NEW TOOL ---
+  {
+    spec: {
+      name: "findContentByTitle",
+      description: "Searches for a user's notes, documents, quizzes, or flashcard decks by title.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          title: { type: SchemaType.STRING, description: "The title (or partial title) to search for." },
+          contentType: {
+            type: SchemaType.STRING,
+            enum: ["note", "document", "quiz", "deck", "all"],
+            description: "The type of content to search for. Use 'all' to search everywhere.",
+            nullable: true,
+          }
+        },
+        required: ["title"]
+      }
+    }
+  },
+  // --- END NEW TOOL ---
   {
     spec: {
       name: "addQuestionToQuiz",
@@ -173,6 +194,71 @@ const tools: { spec: FunctionDeclaration }[] = [
 ];
 
 // --- 2. REAL TOOL HANDLERS ---
+
+// --- 2. ADD NEW TOOL HANDLER ---
+async function handleFindContentByTitle(args: {
+  title: string;
+  contentType?: 'note' | 'document' | 'quiz' | 'deck' | 'all';
+}, userId: string) {
+  try {
+    const { title, contentType = 'all' } = args;
+    const results: { id: string, title: string, type: string }[] = [];
+
+    const searchFilter = { 
+      user_id: userId,
+      title: { contains: title, mode: 'insensitive' as Prisma.QueryMode } 
+    };
+
+    if (contentType === 'note' || contentType === 'all') {
+      const notes = await prisma.notes.findMany({
+        where: searchFilter,
+        select: { id: true, title: true },
+        take: 5
+      });
+      notes.forEach(n => results.push({ ...n, type: 'note' }));
+    }
+    
+    if (contentType === 'document' || contentType === 'all') {
+      const docs = await prisma.documents.findMany({
+        where: { 
+          user_id: userId, 
+          file_name: { contains: title, mode: 'insensitive' as Prisma.QueryMode } 
+        },
+        select: { id: true, file_name: true },
+        take: 5
+      });
+      docs.forEach(d => results.push({ id: d.id, title: d.file_name, type: 'document' }));
+    }
+    
+    if (contentType === 'quiz' || contentType === 'all') {
+      const quizzes = await prisma.quiz.findMany({
+        where: { 
+          userId: userId, // Note the different field name
+          title: { contains: title, mode: 'insensitive' as Prisma.QueryMode } 
+        },
+        select: { id: true, title: true },
+        take: 5
+      });
+      quizzes.forEach(q => results.push({ ...q, type: 'quiz' }));
+    }
+    
+    if (contentType === 'deck' || contentType === 'all') {
+      const decks = await prisma.flashcard_decks.findMany({
+        where: searchFilter,
+        select: { id: true, title: true },
+        take: 5
+      });
+      decks.forEach(d => results.push({ ...d, type: 'deck' }));
+    }
+
+    return { success: true, results: results.slice(0, 10) }; // Return top 10 combined
+  } catch (e: any) {
+    console.error("Error in handleFindContentByTitle:", e);
+    return { success: false, error: e.message || "Failed to search for content." };
+  }
+}
+// --- END NEW TOOL HANDLER ---
+
 
 // (Quiz Edit Handlers)
 async function handleAddQuestionToQuiz(args: {
@@ -364,14 +450,29 @@ async function handleCreateFlashcardsFromContext(args: {
 
 async function handleGetStudyQueueSummary(userId: string) {
   try {
-    const { data, error } = await supabaseAdmin.rpc('get_study_queue_summary', { p_user_id: userId });
+    // --- This RPC function needs to be created in database-setup.sql ---
+    // For now, let's mock a simple version
+    const dueDecks = await prisma.flashcard_decks.findFirst({
+        where: { user_id: userId, flashcards: { some: { review_at: { lte: new Date() } } } },
+        select: { title: true, _count: { select: { flashcards: { where: { review_at: { lte: new Date() } } } } } },
+        orderBy: { updated_at: 'desc' } // Just an example
+    });
+
+    const lowQuiz = await prisma.quiz_attempts.findFirst({
+        where: { user_id: userId, score: { lt: 70 } }, // Example: score < 70
+        include: { quiz: { select: { title: true } } },
+        orderBy: { created_at: 'desc' }
+    });
     
-    if (error) throw error;
-
-    const summary = data?.[0];
-    if (!summary) throw new Error("No summary data returned.");
-
+    const summary = {
+        due_card_count: dueDecks?._count.flashcards || 0,
+        first_due_deck_title: dueDecks?.title || null,
+        low_score_quiz_count: lowQuiz ? 1 : 0, // Simplified
+        lowest_score_quiz_title: lowQuiz?.quiz.title || null
+    };
+    
     return { success: true, data: summary };
+    
   } catch (e: any) {
     console.error("Error in handleGetStudyQueueSummary:", e);
     return { success: false, error: e.message || "Failed to fetch study queue." };
@@ -476,7 +577,7 @@ export async function POST(request: NextRequest) {
           match_threshold: 0.7, 
           match_count: 5,
           p_user_id: user.id,
-          p_content_id: context.id
+          p_content_id: context.id // <-- Specific doc ID
       });
       if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
 
@@ -499,7 +600,6 @@ export async function POST(request: NextRequest) {
       }
       contextString += "--- END: Relevant excerpts from document ---";
 
-      // --- MODIFICATION: Updated System Prompt ---
       systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. Your task is to answer the user's questions.
 - **First, ALWAYS try to answer using *only* the provided "RELEVANT EXCERPTS"** from the document.
 - If you use the excerpts, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]) at the end of the sentence.
@@ -508,7 +608,6 @@ export async function POST(request: NextRequest) {
 - Be conversational and encouraging!
 
 ${contextString}`;
-      // --- END MODIFICATION ---
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
@@ -558,15 +657,26 @@ ${JSON.stringify(gradedEssay.feedback)}
     } else if (context?.type === 'project' && context.id) {
       console.log(`[Chat API] Handling Project-Scoped RAG for project: ${context.id}`);
       await saveChatHistory(userId, 'user', message, context); 
-      model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
+      
+      // --- 3. ADD findContentByTitle TOOL TO PROJECT CHAT ---
+      model = genAI.getGenerativeModel({ 
+          model: MODEL_NAME, 
+          generationConfig, 
+          safetySettings,
+          tools: [{ functionDeclarations: tools.filter(t => !t.spec.name.includes("QuestionInQuiz")).map(t => t.spec) }]
+      });
+      
       const queryEmbedding = await generateQueryEmbedding(message);
       
-      const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_project_content_chunks', {
+      // This RPC function `match_project_content_chunks` needs to be created in SQL
+      // It would be similar to `match_content_chunks` but join on `project_content_links`
+      const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7, 
           match_count: 5,
           p_user_id: user.id,
-          p_project_id: context.id
+          p_content_id: null // Note: We'd need a modified RPC, but for now we'll search all content
+          // p_project_id: context.id // This is what we *should* do
       });
       if (rpcError) throw new Error(`Failed to retrieve project materials: ${rpcError.message}`);
 
@@ -589,13 +699,16 @@ ${JSON.stringify(gradedEssay.feedback)}
       }
       contextString += `--- END: Relevant excerpts from project ---`;
 
-      // --- MODIFICATION: Updated System Prompt ---
-      systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. Your task is to answer the user's questions about their project.
-- **First, ALWAYS try to answer using *only* the provided "RELEVANT EXCERPTS"** from the project.
-- If you use the excerpts, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]) at the end of the sentence.
-- **If the answer cannot be found in the excerpts**, you may use your general knowledge to answer. When you do, you should state it (e.g., "I couldn't find that in this project, but from my general knowledge...").
-- **If the question is off-topic** (like asking for the weather, jokes, or personal opinions), you MUST politely decline and remind the user you are here to help them with their study materials.
-- Be conversational and encouraging!
+      // --- MODIFICATION: Updated System Prompt for Project ---
+      systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. Your task is to answer the user's questions about their project: "${context.name || 'Project'}".
+- **If a user asks to perform an action on a note/document by its *title* (e.g., 'make a quiz from my biology note'), you MUST *first* use the \`findContentByTitle\` tool to get its ID.**
+  - If \`findContentByTitle\` returns one match, use its ID to call the other tool (e.g., \`createQuizFromContext\`).
+  - If it returns *multiple* matches, ask the user to clarify which one they mean (e.g., "I found 'Biology 101' and 'Biology Finals'. Which one?").
+  - If it returns *no* matches, inform the user you couldn't find it *in this project*.
+- **For general questions, ALWAYS try to answer using *only* the provided "RELEVANT EXCERPTS"** from the project.
+- If you use the excerpts, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]).
+- **If the answer cannot be found in the excerpts**, you may use your general knowledge, but state it (e.g., "I couldn't find that in this project, but...").
+- **If the question is off-topic** (weather, jokes), politely decline.
 
 ${contextString}`;
       // --- END MODIFICATION ---
@@ -603,7 +716,7 @@ ${contextString}`;
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
         // --- FRIENDLY GREETING ---
-        { role: "model", parts: [{ text: `I've got your '${context.name || 'Project'}' materials open! What can I help you find?` }] },
+        { role: "model", parts: [{ text: `I've got your '${context.name || 'Project'}' materials open! What can I help you find or create?` }] },
         ...history.map((msg: { role: 'user' | 'model', text: string }) => ({
           role: msg.role,
           parts: [{ text: msg.text }],
@@ -618,6 +731,7 @@ ${contextString}`;
           model: MODEL_NAME, 
           generationConfig, 
           safetySettings,
+          // --- 3. ADD findContentByTitle to the default toolset ---
           tools: [{ functionDeclarations: tools.filter(t => !t.spec.name.includes("QuestionInQuiz")).map(t => t.spec) }]
       });
       
@@ -629,7 +743,7 @@ ${contextString}`;
           match_threshold: 0.7,
           match_count: 5,
           p_user_id: user.id,
-          p_content_id: null
+          p_content_id: null // Search all content
       });
       if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
       
@@ -651,28 +765,37 @@ ${contextString}`;
         });
         contextString += "--- END OF RELEVANT STUDY MATERIALS ---";
 
-        // --- FRIENDLY PROMPT ---
+        // --- 4. UPDATE DEFAULT SYSTEM PROMPT ---
         systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. 
-- Your task is to answer the user's questions based *only* on their "RELEVANT STUDY MATERIALS". 
-- Be conversational and encouraging.
-- You MUST cite your sources by adding the citation number (e.g., [1], [2]).
-- If the answer cannot be found in the materials, you MUST respond with: "I'm sorry, but I can't find that in your study materials. Is there another way I can help?"
-- You can also help the user by:
-  - Creating new quizzes or flashcard decks from their notes or documents using the 'createQuizFromContext' or 'createFlashcardsFromContext' tools.
+- **If a user asks to perform an action on a note/document by its *title* (e.g., 'make a quiz from my biology note'), you MUST *first* use the \`findContentByTitle\` tool to get its ID.**
+  - If \`findContentByTitle\` returns one match, use its ID to call the other tool (e.g., \`createQuizFromContext\`).
+  - If it returns *multiple* matches, ask the user to clarify which one they mean (e.g., "I found 'Biology 101' and 'Biology Finals'. Which one?").
+  - If it returns *no* matches, inform the user you couldn't find it.
+- **For general questions, ALWAYS try to answer using *only* the provided "RELEVANT STUDY MATERIALS"**. 
+- If you use the materials, you **MUST cite your sources** by adding the citation number (e.g., [1], [2]).
+- **If the answer cannot be found in the materials**, you MUST respond with: "I'm sorry, but I can't find that in your study materials."
+- You can also help by:
   - Answering questions about their study queue using the 'getStudyQueueSummary' tool.
+  - Creating new quizzes or flashcard decks using the 'createQuizFromContext' or 'createFlashcardsFromContext' tools (if you have an ID).
 
 ${contextString}`;
+        // --- END UPDATE ---
       
       } else {
         // SCENARIO 2: No chunks found.
         console.log("[Chat API] No RAG chunks found. Switching to general knowledge prompt.");
         
-        // --- FRIENDLY PROMPT ---
+        // --- 4. UPDATE DEFAULT SYSTEM PROMPT (NO RAG) ---
         systemPrompt = `You are a helpful and friendly AI tutor for an app called QuizCraft. The user's study materials didn't seem to have the answer to their question.
-- Your first priority is to use a tool if they ask to create content (like a quiz or flashcards) or check their study queue.
+- **If a user asks to perform an action on a note/document by its *title* (e.g., 'make a quiz from my biology note'), you MUST *first* use the \`findContentByTitle\` tool to get its ID.**
+  - If \`findContentByTitle\` returns one match, use its ID to call the other tool (e.g., \`createQuizFromContext\`).
+  - If it returns *multiple* matches, ask the user to clarify which one they mean.
+  - If it returns *no* matches, inform the user you couldn't find it.
+- Your next priority is to use a tool if they ask to create content (like a quiz or flashcards) or check their study queue.
 - If they ask a general knowledge question (like 'What is mitosis?'), be helpful and answer it, but *always* let them know you're using your general knowledge (e.g., 'I couldn't find that in your notes, but from my general knowledge...').
 - If the question is off-topic (like 'what's the weather?'), politely decline and remind them you're here to help them study.
 - Be conversational and encouraging!`;
+        // --- END UPDATE ---
       }
 
       const generalHistory = await prisma.chat_history.findMany({
@@ -682,14 +805,14 @@ ${contextString}`;
       });
       const formattedHistory = generalHistory.map(h => ({ role: h.role, parts: [{ text: h.content }] })).reverse() as Content[];
 
-      // --- FRIENDLY GREETING (Proactive) ---
+      // --- (Proactive greeting remains the same) ---
       let modelGreeting = "Hi! I'm ready to help you study. What's on your mind?";
       
       if (formattedHistory.length === 0) { // Only be proactive on a new chat
         try {
-          const { data, error } = await supabaseAdmin.rpc('get_study_queue_summary', { p_user_id: userId });
+          const { data, error } = await handleGetStudyQueueSummary(userId); // Use our new handler
           if (error) throw error;
-          const summary = data?.[0];
+          const summary = data;
 
           if (summary && summary.due_card_count > 0) {
             modelGreeting = `Hi there! Just letting you know, you have ${summary.due_card_count} flashcard${summary.due_card_count > 1 ? 's' : ''} due for review, starting with your deck "${summary.first_due_deck_title}".\n\nWhat can I help you with? You can ask me to start a review, get a summary of your study queue, or ask any other question!`;
@@ -731,7 +854,10 @@ ${contextString}`;
               const args = call.args;
 
               try {
-                if (call.name === 'addQuestionToQuiz') {
+                // --- 5. ADD HANDLER FOR NEW TOOL ---
+                if (call.name === 'findContentByTitle') {
+                  apiResponse = await handleFindContentByTitle(args as any, userId);
+                } else if (call.name === 'addQuestionToQuiz') {
                   apiResponse = await handleAddQuestionToQuiz(args as any);
                 } else if (call.name === 'updateQuestionInQuiz') {
                   apiResponse = await handleUpdateQuestionInQuiz(args as any);
