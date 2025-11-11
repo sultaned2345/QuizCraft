@@ -195,18 +195,25 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- (Safety check from previous fix) ---
+  // --- THIS IS THE FIX: Adjusted Validation Logic ---
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
     parsed.notes.length === 0 || 
-    !parsed.notes[0].title || 
-    !parsed.notes[0].content || 
+    !parsed.notes[0].title ||
+    // Check if content is missing, null, or not a string
     typeof parsed.notes[0].content !== 'string' || 
+    // Check if content (after trimming) is empty
     parsed.notes[0].content.trim().length === 0
   ) {
+    // If we have a title but no content, return the title with an "empty" marker
+    // This assumes the API route will handle saving this.
+    // Let's re-evaluate. The API route *will* save this.
+    // We should throw an error instead so the user is notified.
+    console.warn("AI returned invalid note structure or empty content:", parsed.notes[0]);
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
+  // --- END FIX ---
   
   return parsed.notes[0];
 }

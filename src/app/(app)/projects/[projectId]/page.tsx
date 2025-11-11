@@ -8,6 +8,10 @@ import { getServerSession } from '@/lib/getServerSession';
 import { redirect } from 'next/navigation';
 import { ProjectClientComponent } from './ProjectClientComponent';
 import { Project, ProjectContentDetails } from '@/types/database';
+// --- FIX: Add missing imports ---
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
+// --- END FIX ---
 
 export const dynamic = 'force-dynamic';
 
@@ -142,8 +146,8 @@ function ProjectDetailLoading() {
       <div className="flex items-center justify-between mb-6">
         <Skeleton className="h-10 w-36" />
         <div className="flex gap-2">
-          <Skeleton className="h-10 w-32" />
-          <Skeleton className="h-10 w-10" />
+          <Skeleton className="h-10 w-32 rounded-md" />
+          <Skeleton className="h-10 w-10 rounded-md" />
         </div>
       </div>
       <div className="mb-8">
