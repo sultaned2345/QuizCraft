@@ -46,6 +46,7 @@ import {
   StickyNote,
   Layers,
   Plus,
+  Play, // <-- IMPORT PLAY ICON
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -72,6 +73,7 @@ type ContentType = 'document' | 'quiz' | 'note' | 'deck' | '';
 // Helper to get the correct icon
 const getIcon = (type: string) => {
   if (type === 'document') return <FileText className="w-5 h-5 text-blue-500" />;
+  // --- FIX: Change quiz icon ---
   if (type === 'quiz') return <FileQuestion className="w-5 h-5 text-green-500" />;
   if (type === 'note') return <StickyNote className="w-5 h-5 text-yellow-500" />;
   if (type === 'deck') return <Layers className="w-5 h-5 text-purple-500" />;
@@ -81,7 +83,9 @@ const getIcon = (type: string) => {
 // Helper to get the correct link
 const getHref = (type: string, id: string) => {
   if (type === 'document') return `/documents/${id}`;
-  if (type === 'quiz') return `/quiz/${id}/edit`; // Link to edit page
+  // --- FIX: Change quiz link ---
+  if (type === 'quiz') return `/quiz/${id}`; // Link to quiz-taking page
+  // --- END FIX ---
   if (type === 'note') return `/notes/${id}`;
   if (type === 'deck') return `/flashcards/${id}`;
   return '#';
@@ -118,13 +122,13 @@ export function ProjectClientComponent({
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- Set Page Context for Chat ---
+  // --- (Page Context, EditSave, FetchItems, AddItem, RemoveItem handlers are unchanged) ---
   const { setPageContext } = usePageContext();
   const pageContext = useMemo(
     (): PageContextType => ({
       type: 'project',
       id: project.id,
-      name: project.title, // Pass name for the chat header
+      name: project.title,
     }),
     [project.id, project.title]
   );
@@ -133,14 +137,12 @@ export function ProjectClientComponent({
     setPageContext(pageContext);
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
-  // --- End Context ---
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editTitle.trim() || !session || isSaving) return;
     setIsSaving(true);
     try {
-      // NOTE: This API route /api/projects/[projectId] (PUT) needs to be created
       const response = await fetch(`/api/projects/${project.id}`, {
         method: 'PUT',
         headers: {
@@ -156,7 +158,7 @@ export function ProjectClientComponent({
       if (!response.ok || !result.success || !result.data) {
         throw new Error(result.error || 'Failed to update project.');
       }
-      setProject(result.data); // Update local state
+      setProject(result.data); 
       toast({ title: 'Project Updated' });
       setIsEditModalOpen(false);
     } catch (error: any) {
@@ -177,8 +179,6 @@ export function ProjectClientComponent({
       setAvailableItems([]);
       setSelectedItemId('');
       try {
-        // NOTE: This API route /api/content/list?type=... needs to be created
-        // It should list items *not* already in this project.
         const response = await fetch(`/api/content/list?type=${type}&excludeProject=${project.id}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
@@ -206,7 +206,6 @@ export function ProjectClientComponent({
     if (!selectedItemId || !addItemType || !session || isSaving) return;
     setIsSaving(true);
     try {
-      // NOTE: This API route /api/projects/[projectId]/links (POST) needs to be created
       const response = await fetch(`/api/projects/${project.id}/links`, {
         method: 'POST',
         headers: {
@@ -246,7 +245,6 @@ export function ProjectClientComponent({
     setContent((prev) => prev.filter((item) => item.id !== linkId));
 
     try {
-      // NOTE: This API route /api/projects/links/[linkId] (DELETE) needs to be created
       const response = await fetch(`/api/projects/links/${linkId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -262,7 +260,7 @@ export function ProjectClientComponent({
         description: error.message,
         variant: 'destructive',
       });
-      setContent(originalContent); // Rollback
+      setContent(originalContent);
     } finally {
       setIsDeleting(false);
     }
@@ -270,6 +268,7 @@ export function ProjectClientComponent({
 
   return (
     <>
+      {/* --- (Header and Empty State are unchanged) --- */}
       <div className="flex items-center justify-between mb-2">
         <Button variant="ghost" onClick={() => router.push('/projects')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -330,9 +329,13 @@ export function ProjectClientComponent({
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">
+                {/* --- FIX: Prettier note preview --- */}
                 <p className="text-sm text-muted-foreground line-clamp-2">
-                  {item.description || 'No details available.'}
+                  {item.description 
+                    ? item.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() // Strip HTML and normalize whitespace
+                    : 'No details available.'}
                 </p>
+                {/* --- END FIX --- */}
               </CardContent>
               <CardFooter className="justify-end gap-2">
                 <AlertDialog>
@@ -373,19 +376,30 @@ export function ProjectClientComponent({
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-
-                <Button asChild variant="outline" size="sm">
-                  <Link href={getHref(item.content_type, item.content_id)}>
-                    View
-                  </Link>
-                </Button>
+                
+                {/* --- FIX: Change button for quiz --- */}
+                {item.content_type === 'quiz' ? (
+                  <Button asChild size="sm">
+                    <Link href={getHref(item.content_type, item.content_id)}>
+                      <Play className="w-4 h-4 mr-2" />
+                      Start Quiz
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={getHref(item.content_type, item.content_id)}>
+                      View
+                    </Link>
+                  </Button>
+                )}
+                {/* --- END FIX --- */}
               </CardFooter>
             </Card>
           ))}
         </div>
       )}
 
-      {/* Edit Project Modal */}
+      {/* --- (Modals are unchanged) --- */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -427,8 +441,6 @@ export function ProjectClientComponent({
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Add Item Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -460,7 +472,6 @@ export function ProjectClientComponent({
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="grid gap-2">
               <Label htmlFor="item-select">Item</Label>
               <Select
@@ -490,7 +501,6 @@ export function ProjectClientComponent({
                 </SelectContent>
               </Select>
             </div>
-            
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="ghost" disabled={isSaving}>

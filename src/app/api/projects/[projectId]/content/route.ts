@@ -1,4 +1,7 @@
 // src/app/api/projects/[projectId]/content/route.ts
+// src/app/api/projects/[projectId]/content/route.ts
+// NEW FILE
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -64,7 +67,9 @@ export async function GET(
         prisma.notes.findMany({
           where: { id: { in: contentIdsByType.note }, user_id: user.id },
           select: { id: true, title: true, content: true } // Get content for a snippet
-        }).then(items => items.map(item => ({ ...item, type: 'note', desc: item.content.replace(/<[^>]+>/g, ' ').substring(0, 100) + '...' })))
+        // --- FIX: Strip HTML for prettier preview ---
+        }).then(items => items.map(item => ({ ...item, type: 'note', desc: item.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 100) + '...' })))
+        // --- END FIX ---
       );
     }
     if (contentIdsByType.deck) {

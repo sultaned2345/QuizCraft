@@ -100,14 +100,13 @@ export function RichTextEditor({
     editable: editable,
     editorProps: {
       attributes: {
+        // --- FIX: Apply prose classes here ---
         class:
           'prose prose-sm dark:prose-invert max-w-none p-4 h-full min-h-[300px] rounded-b-md border border-t-0 focus:outline-none',
+        // --- END FIX ---
       },
     },
     onUpdate({ editor }) {
-      // We output HTML, so MarkdownViewer must be updated to handle HTML
-      // Or we configure tiptap to output markdown (more complex)
-      // For now, let's stick to HTML output for simplicity.
       onChange(editor.getHTML());
     },
   });
@@ -118,18 +117,12 @@ export function RichTextEditor({
     }
   }, [editor, editable]);
 
-  // --- REMOVED THE PROBLEMATIC useEffect SYNC HOOK ---
-  // React.useEffect(() => {
-  //   if (editor && content !== editor.getHTML()) {
-  //     editor.commands.setContent(content, false);
-  //   }
-  // }, [content, editor]);
-  // --- END REMOVAL ---
-
   return (
-    <div className={cn('rounded-md border', className)}>
+    // --- FIX: Apply base styles to the container ---
+    <div className={cn('rounded-md border bg-background', className)}>
       {editable && <Toolbar editor={editor} />}
       <EditorContent editor={editor} />
     </div>
+    // --- END FIX ---
   );
 }
