@@ -1,10 +1,19 @@
 // src/app/(app)/notes/loading.tsx
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoteCardSkeleton } from "@/components/skeletons/NoteCardSkeleton";
+import { Loader2 } from "lucide-react"; // Import Loader
 
 export default function NotesLoading() {
   return (
     <>
+      {/* --- ADDED LOADING HEADER --- */}
+      <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground text-center mb-8 p-8 border border-dashed rounded-lg">
+        <Loader2 className="h-10 w-10 animate-spin" />
+        <h2 className="text-2xl font-semibold">Loading Notes...</h2>
+        <p className="text-sm">Gathering your thoughts.</p>
+      </div>
+      {/* --- END ADDED HEADER --- */}
+
       {/* Header Skeleton */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
