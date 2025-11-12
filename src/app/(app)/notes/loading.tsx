@@ -1,6 +1,4 @@
 // src/app/(app)/notes/loading.tsx
-'use client'; // <-- ADD THIS LINE
-
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoteCardSkeleton } from "@/components/skeletons/NoteCardSkeleton";
 

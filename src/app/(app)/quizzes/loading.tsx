@@ -1,0 +1,32 @@
+// src/app/(app)/quizzes/loading.tsx
+import { Skeleton } from "@/components/ui/skeleton";
+import { QuizCardSkeleton } from "@/components/skeletons/QuizCardSkeleton";
+
+export default function QuizzesLoading() {
+  return (
+    <>
+      {/* Widget Skeletons */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-1">
+          <Skeleton className="h-[268px] w-full rounded-xl" />
+        </div>
+        <div className="md:col-span-2">
+          <Skeleton className="h-[268px] w-full rounded-xl" />
+        </div>
+      </div>
+
+      {/* Header Skeleton */}
+      <div className="flex items-center justify-between mb-8">
+        <Skeleton className="h-9 w-64 rounded" />
+        <Skeleton className="h-10 w-32 rounded-md" />
+      </div>
+
+      {/* Grid Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <QuizCardSkeleton key={i} />
+        ))}
+      </div>
+    </>
+  );
+}

@@ -1,29 +1,6 @@
 // src/app/(app)/projects/[projectId]/loading.tsx
-// NEW FILE
-
-'use client';
-
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
-
-function ContentItemSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center gap-4 space-y-0 pb-2">
-        <Skeleton className="h-8 w-8 rounded-full" />
-        <Skeleton className="h-5 w-3/4" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6 mt-2" />
-      </CardContent>
-      <CardFooter className="justify-end gap-2">
-        <Skeleton className="h-9 w-9 rounded-md" />
-        <Skeleton className="h-9 w-20 rounded-md" />
-      </CardFooter>
-    </Card>
-  );
-}
+import { ContentItemSkeleton } from "@/components/skeletons/ContentItemSkeleton";
 
 export default function ProjectDetailLoading() {
   return (

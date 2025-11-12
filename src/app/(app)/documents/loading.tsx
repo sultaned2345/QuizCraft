@@ -1,6 +1,4 @@
 // src/app/(app)/documents/loading.tsx
-'use client'; // <-- ADD THIS LINE
-
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocumentCardSkeleton } from "@/components/skeletons/DocumentCardSkeleton";
 

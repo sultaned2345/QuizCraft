@@ -1,6 +1,4 @@
 // src/app/(app)/flashcards/loading.tsx
-'use client'; // <-- ADD THIS LINE
-
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeckCardSkeleton } from "@/components/skeletons/DeckCardSkeleton";
 
