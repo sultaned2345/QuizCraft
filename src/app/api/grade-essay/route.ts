@@ -15,13 +15,11 @@ export const runtime = 'nodejs';
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 
-// --- 1. ADD WORD LIMIT AND COUNTER ---
 const WORD_LIMIT = 3000;
 const countWords = (text: string): number => {
   if (!text.trim()) return 0;
-  return text.trim().split(/\s+/).length; // Splits on one or more whitespace characters
+  return text.trim().split(/\s+/).length;
 };
-// ---
 
 const generationConfig = {
   temperature: 0.6,
@@ -30,13 +28,14 @@ const generationConfig = {
   maxOutputTokens: 4096,
   responseMimeType: "application/json",
 };
-// ... (safetySettings, AI interfaces, and buildAIPrompt remain unchanged) ...
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
+
+// --- MODIFIED: Added 'strengths' to interface ---
 interface AIFeedbackHighlight {
   text: string;
   comment: string;
@@ -48,6 +47,7 @@ interface AIFeedbackCategory {
 interface AIGradedEssayResponse {
   score: number | null;
   feedback: {
+    strengths: AIFeedbackCategory; // <-- ADDED
     clarity: AIFeedbackCategory;
     argument: AIFeedbackCategory;
     grammar: AIFeedbackCategory;
@@ -55,33 +55,41 @@ interface AIGradedEssayResponse {
   };
   suggestions: string[];
 }
-function buildAIPrompt(essayText: string, rubricText?: string): string {
-    const baseInstruction = `You are a helpful writing tutor. Your task is to provide detailed feedback on an essay.
-Analyze the essay based on the user's rubric or standard academic criteria (clarity, argument, grammar).
-You MUST provide:
-1.  An overall 'score' (0-100) or null if not applicable.
-2.  A list of 'suggestions' (1-3 strings) for improvement.
-3.  A 'feedback' object with:
-    a. 'clarity': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
-    b. 'argument': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
-    c. 'grammar': An object with 'summary' (string) and 'highlights' (array of {text, comment}).
-    d. 'summary': An overall summary (string) of the essay.
+// --- END MODIFICATION ---
 
-For 'highlights', find 1-2 exact snippets ('text') from the essay for each category (clarity, argument, grammar) and provide a 'comment' for each snippet. If no highlights are found for a category, return an empty array [].`;
+// --- MODIFIED: Updated buildAIPrompt ---
+function buildAIPrompt(essayText: string, rubricText?: string): string {
+    const baseInstruction = `You are an encouraging and constructive writing professor. Your goal is to help the student improve, not just to criticize.
+Provide detailed feedback on the essay. You MUST provide:
+1.  An overall 'score' (0-100). Be fair. A score of 95-100 is reserved for truly exceptional writing that meets all rubric criteria flawlessly and demonstrates a unique voice or insight. A solid, well-written college paper might earn an 88-94.
+2.  A 'feedback' object containing:
+    a. 'strengths': An object with a 'summary' of what the essay does well and 'highlights' (array of {text, comment}) of 1-2 *positive* examples.
+    b. 'clarity': An object with a 'summary' on clarity/flow and 'highlights' (array of {text, comment}) of 1-2 examples to improve.
+    c. 'argument': An object with a 'summary' on the argument/evidence and 'highlights' (array of {text, comment}) of 1-2 examples to improve.
+    d. 'grammar': An object with a 'summary' on grammar/style and 'highlights' (array of {text, comment}) of 1-2 examples to improve.
+    e. 'summary': A holistic 'summary' of the essay.
+3.  A list of 2-3 actionable 'suggestions' (strings) for improvement.
+
+For 'highlights', find exact snippets ('text') from the essay. If no highlights are found for a category, return an empty array [].`;
 
      const rubricInstruction = rubricText 
        ? `Use the following specific rubric or instructions provided by the user:\n"""\n${rubricText}\n"""\n` 
-       : `Evaluate based on standard academic criteria: Clarity (Is the point clear?), Argument (Is the logic sound?), Grammar (Are there errors?), and provide an overall Summary.`;
+       : `Evaluate based on standard academic criteria: Strengths (What is done well?), Clarity (Is the point clear?), Argument & Evidence (Is the logic sound?), Grammar & Style (Are there errors?), and provide an overall Summary.`;
 
      const outputFormat = `Return ONLY valid JSON in this exact shape:
 {
-  "score": number | null,
+  "score": 92,
   "feedback": {
+    "strengths": {
+      "summary": "You have a very clear thesis and your topic sentences are excellent.",
+      "highlights": [
+        {"text": "an exact snippet you did well", "comment": "This is a great example of using evidence."}
+      ]
+    },
     "clarity": {
       "summary": "Your clarity is...",
       "highlights": [
         {"text": "an exact text snippet from the essay", "comment": "This part was unclear because..."},
-        {"text": "another snippet", "comment": "This sentence is very clear."}
       ]
     },
     "argument": {
@@ -106,19 +114,25 @@ For 'highlights', find 1-2 exact snippets ('text') from the essay for each categ
 
      return `${baseInstruction}\n\n${rubricInstruction}\n\nEssay Text:\n"""\n${essayText}\n"""\n\n${outputFormat}`;
 }
+// --- END MODIFICATION ---
+
 async function callAIToGradeEssay(essayText: string, rubricText?: string): Promise<AIGradedEssayResponse> {
     if (!API_KEY) throw new Error("Missing GOOGLE_AI_API_KEY"); const genAI = new GoogleGenerativeAI(API_KEY); const model = genAI.getGenerativeModel({ model: AI_MODEL_NAME, generationConfig, safetySettings }); const prompt = buildAIPrompt(essayText, rubricText); try { console.log(`Sending prompt to AI model: ${AI_MODEL_NAME} for grading...`); const result = await model.generateContent(prompt); const response = await result.response; const content = response.text(); if (!content) throw new Error("Empty response from AI model."); let parsed: AIGradedEssayResponse; try { parsed = JSON.parse(content); } catch (jsonError) { console.error("Failed to parse AI JSON response:", content); throw new Error("AI returned invalid JSON format."); } 
     
     if (!parsed || typeof parsed !== 'object') throw new Error("AI response is not a valid object."); 
     if (!parsed.feedback || typeof parsed.feedback !== 'object') throw new Error("AI response missing or invalid 'feedback' object."); 
     
-    const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
+    // --- MODIFIED: Check for 'strengths' category ---
+    const categories: ('strengths' | 'clarity' | 'argument' | 'grammar')[] = ['strengths', 'clarity', 'argument', 'grammar'];
     for (const cat of categories) {
         if (!parsed.feedback[cat] || typeof parsed.feedback[cat].summary !== 'string' || !Array.isArray(parsed.feedback[cat].highlights)) {
              console.error(`AI response missing or invalid 'feedback.${cat}' structure.`);
+             // Provide a default empty state
              parsed.feedback[cat] = { summary: `No feedback provided for ${cat}.`, highlights: [] };
         }
     }
+    // --- END MODIFICATION ---
+
     if (!parsed.feedback.summary) parsed.feedback.summary = "No summary provided.";
     if (!Array.isArray(parsed.suggestions)) parsed.suggestions = []; 
     if (typeof parsed.score !== 'number' && parsed.score !== null) parsed.score = null; 
@@ -126,7 +140,7 @@ async function callAIToGradeEssay(essayText: string, rubricText?: string): Promi
     console.log(`AI grading successful using ${AI_MODEL_NAME}.`); return parsed; } catch (error: any) { console.error(`Error calling or parsing AI response from ${AI_MODEL_NAME} for grading:`, error); throw new Error(`AI grading failed: ${error.message}`); }
 }
 
-// --- POST Handler ---
+// (POST Handler remains unchanged, as all logic is in the helpers)
 export async function POST(request: NextRequest) {
     try {
         const user = await requireAuth(request);
@@ -179,12 +193,10 @@ export async function POST(request: NextRequest) {
             throw new Error("Essay text is too short (minimum 50 characters required)."); 
         }
 
-        // --- 2. ADD SERVER-SIDE WORD COUNT VALIDATION ---
         const wordCount = countWords(essayText);
         if (wordCount > WORD_LIMIT) {
             throw new Error(`Essay exceeds the ${WORD_LIMIT} word limit. You submitted ${wordCount} words.`);
         }
-        // ---
 
         // 3. Call AI to Grade Essay
         const aiResult = await callAIToGradeEssay(essayText, rubricText);
@@ -252,7 +264,6 @@ export async function POST(request: NextRequest) {
         }
 
         const errorMessage = error.message || 'Failed to grade essay';
-        // --- 3. ENSURE 400 is sent for word limit errors ---
         const status = (error.message.includes("limit") || error.message.includes("characters required") || error.message.includes("Invalid file type") || error.message.includes("Unsupported Content-Type") || error.message.includes("word limit exceeded")) ? 400 : 500;
         return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status });
     }

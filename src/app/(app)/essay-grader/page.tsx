@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle } from 'lucide-react';
+import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle, Star } from 'lucide-react';
 import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory, GradedEssay } from '@/types/database';
 import { Input } from '@/components/ui/input';
 import { formatFileSize } from '@/lib/file-parser';
@@ -398,7 +398,7 @@ export default function EssayGraderPage() {
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     // ...
     if (!fb) return null;
-    const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
+    const categories: ('strengths' |'clarity' | 'argument' | 'grammar')[] = ['strengths','clarity', 'argument', 'grammar'];
     
     return (
       <div className="space-y-4">
@@ -412,6 +412,7 @@ export default function EssayGraderPage() {
           {categories.map((key) => {
             const data = fb[key];
             if (!data) return null;
+            const isStrengths = key === 'strengths';
             if (typeof data === 'object' && data.summary) {
               return (
                 <AccordionItem value={key} key={key}>

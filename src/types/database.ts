@@ -100,6 +100,7 @@ export interface EssayFeedbackCategory {
     highlights: EssayFeedbackHighlight[];
 }
 export interface GradedEssayFeedback {
+  strengths?: EssayFeedbackCategory | string;
   clarity?: EssayFeedbackCategory | string;
   argument?: EssayFeedbackCategory | string;
   grammar?: EssayFeedbackCategory | string;
