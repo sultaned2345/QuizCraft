@@ -16,27 +16,29 @@ import {
   DialogDescription,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { ApiResponse, Note } from '@/types/database'; // Import Note if needed for onSuccess
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. FIXED IMPORT PATH
+import { Loader2, AlertCircle, Youtube } from 'lucide-react'; // <-- 1. IMPORT Youtube ICON
+import { ApiResponse, Note } from '@/types/database'; 
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; 
 
 interface GenerateNotesDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess: (newNotes: { count: number }) => void; // Update onSuccess type if API returns different data
+    onSuccess: (newNotes: { count: number }) => void;
     onError: (message: string) => void;
 }
 
 export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: GenerateNotesDialogProps) {
-    const [sourceType, setSourceType] = useState<'text' | 'url'>('text');
+    // --- 2. UPDATE STATE ---
+    const [sourceType, setSourceType] = useState<'text' | 'url' | 'youtube'>('text');
     const [textContent, setTextContent] = useState('');
     const [urlContent, setUrlContent] = useState('');
-    // REMOVED: const [numberOfNotes, setNumberOfNotes] = useState(3);
+    const [youtubeUrl, setYoutubeUrl] = useState(''); // <-- Add new state
+    // ---
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState('');
 
     const { session } = useAuth();
-    const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+    const { openModal } = useUpgradeModal(); 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,6 +47,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             onError("Authentication error. Please log in again.");
             return;
         }
+        // --- 3. UPDATE VALIDATION ---
         if (sourceType === 'text' && !textContent.trim()) {
             setError("Please paste some text content.");
             return;
@@ -53,13 +56,25 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             setError("Please enter a valid URL.");
             return;
         }
+        if (sourceType === 'youtube' && !youtubeUrl.trim()) { // <-- Add new validation
+            setError("Please enter a valid YouTube URL.");
+            return;
+        }
+        // ---
 
         setIsGenerating(true);
 
         try {
-            const body = sourceType === 'text'
-                ? { text: textContent.trim() } // Remove number_of_notes
-                : { url: urlContent.trim() }; // Remove number_of_notes
+            // --- 4. UPDATE BODY LOGIC ---
+            let body = {};
+            if (sourceType === 'text') {
+                body = { text: textContent.trim() };
+            } else if (sourceType === 'url') {
+                body = { url: urlContent.trim() };
+            } else if (sourceType === 'youtube') {
+                body = { youtubeUrl: youtubeUrl.trim() };
+            }
+            // ---
 
             const response = await fetch('/api/generate-notes', {
                 method: 'POST',
@@ -70,32 +85,29 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                 body: JSON.stringify(body),
             });
 
-            const result: ApiResponse<{ count: number }> = await response.json(); // Expect count in response
+            const result: ApiResponse<{ count: number }> = await response.json(); 
 
             if (!response.ok || !result.success) {
-                // --- 3. CATCH LIMIT ERROR ---
                 if (result.error === 'limit_exceeded') {
                     openModal();
                     throw new Error(result.message || 'AI generation limit reached.');
                 }
-                // ---
                 throw new Error(result.error || `Failed to generate notes (Status: ${response.status})`);
             }
 
-            // Clear inputs on success
+            // --- 5. CLEAR ALL INPUTS ON SUCCESS ---
             setTextContent('');
             setUrlContent('');
-            onSuccess(result.data || { count: 0 }); // Pass back the count or default
+            setYoutubeUrl('');
+            // ---
+            onSuccess(result.data || { count: 0 }); 
 
         } catch (err: any) {
-            // --- 4. HANDLE ERROR MESSAGING ---
             const errorMessage = err.message || 'An unknown error occurred.';
-            // Don't show modal error in the dialog UI
             if (!errorMessage.includes('limit reached')) {
                 setError(errorMessage);
             }
             onError(errorMessage);
-            // ---
         } finally {
             setIsGenerating(false);
         }
@@ -106,8 +118,10 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
         if (!open) {
             setTextContent('');
             setUrlContent('');
+            setYoutubeUrl(''); // <-- Clear new state
             setError('');
             setIsGenerating(false);
+            setSourceType('text'); // <-- Reset to default tab
         }
         onClose(); // Call original onClose handler
     };
@@ -119,16 +133,22 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                 <DialogHeader>
                     <DialogTitle>Generate Note with AI</DialogTitle>
                     <DialogDescription>
-                        Provide text content or a URL to automatically generate a summary note.
+                        Provide text, a URL, or a YouTube link to automatically generate a summary note.
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
                     <div className="grid gap-4 py-4">
-                         {/* Source Type Toggle */}
+                         {/* --- 6. UPDATE SOURCE TYPE TOGGLE --- */}
                         <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
                             <Button type="button" variant={sourceType === "text" ? "secondary" : "ghost"} onClick={() => setSourceType('text')} className="w-24 h-8 text-xs">Text</Button>
                             <Button type="button" variant={sourceType === "url" ? "secondary" : "ghost"} onClick={() => setSourceType('url')} className="w-24 h-8 text-xs">URL</Button>
+                            <Button type="button" variant={sourceType === "youtube" ? "secondary" : "ghost"} onClick={() => setSourceType('youtube')} className="w-24 h-8 text-xs">
+                                <Youtube className="w-4 h-4 mr-1" />
+                                YouTube
+                            </Button>
                         </div>
+                        {/* --- END TOGGLE UPDATE --- */}
+
 
                          {/* Text Input */}
                          {sourceType === 'text' && (
@@ -163,7 +183,24 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                             </div>
                          )}
 
-                         {/* REMOVED: Number of Notes Input */}
+                         {/* --- 7. ADD YOUTUBE URL INPUT --- */}
+                         {sourceType === 'youtube' && (
+                             <div className="grid gap-2">
+                                <Label htmlFor="youtube-url-content">YouTube URL</Label>
+                                <Input
+                                    id="youtube-url-content"
+                                    type="url"
+                                    value={youtubeUrl}
+                                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                    disabled={isGenerating}
+                                    required={sourceType === 'youtube'}
+                                />
+                                <p className="text-xs text-muted-foreground">Note: This only works for videos that have transcripts available.</p>
+                            </div>
+                         )}
+                         {/* --- END YOUTUBE INPUT --- */}
+
 
                          {error && (
                             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -175,8 +212,18 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                      <DialogFooter>
                          <DialogClose asChild>
                             <Button type="button" variant="ghost" disabled={isGenerating}>Cancel</Button>
-                         </DialogClose>
-                        <Button type="submit" disabled={isGenerating || (sourceType === 'text' && !textContent.trim()) || (sourceType === 'url' && !urlContent.trim())}>
+                         </DialogClose
+                        >
+                        {/* --- 8. UPDATE SUBMIT BUTTON DISABLED LOGIC --- */}
+                        <Button 
+                            type="submit" 
+                            disabled={
+                                isGenerating || 
+                                (sourceType === 'text' && !textContent.trim()) || 
+                                (sourceType === 'url' && !urlContent.trim()) ||
+                                (sourceType === 'youtube' && !youtubeUrl.trim())
+                            }
+                        >
                             {isGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Generate Note
                         </Button>

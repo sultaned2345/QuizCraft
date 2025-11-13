@@ -153,20 +153,31 @@ export async function callAIToGenerateQuiz(
 // --- Helper for Note Generation ---
 
 function buildNotePrompt({ text }: { text: string }): string {
-  // --- FIX: UPDATED PROMPT ---
-  return `Based on the following content, generate structured notes summarizing the **key concepts, definitions, examples, and important points**. Organize the notes logically, using markdown syntax (e.g., '# Heading', '- Bullet point') for clarity. The notes must be detailed and capture the essential information.
+  // --- FIX: UPDATED PROMPT to request clean HTML ---
+  return `You are an expert note-taker. Based on the following content, generate structured summary notes.
+
+You MUST format the notes as clean, semantic HTML.
+- Use <h2> for main topics.
+- Use <h3> for sub-topics.
+- Use <ul> and <li> for bullet points.
+- Use <strong> for key terms.
+- Use <p> for paragraphs.
+- Do NOT use any Markdown (like ##, **, or -).
+- Do NOT use <html>, <body>, or <head> tags.
+- The HTML content must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a detailed, multi-point summary (at least 20 words) and MUST NOT be empty.
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
+
 {
   "notes": [
     {
       "title": "Concise Title Reflecting Main Topic",
-      "content": "Detailed structured notes covering key points, definitions, examples etc. Use markdown for formatting like headings (# Heading 1, ## Heading 2) or bullet points (- Point). THIS MUST NOT BE AN EMPTY STRING or just <p></p>."
+      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
     }
   ]
 }`;
