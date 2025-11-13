@@ -29,16 +29,30 @@ export async function getServerSession() {
       }
     )
 
-    // Get session data
-    const { data: { session }, error } = await supabase.auth.getSession();
+    // --- THIS IS THE FIX ---
+    // Change from getSession() to getUser()
+    // This validates the cookie/token against the Supabase server.
+    const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error) {
-        console.error("!!! SERVER-SIDE ERROR: Error getting session in getServerSession:", error.message);
+        console.error("!!! SERVER-SIDE ERROR: Error getting user in getServerSession:", error.message);
         return null; // Return null on error
     }
 
-    // console.log("getServerSession - Session User ID:", session?.user?.id); // Optional: Add logging
-    return session; // Return the session object (contains user data if logged in)
+    // If user is null, there is no valid session
+    if (!user) {
+        return null;
+    }
+    
+    // We don't have the full "session" object, but we have the
+    // essential "user" object, which is what we use everywhere else.
+    // We will return a "session-like" object to match expectations.
+    return {
+        user,
+        // You can add other properties here if needed, but user is the key
+        access_token: cookieStore.get(`sb-${supabaseUrl.split('.')[0]}-auth-token`)?.value || null, 
+    };
+    // --- END OF FIX ---
 
   } catch (e) {
       console.error("!!! SERVER-SIDE ERROR: Exception in getServerSession:", e);
