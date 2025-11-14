@@ -5,9 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/theme-toggle";
-// import { Footer } from "@/components/Footer"; // <-- REMOVE THIS LINE
+// We don't need the Footer import here, as it's in layout.tsx
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   ArrowRight,
   Sparkles,
@@ -21,9 +27,11 @@ import {
   Upload,
   BrainCircuit,
   GraduationCap,
+  User,
+  Briefcase,
 } from "lucide-react";
 
-// --- Components ---
+// --- Sub-Components for the Page ---
 
 function LandingHeader() {
   const { user, loading } = useAuth();
@@ -116,7 +124,38 @@ function StepCard({
   );
 }
 
-// --- Main Page ---
+function TestimonialCard({
+  quote,
+  name,
+  title,
+}: {
+  quote: string;
+  name: string;
+  title: string;
+}) {
+  return (
+    <Card className="h-full flex flex-col bg-card/50 border-muted">
+      <CardContent className="pt-6 flex-1">
+        <blockquote className="text-lg leading-relaxed text-foreground">
+          "{quote}"
+        </blockquote>
+      </CardContent>
+      <CardFooter>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <User className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-semibold">{name}</p>
+            <p className="text-sm text-muted-foreground">{title}</p>
+          </div>
+        </div>
+      </CardFooter>
+    </Card>
+  );
+}
+
+// --- Main Page Component ---
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
@@ -251,8 +290,140 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* --- NEW: Use Cases Section --- */}
+        <section className="py-24 bg-muted/30">
+          <div className="container mx-auto px-4 md:px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">For Every Kind of Learner</h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Whether you're a student or a professional, QuizCraft adapts to your needs.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-2xl flex items-center gap-3">
+                    <GraduationCap className="w-8 h-8 text-primary" />
+                    For Students
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground">
+                    Turn lecture notes and textbook chapters into study sets in seconds. Stop wasting time on manual prep and focus on what matters: learning.
+                  </p>
+                  <ul className="space-y-2">
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Instantly create study guides from notes.</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Chat with your syllabus or readings.</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Ace exams with practice quizzes and flashcards.</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-2xl flex items-center gap-3">
+                    <Briefcase className="w-8 h-8 text-primary" />
+                    For Educators & Professionals
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground">
+                    Quickly create training materials, onboard new hires, or refresh your knowledge on technical documents.
+                  </p>
+                  <ul className="space-y-2">
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Generate test questions for any topic.</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Summarize dense reports and technical manuals.</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span>Create flashcards for corporate training.</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        {/* --- NEW: Testimonials Section --- */}
+        <section className="py-24 bg-background">
+          <div className="container mx-auto px-4 md:px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Don't just study. Understand.</h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                See what other learners are saying about QuizCraft.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+              <TestimonialCard
+                quote="I uploaded a 40-page PDF on biology and had a practice quiz in 30 seconds. This is a game-changer for midterms."
+                name="Sarah J."
+                title="University Student"
+              />
+              <TestimonialCard
+                quote="The 'Chat with Document' feature is incredible. I can ask my textbook specific questions and get answers instantly. Saved me hours of searching."
+                name="Michael B."
+                title="Grad Student"
+              />
+              <TestimonialCard
+                quote="As a teacher, I use this to generate question banks from my lesson plans. What used to take an hour now takes a minute."
+                name="David L."
+                title="High School Educator"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* --- NEW: FAQ Section --- */}
+        <section className="py-24 bg-muted/30">
+          <div className="container mx-auto px-4 md:px-6 max-w-3xl">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
+            </div>
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="item-1">
+                <AccordionTrigger className="text-lg">Is QuizCraft free to use?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Yes! QuizCraft offers a generous free plan that includes access to all core features, including document uploads, quiz generation, and AI chat. We have fair usage limits on the free plan, with an option to upgrade to Pro for unlimited access.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-2">
+                <AccordionTrigger className="text-lg">What file types are supported?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  You can upload `.pdf`, `.docx` (Word), `.pptx` (PowerPoint), and `.txt` files. You can also paste text directly or provide a URL for our AI to summarize.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-3">
+                <AccordionTrigger className="text-lg">How does the AI Essay Grader work?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Our AI Essay Grader analyzes your text based on standard academic criteria like clarity, argumentation, and grammar. It provides an estimated score (0-100) and detailed feedback with highlights, helping you understand your strengths and areas for improvement.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-4">
+                <AccordionTrigger className="text-lg">Is my data secure?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Yes. Your data is stored securely in your own private Supabase database. We do not share your documents or personal information with any third parties. All AI processing is done anonymously.
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </section>
+
         {/* CTA Section */}
-        <section className="py-24 bg-primary/5 border-t border-b border-primary/10">
+        <section className="py-24 bg-primary/5 border-t border-primary/10">
           <div className="container mx-auto px-4 md:px-6 text-center">
             <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">
               Ready to upgrade your grades?
@@ -274,8 +445,8 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-      
-      {/* Footer is provided by the root layout */}
+
+      {/* Footer is provided by src/app/layout.tsx, so it is not needed here */}
     </div>
   );
 }
