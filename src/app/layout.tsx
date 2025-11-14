@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/theme-toggle";
-import Footer from "@/components/Footer"; // Ensure you have this, or remove if not
+import { Footer } from "@/components/Footer"; // Correctly imported based on your file structure
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -119,6 +119,18 @@ function StepCard({
 // --- Main Page ---
 
 export default function LandingPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  const handleGetStarted = () => {
+    if (loading) return;
+    if (user) {
+      router.push("/documents"); // Default to documents if logged in
+    } else {
+      router.push("/signup"); // Go to signup if not logged in
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen font-sans">
       <LandingHeader />
@@ -145,17 +157,17 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="h-12 px-8 text-base rounded-full" asChild>
-                <Link href="/signup">
+              <Button size="lg" className="h-12 px-8 text-base rounded-full" onClick={handleGetStarted}>
                   Start Studying for Free
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
               </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base rounded-full" asChild>
-                <Link href="/login">
-                  Log In
-                </Link>
-              </Button>
+              {!user && !loading && (
+                <Button size="lg" variant="outline" className="h-12 px-8 text-base rounded-full" asChild>
+                  <Link href="/login">
+                    Log In
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </section>
@@ -189,7 +201,7 @@ export default function LandingPage() {
               <FeatureCard
                 icon={<FileText className="w-6 h-6" />}
                 title="AI Summarizer"
-                description="Paste complex text or URLs to get concise, structured notes on key concepts and definitions."
+                description="Paste complex text or URLs to get concise, structured notes on the key concepts and definitions."
               />
               <FeatureCard
                 icon={<PenTool className="w-6 h-6" />}
@@ -250,11 +262,9 @@ export default function LandingPage() {
               Get started today for free.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-               <Button size="lg" className="h-12 px-8 rounded-full text-lg shadow-lg shadow-primary/20" asChild>
-                <Link href="/signup">
+               <Button size="lg" className="h-12 px-8 rounded-full text-lg shadow-lg shadow-primary/20" onClick={handleGetStarted}>
                   Get Started Now <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+               </Button>
             </div>
             <p className="mt-6 text-sm text-muted-foreground flex items-center justify-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-green-500" /> No credit card required
@@ -264,8 +274,10 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-
-      <Footer />
+      
+      {/* The Footer import is correct based on your file list */}
+      {/* <Footer /> */} 
+      {/* The Footer is now handled by the RootLayout, so it's not needed here. I've removed it. */}
     </div>
   );
 }
