@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
-// --- MODIFICATION: Import FolderKanban directly ---
 import {
   Sparkles,
   LogOut,
@@ -20,10 +19,9 @@ import {
   CreditCard,
   Loader2,
 } from 'lucide-react';
-import FolderKanban from 'lucide-react/dist/esm/icons/folder-kanban'; // <-- FIX
-// --- END MODIFICATION ---
+import FolderKanban from 'lucide-react/dist/esm/icons/folder-kanban'; 
 import { useState } from 'react';
-import { PageProvider } from '@/contexts/PageContext';
+import { PageProvider } from '@/contexts/PageContext'; // <-- 1. IMPORT
 import {
   Tooltip,
   TooltipContent,
@@ -39,21 +37,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import dynamic from 'next/dynamic';
-import { ChatToggleButton } from '@/components/ChatToggleButton'; // <-- 1. IMPORT new button
+import { ChatToggleButton } from '@/components/ChatToggleButton'; 
 
-// --- 2. LAZY-LOAD THE NEW WIDGET CONTAINER ---
 const ChatWidgetContainer = dynamic(
   () =>
     import('@/components/ChatWidgetContainer').then(
       (mod) => mod.ChatWidgetContainer
     ),
   {
-    loading: () => null, // No loader needed for a hidden component
+    loading: () => null, 
     ssr: false,
   }
 );
 
-// --- (AppHeader component is unchanged) ---
 const AppHeader = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -114,14 +110,12 @@ const AppHeader = () => {
   );
 };
 
-// --- 3. MODIFY SidebarNav to REMOVE chat button ---
 const SidebarNav = () => {
   const pathname = usePathname();
 
   const navItems = [
     { href: '/projects', label: 'Projects', icon: FolderKanban },
     { href: '/documents', label: 'Documents', icon: FileText },
-    // { label: 'AI Tutor', icon: MessageSquare, action: onOpenChat }, // <-- REMOVED
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
@@ -200,14 +194,12 @@ const SidebarNav = () => {
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  // --- 4. RENAME state to control the new widget ---
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const pathname = usePathname(); // <-- 5. Get current path
-
-  // --- 6. DETERMINE if we are on a document page ---
+  const pathname = usePathname(); 
   const isDocumentPage = pathname.startsWith('/documents/');
 
   return (
+    // --- 2. WRAP WITH PageProvider ---
     <PageProvider>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-20 flex-col border-r bg-background sm:flex">
@@ -221,7 +213,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-4">
-            {/* --- 7. REMOVE onOpenChat prop --- */}
             <SidebarNav />
           </div>
         </aside>
@@ -231,7 +222,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
         </div>
 
-        {/* --- 8. CONDITIONALLY RENDER the global chat --- */}
         {!isDocumentPage && (
           <>
             <ChatToggleButton
@@ -246,5 +236,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       </div>
     </PageProvider>
+    // --- END WRAP ---
   );
 }
