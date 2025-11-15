@@ -3,6 +3,7 @@
 
 'use client';
 
+import { useState } from 'react'; // <-- FIX: Added useState import
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import {
