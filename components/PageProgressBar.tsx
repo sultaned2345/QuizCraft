@@ -9,36 +9,34 @@ export function PageProgressBar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // --- FIX ---
+  // Move useState to the top level.
+  // This state will store the *current* path.
+  const [currentPath, setCurrentPath] = useState(`${pathname}?${searchParams.toString()}`);
+  // --- END FIX ---
+
   useEffect(() => {
     NProgress.configure({ showSpinner: false });
 
     const handleStart = () => NProgress.start();
     const handleStop = () => NProgress.done();
 
-    // We use a combination of pathname and searchParams to detect
-    // *any* route change, even just query param changes.
-    // We use a state variable to track the previous full path.
-    const fullPath = `${pathname}?${searchParams.toString()}`;
-    
-    // We need to store the previous path to compare.
-    // A simple variable won't work due to React's render cycle.
-    // Using state is the idiomatic way.
-    const [previousPath, setPreviousPath] = useState(fullPath);
+    const newPath = `${pathname}?${searchParams.toString()}`;
 
-    if (fullPath !== previousPath) {
+    // Compare the new path from props to the one we have in state
+    if (newPath !== currentPath) {
       handleStart();
-      // We don't call handleStop() here, because the new page
-      // will trigger its own useEffect, and we want the bar to
-      // stay active until the *new* page is hydrated.
-      setPreviousPath(fullPath);
+      // Update the state to the new path
+      setCurrentPath(newPath);
     }
     
-    // This effect runs on the *new* page after navigation.
-    // We call done() here to signify the new page is loaded.
+    // This effect runs *after* the new page component has mounted.
+    // So we can safely call done().
     handleStop();
 
-  }, [pathname, searchParams]); // Dependency array is correct
+    // The dependency array ensures this runs on every path change
+    // and correctly compares against the 'currentPath' state.
+  }, [pathname, searchParams, currentPath]);
 
-  // This component renders nothing. It just runs effects.
   return null;
 }
