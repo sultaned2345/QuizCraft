@@ -85,3 +85,20 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* --- ADDED: NProgress Styles --- */
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  background: oklch(var(--primary)); /* Use theme's primary color */
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  box-shadow: 0 0 10px oklch(var(--primary)), 0 0 5px oklch(var(--primary));
+}
+/* --- END NProgress Styles --- */

@@ -43,10 +43,9 @@ interface ChatInterfaceProps {
   context: PageContextType;
   initialMessages?: Message[];
   isLoadingHistory?: boolean;
-  className?: string; // --- 1. Keep className prop ---
+  className?: string;
 }
 
-// --- (getSourceHref and getSourceIcon are unchanged) ---
 function getSourceHref(source: Source): string {
     if (source.content_type === 'note') {
         return `/notes/${source.content_id}`;
@@ -71,7 +70,7 @@ export function ChatInterface({
   context,
   initialMessages,
   isLoadingHistory: isHistoryLoadingProp = false,
-  className // --- 2. Receive className prop ---
+  className
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [input, setInput] = useState('');
@@ -89,7 +88,6 @@ export function ChatInterface({
   const { toast } = useToast();
 
   // (All action handlers and useEffects remain the same)
-  // ... (handleGenerateQuizFromContext, handleGenerateNotesFromContext, etc.) ...
   const handleGenerateQuizFromContext = () => {
     if (context?.type !== 'document' || !context.id) return;
     setIsActionLoading(true);
@@ -151,8 +149,6 @@ export function ChatInterface({
   };
 
   useEffect(() => {
-    // This logic handles fetching history or showing proactive prompts
-    // It's safe to run in both the modal and the static page
     if (initialMessages && initialMessages.length > 0) {
       setMessages(initialMessages);
       setIsHistoryLoading(isHistoryLoadingProp);
@@ -208,12 +204,10 @@ export function ChatInterface({
           </div>
         );
       } else {
-        // This is the general case for the modal
         setProactivePrompt(null);
         historyFetchUrl = '/api/chat/history';
       }
 
-      // Fetch history
       fetch(historyFetchUrl, {
           headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
@@ -238,7 +232,7 @@ export function ChatInterface({
           setIsHistoryLoading(false);
       });
     }
-  }, [context, session, initialMessages, isHistoryLoadingProp]); // proactive prompts removed from deps
+  }, [context, session, initialMessages, isHistoryLoadingProp]); 
 
   useEffect(() => {
     if (initialMessages) {
@@ -267,7 +261,6 @@ export function ChatInterface({
     }
   }, [input]);
 
-  // --- (sendMessage, handleFormSubmit, etc. are unchanged) ---
   const sendMessage = async (messageText: string) => {
     if (!messageText || !session || isLoading) return;
 
@@ -355,12 +348,11 @@ export function ChatInterface({
     }
   };
 
-  // --- 3. APPLY className prop ---
+  // --- 7. MODIFICATION: Add internal padding and border ---
   return (
-    <div className={cn("flex flex-col h-full", className)}>
-      {/* 4. REMOVE my-4 from ScrollArea, add pr-1 */}
-      <ScrollArea className="h-full flex-1 pr-1" ref={scrollAreaRef as any}>
-        <div className="space-y-4 pr-3">
+    <div className={cn("flex flex-col h-full p-4", className)}>
+      <ScrollArea className="h-full flex-1 -mr-4">
+        <div className="space-y-4 pr-4"> 
           {isHistoryLoading ? (
             <div className="space-y-4">
               <div className="flex items-start gap-3">
@@ -475,8 +467,7 @@ export function ChatInterface({
           )}
         </div>
       </ScrollArea>
-      {/* 5. REMOVE pt-4 and border-t from form */}
-      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 items-start">
+      <form onSubmit={handleFormSubmit} className="flex w-full gap-2 items-start pt-4 border-t">
         <Textarea
           ref={textareaRef}
           rows={1}

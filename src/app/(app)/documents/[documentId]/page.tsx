@@ -15,10 +15,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// import { PopQuizModal } from '@/components/PopQuizModal'; // <-- 1. REMOVE STATIC IMPORT
-import dynamic from 'next/dynamic'; // <-- 2. IMPORT DYNAMIC
+import dynamic from 'next/dynamic';
+import { MarkdownViewer } from '@/components/MarkdownViewer'; // <-- 1. IMPORT MarkdownViewer
 
-// --- 3. LAZY-LOAD THE POPQUIZMODAL ---
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
   {
@@ -29,7 +28,7 @@ const PopQuizModal = dynamic(
     ),
   }
 );
-// --- (Rest of file is unchanged) ---
+
 interface ViewingContentState {
   title: string;
   text: string | null;
@@ -190,11 +189,11 @@ export default function DocumentViewPage() {
           <div className="w-32"></div> 
         </div>
 
-        {/* --- MODIFICATION: Changed lg:grid-cols-2 to lg:grid-cols-5 --- */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 overflow-hidden h-full">
+        {/* --- 2. MODIFICATION: Changed to lg:grid-cols-2 --- */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden h-full">
           
-          {/* --- MODIFICATION: Added lg:col-span-3 --- */}
-          <Card className="flex flex-col h-full overflow-hidden lg:col-span-3">
+          {/* --- 3. MODIFICATION: Changed to lg:col-span-1 --- */}
+          <Card className="flex flex-col h-full overflow-hidden lg:col-span-1">
             <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
               <CardHeader className="pb-0">
                 <TabsList className="grid w-full grid-cols-2">
@@ -222,11 +221,14 @@ export default function DocumentViewPage() {
                       title={`PDF Viewer for ${viewingContent.title}`}
                     />
                   ) : (
-                    <ScrollArea className="h-full max-h-[65vh] pr-3 border rounded-md p-4">
-                      <pre className="text-sm whitespace-pre-wrap break-words">
-                        {viewingContent.text || "No text extracted or file is empty."}
-                      </pre>
+                    // --- 4. MODIFICATION: Replace <pre> with <MarkdownViewer> ---
+                    <ScrollArea className="h-full max-h-[65vh] pr-3">
+                      <MarkdownViewer
+                        content={viewingContent.text || "No text extracted or file is empty."}
+                        className="p-4 border rounded-md"
+                      />
                     </ScrollArea>
+                    // --- END MODIFICATION ---
                   )}
                 </CardContent>
               </TabsContent>
@@ -284,7 +286,7 @@ export default function DocumentViewPage() {
                             ))}
                           </ul>
                         ) : <p className="text-sm text-muted-foreground italic">No main arguments extracted.</p>}
-                      </InsightSection>
+                      </Section>
                       
                       <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
                          {insights.keyConcepts.length > 0 ? (
@@ -302,27 +304,28 @@ export default function DocumentViewPage() {
             </Tabs>
           </Card>
 
-          {/* --- MODIFICATION: Added lg:col-span-2 --- */}
-          <Card className="flex flex-col h-full overflow-hidden lg:col-span-2">
+          {/* --- 5. MODIFICATION: Changed to lg:col-span-1 --- */}
+          <Card className="flex flex-col h-full overflow-hidden lg:col-span-1">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                  <Sparkles className="w-5 h-5 text-primary" />
                  AI Tutor
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden h-full">
+            {/* --- 6. MODIFICATION: Removed padding from CardContent --- */}
+            <CardContent className="flex-1 overflow-hidden h-full p-0">
               <ChatInterface
                 context={pageContext}
                 initialMessages={chatHistory}
                 isLoadingHistory={isHistoryLoading}
-                className="h-full"
+                className="h-full" // This className is passed to ChatInterface
               />
             </CardContent>
+            {/* --- END MODIFICATION --- */}
           </Card>
         </div>
       </div>
       
-      {/* --- 4. RENDER THE LAZY-LOADED MODAL --- */}
       {isPopQuizOpen && (
         <PopQuizModal
           isOpen={isPopQuizOpen}
@@ -334,7 +337,6 @@ export default function DocumentViewPage() {
   );
 }
 
-// (Helper component is unchanged)
 const InsightSection = ({ title, icon, children }: { title: string, icon: React.ReactNode, children: React.ReactNode }) => (
   <div className="space-y-2">
     <h3 className="flex items-center gap-2 font-semibold">

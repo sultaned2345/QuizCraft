@@ -19,7 +19,7 @@ import {
   CreditCard,
   FolderKanban,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, Suspense } from 'react'; // Import Suspense
 import { PageProvider } from '@/contexts/PageContext';
 import {
   Tooltip,
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import dynamic from 'next/dynamic';
 import { ChatToggleButton } from '@/components/ChatToggleButton';
+import { PageProgressBar } from '@/components/PageProgressBar'; // <-- 1. IMPORT
 
 const ChatWidgetContainer = dynamic(
   () =>
@@ -202,6 +203,10 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <PageProvider>
+      {/* 2. WRAP in Suspense to make router events trigger */}
+      <Suspense fallback={null}>
+        <PageProgressBar />
+      </Suspense>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-20 flex-col border-r bg-background sm:flex">
           <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">

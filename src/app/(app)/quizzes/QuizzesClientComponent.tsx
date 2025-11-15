@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Layers, History, Play } from 'lucide-react';
+// --- 1. IMPORT NEW ICONS ---
+import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Layers, History, Play, RefreshCw } from 'lucide-react';
 import { Quiz, QuizAttempt, ApiResponse } from '@/types/database';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -38,7 +39,6 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { QuizPerformanceChart } from '@/components/dashboard/QuizPerformanceChart';
 import { motion } from 'framer-motion';
-// --- 1. IMPORT NEW WIDGET ---
 import { PersonalizedStudyPlan } from '@/components/dashboard/PersonalizedStudyPlan';
 
 
@@ -58,14 +58,6 @@ interface QuizzesClientComponentProps {
   initialData: DashboardData;
 }
 
-
-// --- 2. REMOVE StudyQueueWidget ---
-/*
-function StudyQueueWidget({ dueCount }: { dueCount: number }) {
-  // ... (this component is no longer needed)
-}
-*/
-
 export function QuizzesClientComponent({ initialData }: QuizzesClientComponentProps) { 
   const [quizzes, setQuizzes] = useState<DashboardQuiz[]>(initialData.quizzes);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -73,7 +65,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const [currentPage, setCurrentPage] = useState(initialData.quizzesCurrentPage);
   const [totalPages, setTotalPages] = useState(initialData.quizzesTotalPages);
   const quizzesPerPage = 9;
-  // const [dueCardCount, setDueCardCount] = useState(initialData.dueCardCount); // No longer needed here
   const [recentAttempts, setRecentAttempts] = useState(initialData.recentAttempts);
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([]);
   const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
@@ -85,7 +76,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- 2. Define animation variants ---
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -135,7 +125,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
     toast({ title: "Link copied!", description: "Share link copied." });
   };
 
-  // This function is already optimistic, no changes needed.
   const handleDeleteQuiz = async (quizId: string) => {
     if (!session) { 
       toast({ title: "Error", description: "Not authenticated.", variant: "destructive" }); 
@@ -219,18 +208,14 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
 
   return (
     <>
-      {/* --- 3. MODIFY WIDGET GRID --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-1">
-          {/* <StudyQueueWidget dueCount={dueCardCount} /> */}
-          {/* REPLACE with new widget */}
           <PersonalizedStudyPlan />
         </div>
         <div className="md:col-span-2">
           <QuizPerformanceChart attempts={recentAttempts} />
         </div>
       </div>
-      {/* --- END MODIFICATION --- */}
 
 
       {/* (Quizzes Section Header) */}
@@ -268,108 +253,124 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
           </Button>
         </div>
       ) : (
-        // --- 3. Wrap grid in motion.div ---
         <motion.div 
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          {quizzes.map((quiz) => (
-            // --- 4. Wrap Card in motion.div ---
-            <motion.div key={quiz.id} variants={itemVariants}>
-              <Card
-                className={cn(
-                  'flex flex-col transition-all h-full', // Added h-full
-                  selectedQuizIds.includes(quiz.id) ? 'ring-2 ring-primary' : ''
-                )}
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3 pr-2">
-                      <Checkbox
-                        id={`select-${quiz.id}`}
-                        checked={selectedQuizIds.includes(quiz.id)}
-                        onCheckedChange={() => handleToggleSelectQuiz(quiz.id)}
-                        aria-label={`Select quiz ${quiz.title}`}
-                      />
-                      <label htmlFor={`select-${quiz.id}`} className="cursor-pointer">
-                        <CardTitle className="text-lg">{quiz.title}</CardTitle>
-                      </label>
-                    </div>
+          {quizzes.map((quiz) => {
+            // --- 2. ADD LOGIC FOR SMART BUTTON ---
+            const hasAttempted = recentAttempts.some(a => a.quiz_id === quiz.id);
 
-                    <AlertDialog>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}>
-                            <FileQuestion className="w-4 h-4 mr-2" />
-                            View Quiz
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit Quiz
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
-                            <Copy className="w-4 h-4 mr-2" />
-                            Copy Link
-                          </DropdownMenuItem>
-                          <AlertDialogTrigger asChild>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onSelect={(e) => e.preventDefault()}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
+            return (
+              <motion.div key={quiz.id} variants={itemVariants}>
+                <Card
+                  className={cn(
+                    'flex flex-col transition-all h-full', // Added h-full
+                    selectedQuizIds.includes(quiz.id) ? 'ring-2 ring-primary' : ''
+                  )}
+                >
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3 pr-2">
+                        <Checkbox
+                          id={`select-${quiz.id}`}
+                          checked={selectedQuizIds.includes(quiz.id)}
+                          onCheckedChange={() => handleToggleSelectQuiz(quiz.id)}
+                          aria-label={`Select quiz ${quiz.title}`}
+                        />
+                        <label htmlFor={`select-${quiz.id}`} className="cursor-pointer">
+                          <CardTitle className="text-lg">{quiz.title}</CardTitle>
+                        </label>
+                      </div>
+
+                      <AlertDialog>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {/* --- 3. REMOVE "View Quiz" --- */}
+                            {/* <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}>
+                              <FileQuestion className="w-4 h-4 mr-2" />
+                              View Quiz
+                            </DropdownMenuItem> */}
+                            <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit Quiz
                             </DropdownMenuItem>
-                          </AlertDialogTrigger>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete the quiz titled:
-                            <br />
-                            <strong className="py-2 inline-block">{quiz.title}</strong>
-                            <br />
-                            This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            className={cn(buttonVariants({ variant: 'destructive' }))}
-                            disabled={isDeleting}
-                            onClick={() => handleDeleteQuiz(quiz.id)}
-                          >
-                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-grow">
-                  <div className="flex items-center text-sm text-muted-foreground gap-2">
-                    <FileQuestion className="w-4 h-4" />
-                    <span>{quiz.questionsCount} Questions</span>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex justify-between items-center text-sm">
-                  <Badge variant={quiz.is_public ? 'default' : 'secondary'}>
-                    {quiz.is_public ? 'Public' : 'Draft'}
-                  </Badge>
-                  <span className="text-muted-foreground">{formatDate(quiz.created_at)}</span>
-                </CardFooter>
-              </Card>
-            </motion.div>
-          ))}
+                            <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
+                              <Copy className="w-4 h-4 mr-2" />
+                              Copy Link
+                            </DropdownMenuItem>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={(e) => e.preventDefault()}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete the quiz titled:
+                              <br />
+                              <strong className="py-2 inline-block">{quiz.title}</strong>
+                              <br />
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className={cn(buttonVariants({ variant: 'destructive' }))}
+                              disabled={isDeleting}
+                              onClick={() => handleDeleteQuiz(quiz.id)}
+                            >
+                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-grow">
+                    <div className="flex items-center text-sm text-muted-foreground gap-2">
+                      <FileQuestion className="w-4 h-4" />
+                      <span>{quiz.questionsCount} Questions</span>
+                    </div>
+                  </CardContent>
+                  {/* --- 4. MODIFY CardFooter --- */}
+                  <CardFooter className="flex justify-between items-center text-sm">
+                    <Badge variant={quiz.is_public ? 'default' : 'secondary'}>
+                      {quiz.is_public ? 'Public' : 'Draft'}
+                    </Badge>
+                    
+                    <Button asChild size="sm">
+                      <Link href={`/quiz/${quiz.id}`}>
+                        {hasAttempted ? (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        ) : (
+                          <Play className="w-4 h-4 mr-2" />
+                        )}
+                        {hasAttempted ? "Try Again" : "Start Quiz"}
+                      </Link>
+                    </Button>
+                  </CardFooter>
+                  {/* --- END MODIFICATION --- */}
+                </Card>
+              </motion.div>
+            )
+          })}
         </motion.div>
       )}
 
