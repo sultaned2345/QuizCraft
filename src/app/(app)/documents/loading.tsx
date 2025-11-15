@@ -1,18 +1,18 @@
 // src/app/(app)/documents/loading.tsx
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocumentCardSkeleton } from "@/components/skeletons/DocumentCardSkeleton";
-import { Loader2 } from "lucide-react"; // Import Loader
+import { Loader2, FileText } from "lucide-react"; // Import icon
 
 export default function DocumentsLoading() {
   return (
     <>
-      {/* --- ADDED LOADING HEADER --- */}
-      <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground text-center mb-8 p-8 border border-dashed rounded-lg">
-        <Loader2 className="h-10 w-10 animate-spin" />
-        <h2 className="text-2xl font-semibold">Loading Documents...</h2>
+      {/* --- Branded Loading Header --- */}
+      <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground text-center mb-8 p-8 border border-dashed rounded-lg bg-card/50">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <h2 className="text-2xl font-semibold text-foreground">Loading Documents...</h2>
         <p className="text-sm">Getting your files ready.</p>
       </div>
-      {/* --- END ADDED HEADER --- */}
+      {/* --- END Branded Header --- */}
 
       {/* Header & Upload Skeleton (unchanged) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
