@@ -1,6 +1,6 @@
 // src/app/layout.tsx
-import type React from "react"
 import type { Metadata } from "next"
+import type { ReactNode } from "react" // <-- THIS IS THE FIX
 import { Inter } from "next/font/google"
 import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: ReactNode // <-- THIS IS THE FIX
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
