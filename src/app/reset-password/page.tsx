@@ -1,129 +1,159 @@
+// src/app/reset-password/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient'; // We need the client to update the password
 
-export default function ResetPage() {
-  const [email, setEmail] = useState('');
+export default function ResetPasswordPage() {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const { resetPassword } = useAuth();
+  
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // This page handles the *actual* password update after the user clicks the email link.
+  // The token is in the URL fragment, not search params.
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Supabase password reset link puts the token in the URL hash
+    // We need to parse it on the client
+    const hash = window.location.hash;
+    const params = new URLSearchParams(hash.substring(1)); // remove '#'
+    const accessToken = params.get('access_token');
+    
+    if (accessToken) {
+      setToken(accessToken);
+    } else {
+      setError("Invalid or missing reset token. Please request a new link.");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
     setMessage('');
-
-    // Client-side validation
-    if (!email.trim()) {
-      setError('Email is required');
-      setLoading(false);
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
-
-    if (!email.includes('@')) {
-      setError('Please enter a valid email address');
-      setLoading(false);
+    if (!token) {
+      setError('No reset token found. Please use the link from your email.');
       return;
     }
+    
+    setLoading(true);
 
-    try {
-      console.log('Sending password reset for:', email);
-      const { error } = await resetPassword(email.trim());
-      
-      if (error) {
-        console.error('Reset password error:', error);
-        setError(error.message || 'Failed to send reset link. Please try again.');
-      } else {
-        console.log('Reset email sent successfully');
-        setMessage('Check your email for a password reset link!');
-        setEmail(''); // Clear form on success
-      }
-    } catch (err: any) {
-      console.error('Unexpected reset password error:', err);
-      setError('An unexpected error occurred. Please try again.');
+    // Use the Supabase client to update the user's password
+    const { error } = await supabase.auth.updateUser({ password: password });
+
+    if (error) {
+      setError(error.message || 'Failed to update password. The link may have expired.');
+    } else {
+      setMessage('Password updated successfully! Redirecting to login...');
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
     }
     
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Reset password</CardTitle>
-          <CardDescription>Enter your email to receive a reset link</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="Enter your email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                required 
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2">
+      {/* Form Column */}
+      <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-sm gap-6">
+          <div className="grid gap-2 text-center">
+            <h1 className="text-3xl font-bold">Set New Password</h1>
+            <p className="text-muted-foreground">
+              Enter and confirm your new password.
+            </p>
+          </div>
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <div className="grid gap-2">
+              <Label htmlFor="password">New Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="6+ characters"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading || message !== ''}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Re-enter password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={loading || message !== ''}
               />
             </div>
 
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
-                {error}
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
             {message && (
-              <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-md p-3">
-                {message}
+              <div className="flex items-start gap-3 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                <span>{message}</span>
               </div>
             )}
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
+              disabled={loading || message !== '' || !token}
               className="w-full"
-              disabled={loading || !email.trim()}
             >
-              {loading ? 'Sending...' : 'Send Reset Link'}
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Update Password
             </Button>
           </form>
-
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">
-              Remember your password?{" "}
-              <Link href="/login" className="text-primary hover:underline underline-offset-4">
-                Sign in
-              </Link>
-            </div>
+          <div className="mt-4 text-center text-sm">
+            Remembered your password?{" "}
+            <Link href="/login" className="text-primary underline-offset-4 hover:underline font-semibold">
+              Sign In
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Brand Column */}
+      <div className="hidden lg:flex items-center justify-center bg-muted/40 p-10 flex-col gap-6">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="bg-primary text-primary-foreground p-2 rounded-lg">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <span className="text-3xl font-bold tracking-tight">QuizCraft</span>
+        </Link>
+        <div className="text-center max-w-md">
+          <p className="text-lg italic text-muted-foreground">
+            &ldquo;This app is a game-changer for my midterms. I turned a 40-page PDF into a practice quiz in 30 seconds.&rdquo;
+          </p>
+          <p className="font-semibold text-foreground mt-4">&mdash; Sarah J, University Student</p>
+        </div>
+      </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

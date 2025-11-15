@@ -39,9 +39,7 @@ export default function LoginPage() {
       if (error) {
         setError(error.message || 'Invalid login credentials. Please try again.');
       } else {
-        // --- THIS IS THE CHANGE ---
         router.push('/documents');
-        // --- END OF CHANGE ---
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
@@ -51,19 +49,18 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
-      <div className="flex items-center gap-2 mb-8">
-        <Sparkles className="w-8 h-8 text-primary" />
-        <span className="text-3xl font-bold">QuizCraft</span>
-      </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>Sign in to continue to your dashboard.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2">
+      {/* Form Column */}
+      <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-sm gap-6">
+          <div className="grid gap-2 text-center">
+            <h1 className="text-3xl font-bold">Welcome Back</h1>
+            <p className="text-muted-foreground">
+              Sign in to continue to your dashboard.
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="grid gap-4">
+            <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -75,12 +72,12 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="grid gap-2">
+              <div className="flex items-center">
                 <Label htmlFor="password">Password</Label>
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
+                  className="ml-auto inline-block text-sm text-primary underline-offset-4 hover:underline"
                 >
                   Forgot?
                 </Link>
@@ -108,18 +105,30 @@ export default function LoginPage() {
               Sign In
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don't have an account?{' '}
-            <Link
-              href="/signup"
-              className="text-primary hover:underline underline-offset-4 font-semibold"
-            >
+          <div className="mt-4 text-center text-sm">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-primary underline-offset-4 hover:underline font-semibold">
               Sign Up
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Brand Column */}
+      <div className="hidden lg:flex items-center justify-center bg-muted/40 p-10 flex-col gap-6">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="bg-primary text-primary-foreground p-2 rounded-lg">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <span className="text-3xl font-bold tracking-tight">QuizCraft</span>
+        </Link>
+        <div className="text-center max-w-md">
+          <p className="text-lg italic text-muted-foreground">
+            &ldquo;This app is a game-changer for my midterms. I turned a 40-page PDF into a practice quiz in 30 seconds.&rdquo;
+          </p>
+          <p className="font-semibold text-foreground mt-4">&mdash; Sarah J, University Student</p>
+        </div>
+      </div>
     </div>
   );
 }

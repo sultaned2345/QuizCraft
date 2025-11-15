@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/theme-toggle";
-// We don't need the Footer import here, as it's in layout.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -31,7 +30,7 @@ import {
   Briefcase,
 } from "lucide-react";
 
-// --- Sub-Components for the Page ---
+// --- Components ---
 
 function LandingHeader() {
   const { user, loading } = useAuth();
@@ -290,7 +289,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- NEW: Use Cases Section --- */}
+        {/* Use Cases Section */}
         <section className="py-24 bg-muted/30">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
@@ -358,7 +357,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- NEW: Testimonials Section --- */}
+        {/* Testimonials Section */}
         <section className="py-24 bg-background">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
@@ -387,7 +386,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- NEW: FAQ Section --- */}
+        {/* FAQ Section */}
         <section className="py-24 bg-muted/30">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
@@ -423,7 +422,7 @@ export default function LandingPage() {
         </section>
 
         {/* CTA Section */}
-        <section className="py-24 bg-primary/5 border-t border-primary/10">
+        <section className="py-24 bg-primary/5 border-t border-b border-primary/10">
           <div className="container mx-auto px-4 md:px-6 text-center">
             <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">
               Ready to upgrade your grades?
@@ -446,7 +445,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer is provided by src/app/layout.tsx, so it is not needed here */}
+      {/* Footer is provided by src/app/layout.tsx */}
     </div>
   );
 }
