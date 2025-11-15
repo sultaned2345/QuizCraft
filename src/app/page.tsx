@@ -1,10 +1,7 @@
 // src/app/page.tsx
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { LandingHeader } from "@/components/LandingHeader";
+import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -30,47 +27,7 @@ import {
   Briefcase,
 } from "lucide-react";
 
-// --- Components ---
-
-function LandingHeader() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-sm">
-      <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <div className="bg-primary text-primary-foreground p-1 rounded-md">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">QuizCraft</span>
-        </Link>
-        
-        <nav className="flex items-center gap-4">
-          <ThemeToggle />
-          {!loading && (
-            <>
-              {user ? (
-                <Button onClick={() => router.push("/documents")}>
-                  My Dashboard <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" asChild className="hidden sm:inline-flex">
-                    <Link href="/login">Log In</Link>
-                  </Button>
-                  <Button asChild>
-                    <Link href="/signup">Get Started</Link>
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </nav>
-      </div>
-    </header>
-  );
-}
+// --- Sub-Components for the Page (Server Components) ---
 
 function FeatureCard({
   icon,
@@ -82,7 +39,8 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <Card className="border-muted bg-card/50 hover:bg-card transition-colors duration-300">
+    // --- REFINEMENT: Added hover:scale-105, shadow, and transition ---
+    <Card className="border-muted bg-card/50 transition-all duration-300 ease-in-out hover:scale-[1.03] hover:shadow-lg">
       <CardHeader>
         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4">
           {icon}
@@ -108,9 +66,10 @@ function StepCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center text-center p-6">
+    // --- REFINEMENT: Added hover effect and transition ---
+    <div className="flex flex-col items-center text-center p-6 rounded-xl transition-all duration-300 ease-in-out hover:scale-105 hover:bg-card/60">
       <div className="relative mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center text-primary">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
           {icon}
         </div>
         <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold border-4 border-background">
@@ -133,7 +92,8 @@ function TestimonialCard({
   title: string;
 }) {
   return (
-    <Card className="h-full flex flex-col bg-card/50 border-muted">
+    // --- REFINEMENT: Added shadow-lg for prominence ---
+    <Card className="h-full flex flex-col bg-card/50 border-muted shadow-lg">
       <CardContent className="pt-6 flex-1">
         <blockquote className="text-lg leading-relaxed text-foreground">
           "{quote}"
@@ -154,29 +114,18 @@ function TestimonialCard({
   );
 }
 
-// --- Main Page Component ---
+// --- Main Page Component (Server Component) ---
 
 export default function LandingPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  const handleGetStarted = () => {
-    if (loading) return;
-    if (user) {
-      router.push("/documents"); // Default to documents if logged in
-    } else {
-      router.push("/signup"); // Go to signup if not logged in
-    }
-  };
-
   return (
     <div className="flex flex-col min-h-screen font-sans">
-      <LandingHeader />
+      <LandingHeader /> {/* Use the Client Component for the header */}
 
       <main className="flex-1">
         {/* Hero Section */}
         <section className="relative py-20 md:py-32 overflow-hidden">
-          <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
+          {/* --- REFINEMENT: Added backdrop-blur-sm --- */}
+          <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px] backdrop-blur-sm"></div>
           <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-[310px] rounded-full bg-primary/20 opacity-20 blur-[100px]"></div>
           
           <div className="container mx-auto px-4 md:px-6 text-center">
@@ -195,17 +144,18 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="h-12 px-8 text-base rounded-full" onClick={handleGetStarted}>
+              {/* --- REFINEMENT: Added shadow-lg and hover:shadow-primary/40 --- */}
+              <Button size="lg" className="h-12 px-8 text-base rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-shadow" asChild>
+                <Link href="/signup">
                   Start Studying for Free
                   <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
-              {!user && !loading && (
-                <Button size="lg" variant="outline" className="h-12 px-8 text-base rounded-full" asChild>
-                  <Link href="/login">
-                    Log In
-                  </Link>
-                </Button>
-              )}
+              <Button size="lg" variant="outline" className="h-12 px-8 text-base rounded-full" asChild>
+                <Link href="/login">
+                  Log In
+                </Link>
+              </Button>
             </div>
           </div>
         </section>
@@ -265,7 +215,7 @@ export default function LandingPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto relative">
               {/* Connector Line (Desktop only) */}
-              <div className="hidden md:block absolute top-14 left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-transparent via-primary/20 to-transparent -z-10" />
+              <div className="hidden md:block absolute top-14 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/10 to-transparent -z-10" />
               
               <StepCard 
                 number="1"
@@ -432,8 +382,10 @@ export default function LandingPage() {
               Get started today for free.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-               <Button size="lg" className="h-12 px-8 rounded-full text-lg shadow-lg shadow-primary/20" onClick={handleGetStarted}>
+               <Button size="lg" className="h-12 px-8 rounded-full text-lg shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-shadow" asChild>
+                <Link href="/signup">
                   Get Started Now <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
                </Button>
             </div>
             <p className="mt-6 text-sm text-muted-foreground flex items-center justify-center gap-2">

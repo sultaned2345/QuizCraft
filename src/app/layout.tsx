@@ -3,10 +3,12 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { Suspense } from "react"
-import { Providers } from "./providers"; // <-- 1. IMPORT
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
 import { Footer } from "@/components/Footer"
-// --- 2. REMOVE imports for AuthProvider, ThemeProvider, UpgradeModalProvider ---
+// --- 1. IMPORT FROM THE CORRECTED PATH ---
+import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
 
 // Main sans-serif font
 const inter = Inter({
@@ -28,14 +30,18 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="antialiased flex flex-col min-h-screen">
-        {/* --- 3. USE THE NEW PROVIDERS COMPONENT --- */}
-        <Providers>
-          <div className="flex-1 flex flex-col">
-            <Suspense fallback={null}>{children}</Suspense>
-          </div>
-          <Footer />
-        </Providers>
-        {/* --- END OF CHANGE --- */}
+        <AuthProvider>
+          <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
+            {/* 2. WRAP with Provider */}
+            <UpgradeModalProvider>
+              <div className="flex-1 flex flex-col">
+                <Suspense fallback={null}>{children}</Suspense>
+              </div>
+              <Footer />
+            </UpgradeModalProvider>
+            {/* 3. END WRAP */}
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   )
