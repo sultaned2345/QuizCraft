@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import dynamic from 'next/dynamic';
-import { MarkdownViewer } from '@/components/MarkdownViewer'; // <-- 1. IMPORT MarkdownViewer
+import { MarkdownViewer } from '@/components/MarkdownViewer';
 
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
@@ -221,14 +221,12 @@ export default function DocumentViewPage() {
                       title={`PDF Viewer for ${viewingContent.title}`}
                     />
                   ) : (
-                    // --- 4. MODIFICATION: Replace <pre> with <MarkdownViewer> ---
                     <ScrollArea className="h-full max-h-[65vh] pr-3">
                       <MarkdownViewer
                         content={viewingContent.text || "No text extracted or file is empty."}
                         className="p-4 border rounded-md"
                       />
                     </ScrollArea>
-                    // --- END MODIFICATION ---
                   )}
                 </CardContent>
               </TabsContent>
@@ -286,7 +284,8 @@ export default function DocumentViewPage() {
                             ))}
                           </ul>
                         ) : <p className="text-sm text-muted-foreground italic">No main arguments extracted.</p>}
-                      </Section>
+                      </InsightSection> 
+                      {/* // <-- FIX HERE: Was </Section> */}
                       
                       <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
                          {insights.keyConcepts.length > 0 ? (
@@ -312,16 +311,14 @@ export default function DocumentViewPage() {
                  AI Tutor
               </CardTitle>
             </CardHeader>
-            {/* --- 6. MODIFICATION: Removed padding from CardContent --- */}
             <CardContent className="flex-1 overflow-hidden h-full p-0">
               <ChatInterface
                 context={pageContext}
                 initialMessages={chatHistory}
                 isLoadingHistory={isHistoryLoading}
-                className="h-full" // This className is passed to ChatInterface
+                className="h-full" 
               />
             </CardContent>
-            {/* --- END MODIFICATION --- */}
           </Card>
         </div>
       </div>
