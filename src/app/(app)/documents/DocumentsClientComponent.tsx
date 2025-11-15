@@ -5,6 +5,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr'; // <-- 1. IMPORT useSWR
 import { fetcher } from '@/lib/fetcher'; // <-- 2. IMPORT fetcher
+import { useAuth } from '@/contexts/AuthContext'; // <-- THIS IS THE FIX
 import { ApiResponse, DocumentMetadata } from '@/types/database'; 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
@@ -294,7 +295,7 @@ export function DocumentsClientComponent() {
         <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
         <h3 className="mt-4 text-lg font-semibold text-destructive">Failed to Load Documents</h3>
         <p className="mt-1 text-sm text-muted-foreground">{swrError.message}</p>
-        <Button className="mt-6" variant="outline" onClick={() => refreshFirstPage()}>
+        <Button className="mt-6" variant="outline" onClick={() => refreshFirstPage(undefined, { revalidate: true })}>
           <RefreshCw className="w-4 h-4 mr-2" /> {/* Changed to RefreshCw */}
           Try Again
         </Button>
@@ -360,7 +361,7 @@ export function DocumentsClientComponent() {
                   <motion.div key={doc.id} variants={itemVariants}>
                     <Card className="flex flex-col h-full">
                       <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
-                        <div className="space-y-1 overflow-hidden">
+                        <div className="space-y-1 overflow-hidden flex-1">
                           <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
                           <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
                           <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
