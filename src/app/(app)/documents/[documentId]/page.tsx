@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -184,8 +184,8 @@ export default function DocumentViewPage() {
 
   return (
     <>
-      {/* --- THIS IS THE FIX: Use h-full and flex-col --- */}
-      <div className="flex flex-col h-full">
+      {/* --- THIS IS THE FIX: Use flex-1 and overflow-hidden --- */}
+      <div className="flex flex-col flex-1 overflow-hidden">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-4">
           <Button variant="ghost" onClick={() => router.push('/documents')}>
@@ -198,7 +198,7 @@ export default function DocumentViewPage() {
           <div className="w-32"></div> 
         </div>
 
-        {/* --- THIS IS THE FIX: Use ResizablePanelGroup --- */}
+        {/* --- ResizablePanelGroup now correctly fills the flex-1 space --- */}
         <ResizablePanelGroup
           direction="horizontal"
           className="flex-1 rounded-lg border overflow-hidden"
