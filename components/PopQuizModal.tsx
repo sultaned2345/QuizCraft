@@ -7,14 +7,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
-import { Button }ANd { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // <-- FIX WAS HERE
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Question } from '@/types/database';
-import { Loader2, Check, X, RotateCw, Trophy, Target } from 'lucide-react';
+import { Loader2, Check, X, RotateCw, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -26,6 +24,16 @@ interface PopQuizModalProps {
 }
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
+
+// Helper function to shuffle an array
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // Swap
+  }
+  return newArray;
+}
 
 export function PopQuizModal({
   isOpen,
@@ -40,20 +48,22 @@ export function PopQuizModal({
   const [isFinished, setIsFinished] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
 
-  // Shuffle questions and answers on load
+  // Shuffle questions and answers when modal opens
   useEffect(() => {
-    if (questions.length > 0) {
-      const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+    if (isOpen && questions.length > 0) {
+      const shuffledQuestions = shuffleArray(questions);
+      
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'multiple_choice' && q.options) {
+        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
           const options = q.options as { text: string; is_correct: boolean }[];
           return {
             ...q,
-            options: [...options].sort(() => Math.random() - 0.5),
+            options: shuffleArray(options),
           };
         }
         return q;
       });
+      
       setQuizQuestions(questionsWithShuffledOptions);
       // Reset all states
       setCurrentQuestionIndex(0);
@@ -62,7 +72,7 @@ export function PopQuizModal({
       setCorrectAnswers(0);
       setIsFinished(false);
     }
-  }, [isOpen, questions]); // Reruns when modal is opened
+  }, [isOpen, questions]); // Reruns when modal is opened or questions change
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / quizQuestions.length) * 100;
@@ -71,12 +81,14 @@ export function PopQuizModal({
     if (answerStatus !== 'unanswered') return; // Already answered
 
     setSelectedAnswer(answer);
-    const isCorrect =
-      currentQuestion.question_type === 'multiple_choice'
-        ? (currentQuestion.options as { text: string; is_correct: boolean }[]).find(
-            (opt) => opt.text === answer
-          )?.is_correct
-        : currentQuestion.answer === answer; // Assuming True/False has answer field
+    
+    let isCorrect = false;
+    if (currentQuestion.question_type === 'multiple_choice') {
+      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
+      isCorrect = options.find((opt) => opt.text === answer)?.is_correct ?? false;
+    } else if (currentQuestion.question_type === 'true_false') {
+      isCorrect = currentQuestion.answer === answer;
+    }
 
     if (isCorrect) {
       setAnswerStatus('correct');
@@ -98,15 +110,15 @@ export function PopQuizModal({
   };
 
   const handleRestart = () => {
-    // Reshuffle and reset
+    // Just trigger the useEffect
     if (questions.length > 0) {
-      const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+      const shuffledQuestions = shuffleArray(questions);
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'multiple_choice' && q.options) {
+        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
           const options = q.options as { text: string; is_correct: boolean }[];
           return {
             ...q,
-            options: [...options].sort(() => Math.random() - 0.5),
+            options: shuffleArray(options),
           };
         }
         return q;
@@ -122,30 +134,35 @@ export function PopQuizModal({
 
   const getOptionClass = (optionText: string) => {
     if (answerStatus === 'unanswered') {
-      return 'border-border';
+      return 'border-border hover:bg-muted/50';
     }
 
-    const isCorrect =
-      currentQuestion.question_type === 'multiple_choice'
-        ? (currentQuestion.options as { text: string; is_correct: boolean }[]).find(
-            (opt) => opt.text === optionText
-          )?.is_correct
-        : currentQuestion.answer === optionText;
+    let isCorrect = false;
+    if (currentQuestion.question_type === 'multiple_choice') {
+      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
+      isCorrect = options.find((opt) => opt.text === optionText)?.is_correct ?? false;
+    } else if (currentQuestion.question_type === 'true_false') {
+      isCorrect = currentQuestion.answer === optionText;
+    }
 
     if (isCorrect) {
-      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500'; // Correct answer
+      // Is the correct answer
+      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
     }
     if (selectedAnswer === optionText && !isCorrect) {
-      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive'; // Selected incorrect
+      // Is the selected, incorrect answer
+      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
     }
-    return 'border-border opacity-60'; // Not selected
+    
+    // Is neither selected nor correct (an incorrect option)
+    return 'border-border opacity-60';
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl p-0" onInteractOutside={(e) => e.preventDefault()}>
         <AnimatePresence mode="wait">
-          {!quizQuestions || quizQuestions.length === 0 ? (
+          {!currentQuestion ? (
             <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
@@ -207,23 +224,22 @@ export function PopQuizModal({
                       {/* Multiple Choice */}
                       {currentQuestion.question_type === 'multiple_choice' &&
                         (currentQuestion.options as { text: string; is_correct: boolean }[]).map(
-                          (option) => (
+                          (option)_ => (
                             <Button
                               key={option.text}
                               variant="outline"
                               className={cn(
                                 'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
                                 answerStatus !== 'unanswered' && 'pointer-events-none',
-                                selectedAnswer === option.text && 'ring-2 ring-primary',
-                                answerStatus !== 'unanswered' && getOptionClass(option.text)
+                                getOptionClass(option.text)
                               )}
                               onClick={() => handleAnswerSelect(option.text)}
                             >
                               <span className="flex-1">{option.text}</span>
-                              {answerStatus === 'correct' && selectedAnswer === option.text && (
+                              {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('green') && (
                                 <Check className="w-5 h-5 ml-2 text-green-600" />
                               )}
-                              {answerStatus === 'incorrect' && selectedAnswer === option.text && (
+                              {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('destructive') && (
                                 <X className="w-5 h-5 ml-2 text-destructive" />
                               )}
                             </Button>
@@ -239,16 +255,15 @@ export function PopQuizModal({
                             className={cn(
                               'h-12 w-full text-left p-4',
                               answerStatus !== 'unanswered' && 'pointer-events-none',
-                              selectedAnswer === option && 'ring-2 ring-primary',
-                              answerStatus !== 'unanswered' && getOptionClass(option)
+                              getOptionClass(option)
                             )}
                             onClick={() => handleAnswerSelect(option)}
                           >
                             <span className="flex-1">{option}</span>
-                            {answerStatus === 'correct' && selectedAnswer === option && (
+                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && (
                               <Check className="w-5 h-5 ml-2 text-green-600" />
                             )}
-                            {answerStatus === 'incorrect' && selectedAnswer === option && (
+                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('destructive') && (
                               <X className="w-5 h-5 ml-2 text-destructive" />
                             )}
                           </Button>
@@ -289,15 +304,15 @@ export function PopQuizModal({
                 </Card>
               </div>
 
-              <DialogFooter className="p-6 pt-0">
+              <div className="p-6 pt-0 flex justify-end">
                 <Button
-                  className="w-full"
+                  className="w-full sm:w-auto"
                   disabled={answerStatus === 'unanswered'}
                   onClick={handleNext}
                 >
-                  {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next'}
+                  {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next Question'}
                 </Button>
-              </DialogFooter>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
