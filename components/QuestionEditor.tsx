@@ -99,7 +99,7 @@ export function QuestionEditor({
   };
   // --- END NEW ---
 
-  // --- Handlers for MATCHING type (Unchanged) ---
+  // Handlers for MATCHING type
   const handleMatchingChange = (
     type: 'prompt' | 'option',
     pairIndex: number,
@@ -128,11 +128,11 @@ export function QuestionEditor({
   const addMatchingPair = () => {
     const newPrompts = [
       ...(Array.isArray(question.prompts) ? question.prompts : []),
-      `Prompt ${question.prompts.length + 1}`,
+      `Prompt ${question.prompts ? question.prompts.length + 1 : 1}`,
     ];
     const newOptions = [
       ...(Array.isArray(question.options) ? question.options : []),
-      `Answer ${question.options.length + 1}`,
+      `Answer ${question.options ? question.options.length + 1 : 1}`,
     ];
     onQuestionChange(index, {
       ...question,
@@ -156,7 +156,6 @@ export function QuestionEditor({
       options: newOptions,
     });
   };
-  // --- END MATCHING Handlers ---
 
   return (
     <Card className="relative overflow-hidden">
@@ -314,7 +313,7 @@ export function QuestionEditor({
                           : 'text-muted-foreground opacity-50 cursor-not-allowed'
                       )}
                       onClick={() => removeMatchingPair(pairIndex)}
-                      disabled={question.prompts.length <= 1}
+                      disabled={!question.prompts || question.prompts.length <= 1}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

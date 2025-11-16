@@ -37,7 +37,10 @@ interface QuizData {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
-// (shuffleArray helper function is unchanged)
+// This is the type for the question state, including our new shuffled property
+type QuizQuestion = Question & { shuffledOptions?: string[] };
+
+// Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -47,15 +50,194 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
+// --- NEW SUB-COMPONENT ---
+/**
+ * A self-contained component to render the Matching Question UI.
+ */
+function MatchingQuestionUI({
+  question,
+  answerStatus,
+  onQuestionComplete,
+}: {
+  question: QuizQuestion;
+  answerStatus: AnswerStatus;
+  onQuestionComplete: (isCorrect: boolean) => void;
+}) {
+  const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
+  // userMatches[promptIndex] = optionIndex
+  const [userMatches, setUserMatches] = useState<(number | null)[]>([]);
+
+  const {
+    prompts,
+    options: correctOptions, // This is the unshuffled answer key
+    shuffledOptions, // This is the shuffled list for display
+  } = useMemo(() => ({
+    prompts: (question.prompts as string[]) || [],
+    options: (question.options as string[]) || [],
+    shuffledOptions: question.shuffledOptions || [],
+  }), [question]);
+
+  // Reset state when the question changes
+  useEffect(() => {
+    setUserMatches(new Array(prompts.length).fill(null));
+    setSelectedPromptIdx(null);
+  }, [prompts]);
+
+  const handlePromptClick = (promptIdx: number) => {
+    if (answerStatus !== 'unanswered') return;
+
+    if (userMatches[promptIdx] !== null) {
+      // This prompt is already matched, clear its match
+      const newUserMatches = [...userMatches];
+      newUserMatches[promptIdx] = null;
+      setUserMatches(newUserMatches);
+      setSelectedPromptIdx(promptIdx); // Reselect it
+    } else {
+      setSelectedPromptIdx(promptIdx);
+    }
+  };
+
+  const handleOptionClick = (optionIdx: number) => {
+    if (answerStatus !== 'unanswered' || selectedPromptIdx === null) return;
+
+    const newUserMatches = [...userMatches];
+    // Clear if this option was used elsewhere
+    const existingMatchIdx = newUserMatches.indexOf(optionIdx);
+    if (existingMatchIdx > -1) {
+      newUserMatches[existingMatchIdx] = null;
+    }
+    // Set new match
+    newUserMatches[selectedPromptIdx] = optionIdx;
+    setUserMatches(newUserMatches);
+    setSelectedPromptIdx(null);
+  };
+
+  const handleSubmit = () => {
+    if (answerStatus !== 'unanswered') return;
+
+    let correctCount = 0;
+    for (let pIdx = 0; pIdx < prompts.length; pIdx++) {
+      const correctAns = correctOptions[pIdx];
+      const userOptionIdx = userMatches[pIdx];
+      if (userOptionIdx !== null) {
+        const userAns = shuffledOptions[userOptionIdx];
+        if (userAns === correctAns) {
+          correctCount++;
+        }
+      }
+    }
+    onQuestionComplete(correctCount === prompts.length);
+  };
+
+  const allMatched = useMemo(
+    () => userMatches.every((m) => m !== null),
+    [userMatches]
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {/* Prompts Column */}
+        <div className="space-y-2">
+          {prompts.map((prompt, pIdx) => {
+            const isSelected = selectedPromptIdx === pIdx;
+            const isMatched = userMatches[pIdx] !== null;
+            let state: 'default' | 'selected' | 'matched' | 'correct' | 'incorrect' = 'default';
+
+            if (answerStatus === 'unanswered') {
+              if (isSelected) state = 'selected';
+              else if (isMatched) state = 'matched';
+            } else {
+              // After submission
+              const correctAns = correctOptions[pIdx];
+              const userAns = userMatches[pIdx] !== null ? shuffledOptions[userMatches[pIdx]!] : null;
+              state = userAns === correctAns ? 'correct' : 'incorrect';
+            }
+
+            return (
+              <Button
+                key={pIdx}
+                variant="outline"
+                onClick={() => handlePromptClick(pIdx)}
+                className={cn(
+                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
+                  state === 'selected' && 'ring-2 ring-primary',
+                  state === 'matched' && 'bg-primary/10 text-primary-foreground',
+                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
+                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none'
+                )}
+                disabled={answerStatus !== 'unanswered'}
+              >
+                {prompt}
+              </Button>
+            );
+          })}
+        </div>
+        
+        {/* Options Column */}
+        <div className="space-y-2">
+          {shuffledOptions.map((option, oIdx) => {
+            const isMatched = userMatches.includes(oIdx);
+            let state: 'default' | 'matched' | 'correct' | 'incorrect' = 'default';
+
+            if (answerStatus === 'unanswered') {
+              if (isMatched) state = 'matched';
+            } else {
+              // After submission
+              const promptIdx = userMatches.indexOf(oIdx);
+              if (promptIdx > -1) {
+                const correctAns = correctOptions[promptIdx];
+                state = option === correctAns ? 'correct' : 'incorrect';
+              } else {
+                state = 'default'; // This option wasn't even selected
+              }
+            }
+            
+            return (
+              <Button
+                key={oIdx}
+                variant="outline"
+                onClick={() => handleOptionClick(oIdx)}
+                className={cn(
+                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
+                  state === 'matched' && 'bg-primary/10 text-primary-foreground opacity-50',
+                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
+                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none',
+                  answerStatus === 'unanswered' && selectedPromptIdx === null && 'cursor-not-allowed opacity-60'
+                )}
+                disabled={answerStatus !== 'unanswered' || selectedPromptIdx === null}
+              >
+                {option}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Submit Button */}
+      {answerStatus === 'unanswered' && (
+         <Button
+           className="w-full"
+           disabled={!allMatched}
+           onClick={handleSubmit}
+         >
+           Submit Matches
+         </Button>
+      )}
+    </div>
+  );
+}
+// --- END SUB-COMPONENT ---
+
+
 export default function TakeQuizPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
-  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]); // <-- USE QuizQuestion type
   const [showHint, setShowHint] = useState(false);
-  const [isSubmittingScore, setIsSubmittingScore] = useState(false); // <-- 1. ADD STATE
 
   const router = useRouter();
   const params = useParams();
@@ -71,7 +253,6 @@ export default function TakeQuizPage() {
     { revalidateOnFocus: false }
   );
 
-  // (useEffect for shuffling is unchanged)
   useEffect(() => {
     if (data?.questions && data.questions.length > 0) {
       const shuffledQuestions = shuffleArray(data.questions);
@@ -83,16 +264,20 @@ export default function TakeQuizPage() {
             options: shuffleArray(q.options as string[]),
           };
         }
+        // --- THIS IS THE FIX ---
         if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
+          // q.options contains the *correct answers* in order of q.prompts
+          // We create shuffledOptions for the user to select from.
           return {
             ...q,
-            options: shuffleArray(q.options as string[]),
+            shuffledOptions: shuffleArray(q.options as string[]),
           };
         }
+        // --- END FIX ---
         return q;
       });
 
-      setQuizQuestions(questionsWithShuffledOptions);
+      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]); // <-- Cast to QuizQuestion
       setCurrentQuestionIndex(0);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
@@ -102,62 +287,12 @@ export default function TakeQuizPage() {
     }
   }, [data]);
 
-  // --- 2. ADD useEffect TO SUBMIT SCORE ---
-  useEffect(() => {
-    // Only run this when the quiz is finished and we haven't submitted yet
-    if (isFinished && !isSubmittingScore && session && quizQuestions.length > 0) {
-      const submitScore = async () => {
-        setIsSubmittingScore(true); // Prevent double submission
-        try {
-          const response = await fetch('/api/quiz/attempt', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              quizId: quizId,
-              score: correctAnswers,
-              total: quizQuestions.length,
-            }),
-          });
-
-          const result: ApiResponse = await response.json();
-
-          if (!response.ok || !result.success) {
-            throw new Error(result.error || 'Failed to save quiz attempt.');
-          }
-
-          console.log('Quiz attempt saved successfully.');
-          // Optional: We could show a success toast here.
-        } catch (error: any) {
-          console.error('Failed to submit score:', error);
-          // Don't bother the user with a toast, just log it.
-        } finally {
-          // We set this regardless of success/failure
-          setIsSubmittingScore(false);
-        }
-      };
-
-      submitScore();
-    }
-  }, [
-    isFinished,
-    quizId,
-    correctAnswers,
-    quizQuestions.length,
-    session,
-    isSubmittingScore,
-  ]);
-  // --- END OF ADDITION ---
-
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const progress =
     quizQuestions.length > 0
       ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
       : 0;
 
-  // (handleAnswerSelect is unchanged)
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return;
 
@@ -171,10 +306,16 @@ export default function TakeQuizPage() {
     ) {
       isCorrect = currentQuestion.correct_answer === answerTrimmed;
     } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
+      // Use 'options' as the array of correct answers
       const correctAnswers = (currentQuestion.options as string[]) || [];
-      isCorrect = correctAnswers.some(
-        (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
-      );
+      if (correctAnswers.length > 0) {
+        isCorrect = correctAnswers.some(
+          (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
+        );
+      } else {
+        // Fallback to correct_answer if options is empty
+        isCorrect = currentQuestion.correct_answer.toLowerCase() === answerTrimmed.toLowerCase();
+      }
     }
 
     if (isCorrect) {
@@ -185,7 +326,19 @@ export default function TakeQuizPage() {
     }
   };
 
-  // --- 3. MODIFY handleNext ---
+  // --- NEW HANDLER for Matching ---
+  const handleMatchingComplete = (isCorrect: boolean) => {
+    if (answerStatus !== 'unanswered') return; // Already answered
+
+    if (isCorrect) {
+      setAnswerStatus('correct');
+      setCorrectAnswers((prev) => prev + 1);
+    } else {
+      setAnswerStatus('incorrect');
+    }
+  };
+  // --- END NEW HANDLER ---
+
   const handleNext = () => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
@@ -193,10 +346,25 @@ export default function TakeQuizPage() {
       setAnswerStatus('unanswered');
       setShowHint(false);
     } else {
-      setIsFinished(true); // This will now trigger the useEffect
+      setIsFinished(true);
+      // --- Save Attempt ---
+      if (session) {
+        fetch('/api/quiz/attempt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            quizId: quizId,
+            score: correctAnswers,
+            total: quizQuestions.length
+          })
+        }).catch(err => console.error("Failed to save quiz attempt:", err));
+      }
+      // ---
     }
   };
-  // --- END OF MODIFICATION ---
 
   const handleRestart = () => {
     if (data?.questions && data.questions.length > 0) {
@@ -208,9 +376,17 @@ export default function TakeQuizPage() {
             options: shuffleArray(q.options as string[]),
           };
         }
+        // --- ADD FIX HERE TOO ---
+        if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
+          return {
+            ...q,
+            shuffledOptions: shuffleArray(q.options as string[]),
+          };
+        }
+        // --- END FIX ---
         return q;
       });
-      setQuizQuestions(questionsWithShuffledOptions);
+      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
     }
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
@@ -220,7 +396,6 @@ export default function TakeQuizPage() {
     setShowHint(false);
   };
 
-  // (getOptionClass, isLoading, error, no-data states are unchanged)
   const getOptionClass = (optionText: string) => {
     if (answerStatus === 'unanswered') {
       return 'border-border hover:bg-muted/50';
@@ -273,7 +448,6 @@ export default function TakeQuizPage() {
   return (
     <div className="flex flex-col h-full items-center py-8">
       <div className="w-full max-w-2xl">
-        {/* (Header, Progress Bar, Summary Screen are unchanged) */}
         <div className="flex items-center justify-between mb-2">
           <Button
             variant="ghost"
@@ -342,7 +516,6 @@ export default function TakeQuizPage() {
               </Card>
             </motion.div>
           ) : (
-            // --- Question Screen (Unchanged) ---
             <motion.div
               key={currentQuestionIndex}
               initial={{ opacity: 0, x: 50 }}
@@ -356,7 +529,6 @@ export default function TakeQuizPage() {
                     {currentQuestion.question_text}
                   </p>
                   <div className="space-y-3">
-                    {/* (All question type render logic is unchanged) */}
                     {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
                       (currentQuestion.options as string[]).map((option) => (
                         <Button
@@ -441,21 +613,19 @@ export default function TakeQuizPage() {
                       </div>
                     )}
 
+                    {/* --- REPLACE PLACEHOLDER --- */}
                     {currentQuestion.question_type === 'MATCHING' && (
-                      <div className="p-4 rounded-md border bg-muted/50 text-muted-foreground text-sm">
-                        <p className="font-semibold">Matching Question</p>
-                        <p>
-                          This question type is not yet supported in the
-                          quiz-taker. Please edit this quiz to change the
-                          question type.
-                        </p>
-                      </div>
+                      <MatchingQuestionUI
+                        question={currentQuestion}
+                        answerStatus={answerStatus}
+                        onQuestionComplete={handleMatchingComplete}
+                      />
                     )}
+                    {/* --- END REPLACEMENT --- */}
+
                   </div>
 
-                  {/* (Feedback & Hint Block is unchanged) */}
                   <AnimatePresence>
-                    {/* HINT: Show hint if not answered and hint toggled */}
                     {answerStatus === 'unanswered' &&
                       showHint &&
                       currentQuestion.explanation && (
@@ -474,7 +644,6 @@ export default function TakeQuizPage() {
                         </motion.div>
                       )}
 
-                    {/* CORRECT: Show explanation */}
                     {answerStatus === 'correct' && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
@@ -493,7 +662,6 @@ export default function TakeQuizPage() {
                       </motion.div>
                     )}
 
-                    {/* INCORRECT: Show explanation */}
                     {answerStatus === 'incorrect' && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
@@ -526,7 +694,6 @@ export default function TakeQuizPage() {
                   </AnimatePresence>
                 </CardContent>
                 <CardFooter className="p-6 pt-0 flex justify-between">
-                  {/* (Hint Button is unchanged) */}
                   <Button
                     variant="outline"
                     onClick={() => setShowHint(true)}
