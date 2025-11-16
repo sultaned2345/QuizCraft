@@ -271,7 +271,9 @@ export default function TakeQuizPage() {
                     {/* Multiple Choice */}
                     {currentQuestion.question_type === 'multiple_choice' &&
                       (currentQuestion.options as { text: string; is_correct: boolean }[]).map(
-                        (option)_ => (
+                        // --- THIS IS THE FIX ---
+                        (option) => (
+                        // --- END FIX ---
                           <Button
                             key={option.text}
                             variant="outline"
