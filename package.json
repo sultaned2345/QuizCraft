@@ -1,3 +1,4 @@
+// package.json
 {
   "name": "my-v0-project",
   "version": "0.1.0",
@@ -7,7 +8,7 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && cp node_modules/pdfjs-dist/build/pdf.worker.mjs public/"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -62,6 +63,7 @@
     "nprogress": "^0.2.0",
     "openai": "^4.67.3",
     "pdf-parse-fork": "^1.2.0",
+    "pdfjs-dist": "^4.5.136",
     "react": "^18",
     "react-day-picker": "9.8.0",
     "react-dom": "^18",
