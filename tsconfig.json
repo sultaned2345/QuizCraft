@@ -1,4 +1,3 @@
-sultaned2345/quizcraft/QuizCraft-e21caa5b2dd496e323be15b2e7bd151e7f4700b9/tsconfig.json
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
