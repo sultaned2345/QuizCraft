@@ -50,7 +50,7 @@ import {
 } from '@/lib/file-parser';
 // ---
 import { QuestionType, ApiResponse, DocumentMetadata } from '@/types/database';
-import { useUpgradeModal } from '@/components/UpgradeModalContext';
+import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. IMPORT HOOK (FIXED PATH)
 
 interface QuizSettings {
   questionCount: number;
@@ -108,7 +108,7 @@ export default function CreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams(); // Hook to read query params
   const { toast } = useToast();
-  const { openModal } = useUpgradeModal();
+  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
 
   // Effect to handle initial login state
   useEffect(() => {
@@ -163,9 +163,12 @@ export default function CreatePage() {
       const maxSize = 3 * 1024 * 1024; // 3MB
 
       // Updated validation
-      const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some((ext) =>
-        file.name.toLowerCase().endsWith(ext)
-      );
+      const isValidType = [
+        '.pdf',
+        '.txt',
+        '.docx',
+        '.pptx',
+      ].some((ext) => file.name.toLowerCase().endsWith(ext));
 
       if (!isValidType) {
         setError('Unsupported file. Please upload PDF, TXT, DOCX, or PPTX.'); // Updated message
@@ -422,11 +425,13 @@ export default function CreatePage() {
                   <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
                   <p className="mt-2 font-semibold">
                     {selectedFile ? selectedFile.name : 'Drag & drop or click'}
-                  </play>
+                  </p>
+                  {/* --- THIS IS THE FIX --- */}
                   <p className="mt-1 text-xs text-muted-foreground">
                     PDF, TXT, DOCX, PPTX (max 3MB).
                     {selectedFile && ` (${formatFileSize(selectedFile.size)})`}
                   </p>
+                  {/* --- END FIX --- */}
                   {/* --- MODIFIED: accept attribute --- */}
                   <Input
                     id="file-upload"
