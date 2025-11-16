@@ -61,7 +61,9 @@ export default function TakeQuizPage() {
   const { session } = useAuth();
 
   // Fetch from the GET route we created
-  const { data, error, isLoading }_ = useSWR<QuizData>(
+  // --- THIS IS THE FIX ---
+  const { data, error, isLoading } = useSWR<QuizData>(
+  // --- END THE FIX ---
     session ? `/api/quiz/${quizId}` : null,
     (url: string) =>
       fetcher(url, {
@@ -191,7 +193,6 @@ export default function TakeQuizPage() {
     return 'border-border opacity-60';
   };
   
-  // (Loading and Error states are unchanged)
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
