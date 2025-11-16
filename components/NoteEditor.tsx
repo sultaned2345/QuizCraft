@@ -11,7 +11,7 @@ import { Loader2, Save, ArrowLeft, FileText, StickyNote, Link as LinkIcon } from
 import { Note, ApiResponse, RelatedItem } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import NextLink from 'next/link';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@hooks/use-toast'; // <-- MODIFIED
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { BacklinksWidget } from '@/components/BacklinksWidget';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';

@@ -1,7 +1,7 @@
 // components/MarkdownViewer.tsx
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@lib/utils'; // <-- MODIFIED
 
 interface MarkdownViewerProps {
   content: string;
