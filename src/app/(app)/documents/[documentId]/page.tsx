@@ -24,7 +24,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/contexts/AuthContext'; // <-- FIX: Corrected path
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -35,7 +35,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
-// --- 1. IMPORT THE NEW PDF VIEWER ---
 import { PdfViewer } from '@/components/PdfViewer';
 
 const PopQuizModal = dynamic(
@@ -83,7 +82,9 @@ function SelectionMenu({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document..removeEventListener('mousedown', handleClickOutside);
+      // --- THIS IS THE FIX ---
+      document.removeEventListener('mousedown', handleClickOutside);
+      // --- END FIX ---
     };
   }, [onClose]);
 
@@ -329,7 +330,6 @@ export default function DocumentViewPage() {
         onAction={handleMenuAction}
       />
 
-      {/* --- 2. REMOVE onMouseUpCapture from this div --- */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <Button variant="ghost" onClick={() => router.push('/documents')}>
@@ -377,14 +377,12 @@ export default function DocumentViewPage() {
                         <Loader2 className="h-6 w-6 animate-spin" />
                       </div>
                     ) : viewingContent.pdfUrl ? (
-                      // --- 3. REPLACE iframe WITH PdfViewer ---
                       <PdfViewer
                         url={viewingContent.pdfUrl}
                         onTextSelect={handleMouseUpCapture}
                         className="h-full max-h-[65vh]"
                       />
                     ) : (
-                      // --- 4. ADD onMouseUpCapture to MarkdownViewer ---
                       <ScrollArea className="h-full max-h-[65vh] pr-0">
                         <MarkdownViewer
                           content={
@@ -392,14 +390,12 @@ export default function DocumentViewPage() {
                             'No text extracted or file is empty.'
                           }
                           className="p-4"
-                          // Attach the handler here for plain text
                           onMouseUpCapture={handleMouseUpCapture}
                         />
                       </ScrollArea>
                     )}
                   </CardContent>
                 </TabsContent>
-                {/* (Insights tab is unchanged) */}
                 <TabsContent
                   value="insights"
                   className="flex-1 overflow-auto mt-0"
@@ -480,7 +476,7 @@ export default function DocumentViewPage() {
                           }
                           title="Key Concepts"
                         >
-                          {insights.mainArguments.length > 0 ? ( // Typo: Should be insights.keyConcepts
+                          {insights.keyConcepts.length > 0 ? (
                             <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
                               {insights.keyConcepts.map((concept, i) => (
                                 <li key={i}>{concept}</li>
@@ -501,7 +497,6 @@ export default function DocumentViewPage() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={50} minSize={30}>
-            {/* (Chat panel is unchanged) */}
             <Card
               className="flex flex-col h-full overflow-hidden border-0 rounded-none"
               data-chat-panel="true"

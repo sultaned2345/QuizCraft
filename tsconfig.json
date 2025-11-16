@@ -22,6 +22,7 @@
     "paths": {
       "@/components/*": ["./components/*"],
       "@/lib/utils": ["./lib/utils.ts"],
+      "@/lib/prisma": ["./lib/prisma.ts"],
       "@/hooks/*": ["./hooks/*"],
       "@/*": ["./src/*"]
     }
