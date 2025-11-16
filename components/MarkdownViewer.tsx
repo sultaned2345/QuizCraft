@@ -1,11 +1,12 @@
 // components/MarkdownViewer.tsx
 'use client';
 
-import { cn } from '@lib/utils'; // <-- MODIFIED
+import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
 
 interface MarkdownViewerProps {
   content: string;
   className?: string;
+  onMouseUpCapture?: (e: React.MouseEvent) => void; // <-- ADDED THIS PROP
 }
 
 /**
@@ -13,9 +14,13 @@ interface MarkdownViewerProps {
  * It uses a 'prose' class for typography.
  * * UPDATE: It now also correctly handles plain text by preserving whitespace.
  */
-export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
+export function MarkdownViewer({
+  content,
+  className,
+  onMouseUpCapture,
+}: MarkdownViewerProps) {
   // Check if content looks like HTML or plain text
-  const isHtml = /[<>]/g.test(content); 
+  const isHtml = /[<>]/g.test(content);
 
   if (isHtml) {
     // If it's HTML (from a rich-text note, for example), render it as prose
@@ -33,6 +38,7 @@ export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
           className,
         )}
         dangerouslySetInnerHTML={{ __html: content }}
+        onMouseUpCapture={onMouseUpCapture} // <-- ATTACH HANDLER
       />
     );
   }
@@ -41,9 +47,10 @@ export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
   return (
     <pre
       className={cn(
-        "text-sm whitespace-pre-wrap break-words font-sans text-foreground",
-        className
+        'text-sm whitespace-pre-wrap break-words font-sans text-foreground',
+        className,
       )}
+      onMouseUpCapture={onMouseUpCapture} // <-- ATTACH HANDLER
     >
       {content}
     </pre>

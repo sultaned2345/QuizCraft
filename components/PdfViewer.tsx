@@ -4,12 +4,10 @@
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- CONFIGURE THE WORKER ---
-// This points to the file we copied in package.json
-// Note: We're using a dynamic import for the type to avoid server-side errors
 if (typeof window !== 'undefined') {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
@@ -28,8 +26,6 @@ interface PdfPageProps {
 
 /**
  * Renders a single page of the PDF.
- * This component is responsible for rendering both the canvas (the visual)
- * and the text layer (the invisible, selectable text).
  */
 function PdfPage({ page, scale, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);

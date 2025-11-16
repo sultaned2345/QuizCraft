@@ -1,3 +1,4 @@
+// tsconfig.json
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -20,9 +21,19 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "@/*": ["./src/*"], // Standard Next.js alias
+      
+      // --- FIX: Add aliases for your root-level folders ---
       "@/components/*": ["./components/*"],
+      "@/lib/*": ["./lib/*"],
       "@/hooks/*": ["./hooks/*"],
-      "@/*": ["./src/*"]
+
+      // --- FIX: Add aliases for the specific files failing in the log ---
+      "@lib/utils": ["./lib/utils.ts"],
+      "@hooks/use-toast": ["./hooks/use-toast.ts"],
+      
+      // --- FIX: Add aliases for the files I introduced ---
+      "@/lib/utils": ["./lib/utils.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
