@@ -12,8 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
     Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, 
     Info, History, Eye, CheckCircle, Star, RefreshCw,
-    Scale, // <-- 1. IMPORT NEW ICONS
-    PenSquare // <-- 1. IMPORT NEW ICONS
+    Scale, PenSquare
 } from 'lucide-react';
 import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, GradedEssay } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -28,6 +27,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+// --- 1. IMPORT RESIZABLE PANELS ---
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+// ---
 
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 
@@ -50,6 +56,7 @@ const countWords = (text: string): number => {
   return text.trim().split(/\s+/).length;
 };
 
+// (ScoreBadge component remains unchanged)
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -93,6 +100,7 @@ export default function EssayGraderPage() {
   const router = useRouter();
   const { openModal } = useUpgradeModal();
 
+  // (useSWR hooks remain unchanged)
   const { 
     data: aiUsage, 
     error: usageError, 
@@ -114,7 +122,8 @@ export default function EssayGraderPage() {
     (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: true }
   );
-
+  
+  // (useEffect for pageContext remains unchanged)
   useEffect(() => {
     if (gradedEssay?.id) {
       setPageContext({ type: 'essay', id: gradedEssay.id });
@@ -124,11 +133,13 @@ export default function EssayGraderPage() {
     return () => setPageContext(null);
   }, [gradedEssay, setPageContext]);
 
+  // --- 2. UPDATE handleFileChange ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
        setError(null);
-       const maxSize = 3 * 1024 * 1024;
+       // --- REVERT LIMIT TO 3MB ---
+       const maxSize = 3 * 1024 * 1024; // 3MB
        const isValidMime = ['application/pdf', 'text/plain'].includes(file.type);
        const isValidExt = ['.pdf', '.txt'].some(ext => file.name.toLowerCase().endsWith(ext));
        if (!isValidMime && !isValidExt) {
@@ -138,11 +149,13 @@ export default function EssayGraderPage() {
          return;
        }
        if (file.size > maxSize) {
-         setError(`File exceeds 3MB (${formatFileSize(file.size)}).`);
+         // --- UPDATE ERROR MESSAGE ---
+         setError(`File exceeds 3MB (${formatFileSize(file.size)}). For larger files, use the Documents page.`);
          setSelectedFile(null);
          if (e.target) e.target.value = '';
          return;
        }
+       // ---
        setSelectedFile(file);
        setEssayText('');
        setWordCount(0); 
@@ -152,6 +165,9 @@ export default function EssayGraderPage() {
        setSelectedFile(null);
      }
    };
+   // --- END UPDATE ---
+   
+  // (handleTextChange, handleViewHistoryItem, handleSubmit, renderHighlightedEssay, renderFeedback remain unchanged)
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
      const newText = e.target.value;
      const newWordCount = countWords(newText);
@@ -331,11 +347,8 @@ export default function EssayGraderPage() {
     return <pre className="text-sm whitespace-pre-wrap break-words p-4">{parts.map((part, i) => <Fragment key={i}>{part}</Fragment>)}</pre>;
   };
 
-  // --- 2. MODIFY renderFeedback ---
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     if (!fb) return null;
-
-    // Define categories with icons
     const categories: {
       key: 'strengths' | 'clarity' | 'argument' | 'grammar';
       icon: React.ReactNode;
@@ -354,35 +367,27 @@ export default function EssayGraderPage() {
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb.summary}</p>
           </div>
         )}
-
-        {/* This is the main accordion for categories */}
         <Accordion 
           type="multiple" 
-          // Default all categories to be open
           defaultValue={['strengths', 'clarity', 'argument', 'grammar']} 
           className="w-full"
         >
           {categories.map(({ key, icon }) => {
             const data = fb[key];
             if (!data) return null;
-            
-            // Handle both string (old) and object (new) feedback types
             if (typeof data === 'object' && data.summary) {
               return (
                 <AccordionItem value={key} key={key}>
                   <AccordionTrigger className="text-base font-semibold capitalize">
-                    {/* Add icon to trigger */}
                     <span className="flex items-center gap-2">{icon} {key}</span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3">
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
-                    
-                    {/* --- 3. ADD NESTED ACCORDION FOR HIGHLIGHTS --- */}
                     {data.highlights && data.highlights.length > 0 && (
                       <Accordion 
                         type="single" 
                         collapsible 
-                        defaultValue="item-1" // <-- This makes it OPEN by default
+                        defaultValue="item-1"
                         className="w-full pt-2"
                       >
                         <AccordionItem value="item-1" className="border-none">
@@ -402,13 +407,10 @@ export default function EssayGraderPage() {
                         </AccordionItem>
                       </Accordion>
                     )}
-                    {/* --- END NESTED ACCORDION --- */}
-
                   </AccordionContent>
                 </AccordionItem>
               );
             }
-            // Fallback for old string-based feedback
             if (typeof data === 'string') {
                return (
                  <AccordionItem value={key} key={key}>
@@ -427,13 +429,13 @@ export default function EssayGraderPage() {
       </div>
     );
   };
-  // --- END MODIFICATION ---
   
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= (aiUsage.limit ?? Infinity);
   const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
   return (
-    <>
+    // --- 3. APPLY FULL-HEIGHT WRAPPER ---
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
           <div className="text-sm text-muted-foreground">
@@ -453,120 +455,132 @@ export default function EssayGraderPage() {
           </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        <div className="lg:col-span-1 space-y-6">
-           <Card>
-                <CardHeader>
-                    <CardTitle>Your Essay</CardTitle>
-                    <CardDescription>Paste text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
-                        <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
-                        <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setWordCount(0); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
-                    </div>
-                    {inputMode === 'text' && (
-                        <div className="relative">
-                            <Textarea
-                                placeholder="Paste your essay here..."
-                                value={essayText}
-                                onChange={handleTextChange}
-                                className={cn(
-                                    "min-h-[250px] text-base border rounded-md",
-                                    wordCount > WORD_LIMIT ? "border-destructive focus-visible:ring-destructive" : ""
-                                )}
-                                disabled={isLoading}
-                            />
-                            <p className={cn(
-                                "text-xs text-right mt-1.5",
-                                wordCount > WORD_LIMIT ? "text-destructive" : "text-muted-foreground"
-                            )}>
-                                {wordCount} / {WORD_LIMIT} words
-                            </p>
-                        </div>
-                    )}
-                    {inputMode === 'file' && (
-                        <div className="space-y-2">
-                             <Label htmlFor="file-upload" className="sr-only">Upload Essay File</Label>
-                             <Input
-                                id="file-upload"
-                                type="file"
-                                accept=".pdf,.txt,application/pdf,text/plain" 
-                                onChange={handleFileChange}
-                                disabled={isLoading}
-                                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border rounded-md"
+      {/* --- 4. APPLY RESIZABLE PANEL GROUP --- */}
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="flex-1 rounded-lg border overflow-hidden"
+      >
+        {/* --- Input Panel --- */}
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <ScrollArea className="h-full">
+            <div className="lg:col-span-1 space-y-6 p-4"> {/* Added padding */}
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Your Essay</CardTitle>
+                      {/* --- UPDATE HELP TEXT --- */}
+                      <CardDescription>Paste text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
+                          <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
+                          <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setWordCount(0); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
+                      </div>
+                      {inputMode === 'text' && (
+                          <div className="relative">
+                              <Textarea
+                                  placeholder="Paste your essay here..."
+                                  value={essayText}
+                                  onChange={handleTextChange}
+                                  className={cn(
+                                      "min-h-[250px] text-base border rounded-md",
+                                      wordCount > WORD_LIMIT ? "border-destructive focus-visible:ring-destructive" : ""
+                                  )}
+                                  disabled={isLoading}
                               />
-                              {selectedFile && <p className="text-xs text-muted-foreground truncate pt-1">Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})</p>}
-                        </div>
-                    )}
-                </CardContent>
-           </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Grading Criteria (Optional)</CardTitle>
-                    <CardDescription>Provide specific instructions or a rubric for the AI.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Textarea
-                        placeholder="e.g., Focus on the use of historical evidence. Grade based on clarity (40%), argument (40%), grammar (20%)..."
-                        value={rubricText}
-                        onChange={(e) => setRubricText(e.target.value)}
-                        className="min-h-[100px] border rounded-md"
-                        disabled={isLoading}
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.general.rubric)}>
-                            {rubricPresets.general.name}
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.persuasive.rubric)}>
-                            {rubricPresets.persuasive.name}
-                        </Button>
-                         <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.admission.rubric)}>
-                            {rubricPresets.admission.name}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-             {error && (
-                <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                    <span>{error}</span>
-                </div>
+                              <p className={cn(
+                                  "text-xs text-right mt-1.5",
+                                  wordCount > WORD_LIMIT ? "text-destructive" : "text-muted-foreground"
+                              )}>
+                                  {wordCount} / {WORD_LIMIT} words
+                              </p>
+                          </div>
+                      )}
+                      {inputMode === 'file' && (
+                          <div className="space-y-2">
+                              <Label htmlFor="file-upload" className="sr-only">Upload Essay File</Label>
+                              <Input
+                                  id="file-upload"
+                                  type="file"
+                                  accept=".pdf,.txt,application/pdf,text/plain" 
+                                  onChange={handleFileChange}
+                                  disabled={isLoading}
+                                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border rounded-md"
+                                />
+                                {selectedFile && <p className="text-xs text-muted-foreground truncate pt-1">Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})</p>}
+                          </div>
+                      )}
+                  </CardContent>
+              </Card>
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Grading Criteria (Optional)</CardTitle>
+                      <CardDescription>Provide specific instructions or a rubric for the AI.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <Textarea
+                          placeholder="e.g., Focus on the use of historical evidence. Grade based on clarity (40%), argument (40%), grammar (20%)..."
+                          value={rubricText}
+                          onChange={(e) => setRubricText(e.target.value)}
+                          className="min-h-[100px] border rounded-md"
+                          disabled={isLoading}
+                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.general.rubric)}>
+                              {rubricPresets.general.name}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.persuasive.rubric)}>
+                              {rubricPresets.persuasive.name}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.admission.rubric)}>
+                              {rubricPresets.admission.name}
+                          </Button>
+                      </div>
+                  </CardContent>
+              </Card>
+              {error && (
+                  <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                      <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                      <span>{error}</span>
+                  </div>
+                )}
+              <Button
+                  size="lg"
+                  onClick={handleSubmit}
+                  disabled={
+                      isLoading || 
+                      isUsageLoading || 
+                      isOverLimit || 
+                      (inputMode === 'text' && (isOverTextLimit || wordCount === 0)) || 
+                      (inputMode === 'file' && !selectedFile)
+                  }
+                  className="w-full"
+              >
+                  {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
+                  {isLoading ? 'Grading...' : isOverLimit ? 'AI Limit Reached' : 'Get Feedback'}
+              </Button>
+              {isOverLimit && (
+                  <Button variant="link" className="text-xs text-destructive text-center w-full" onClick={openModal}>
+                      You have used all your free AI generations. Upgrade to Pro?
+                  </Button>
               )}
-             <Button
-                size="lg"
-                onClick={handleSubmit}
-                disabled={
-                    isLoading || 
-                    isUsageLoading ||
-                    isOverLimit || 
-                    (inputMode === 'text' && (isOverTextLimit || wordCount === 0)) || 
-                    (inputMode === 'file' && !selectedFile)
-                }
-                className="w-full"
-             >
-                {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
-                {isLoading ? 'Grading...' : isOverLimit ? 'AI Limit Reached' : 'Get Feedback'}
-             </Button>
-             {isOverLimit && (
-                 <Button variant="link" className="text-xs text-destructive text-center w-full" onClick={openModal}>
-                    You have used all your free AI generations. Upgrade to Pro?
-                 </Button>
-             )}
-        </div>
+            </div>
+          </ScrollArea>
+        </ResizablePanel>
         
-        <div className="lg:col-span-1">
-           <Card className="min-h-[400px] flex flex-col"> 
-                <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col">
-                    <CardHeader>
+        <ResizableHandle withHandle />
+
+        {/* --- Output Panel --- */}
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <Card className="min-h-full flex flex-col border-0 rounded-none"> 
+                <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col h-full overflow-hidden">
+                    <CardHeader className="pt-4 px-4">
                         <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="feedback">AI Feedback</TabsTrigger>
                             <TabsTrigger value="history">Grading History</TabsTrigger>
                         </TabsList>
                     </CardHeader>
                     
-                    <TabsContent value="feedback" className="flex-1 flex flex-col mt-0">
+                    <TabsContent value="feedback" className="flex-1 flex flex-col mt-0 overflow-auto">
                         <CardContent className="flex-1 flex flex-col">
                             {isLoading ? ( 
                                 <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
@@ -574,7 +588,7 @@ export default function EssayGraderPage() {
                                     <p>Analyzing your essay...</p>
                                 </div>
                             ) : gradedEssay ? ( 
-                                <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
+                                <ScrollArea className="h-full p-1 pr-3">
                                     <ScoreBadge score={gradedEssay.score} />
                                     {renderFeedback(gradedEssay.feedback)}
                                     {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
@@ -595,10 +609,10 @@ export default function EssayGraderPage() {
                         </CardContent>
                     </TabsContent>
                     
-                    <TabsContent value="history" className="flex-1 flex flex-col mt-0">
+                    <TabsContent value="history" className="flex-1 flex flex-col mt-0 overflow-auto">
                         <CardContent className="flex-1 flex flex-col">
                              {isHistoryLoading ? (
-                                <div className="space-y-2">
+                                <div className="space-y-2 p-4">
                                     <Skeleton className="h-12 w-full" />
                                     <Skeleton className="h-12 w-full" />
                                     <Skeleton className="h-12 w-full" />
@@ -614,7 +628,7 @@ export default function EssayGraderPage() {
                                     <p>Your graded essays will appear here.</p>
                                 </div>
                             ) : (
-                                <ScrollArea className="h-full max-h-[60vh]">
+                                <ScrollArea className="h-full p-4">
                                     <Button variant="outline" size="sm" className="w-full mb-2" onClick={() => mutateHistory()} disabled={isHistoryLoading}>
                                         <RefreshCw className={cn("w-4 h-4 mr-2", isHistoryLoading && "animate-spin")} />
                                         Refresh History
@@ -656,8 +670,8 @@ export default function EssayGraderPage() {
                     </TabsContent>
                 </Tabs>
            </Card>
-         </div>
-      </div>
-    </>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   );
 }
