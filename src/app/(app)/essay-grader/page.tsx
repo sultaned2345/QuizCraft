@@ -1,59 +1,37 @@
-'use client';
 // src/app/(app)/essay-grader/page.tsx
-// UPDATED FILE
+'use client';
 
 import { useState, useEffect, Fragment } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle, Star } from 'lucide-react';
-import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, EssayFeedbackCategory, GradedEssay } from '@/types/database';
+import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle, Star, RefreshCw } from 'lucide-react';
+import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, GradedEssay } from '@/types/database';
 import { Input } from '@/components/ui/input';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
+import useSWR from 'swr'; // <-- 1. IMPORT SWR
+import { fetcher } from '@/lib/fetcher'; // <-- 2. IMPORT FETCHER
 
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
+
 const rubricPresets = {
-    general: {
-        name: "General",
-        rubric: "Evaluate based on standard academic criteria: Clarity (Is the point clear?), Argument (Is the logic sound?), and Grammar (Are there errors?)."
-    },
-    persuasive: {
-        name: "Persuasive",
-        rubric: "Evaluate this as a persuasive essay. Focus on: (1) The strength and clarity of the thesis statement, (2) The quality and relevance of supporting evidence, (3) The effectiveness of the counter-argument and rebuttal, and (4) The overall rhetorical impact."
-    },
-    admission: {
-        name: "Admission",
-        rubric: "Evaluate this as a college admission essay. Focus on: (1) A compelling personal narrative, (2) A strong and unique authorial voice, (3) Clarity of thought and structure, and (4) Flawless grammar and style."
-    }
+    general: { name: "General", rubric: "Evaluate based on standard academic criteria: Clarity (Is the point clear?), Argument (Is the logic sound?), and Grammar (Are there errors?)." },
+    persuasive: { name: "Persuasive", rubric: "Evaluate this as a persuasive essay. Focus on: (1) The strength and clarity of the thesis statement, (2) The quality and relevance of supporting evidence, (3) The effectiveness of the counter-argument and rebuttal, and (4) The overall rhetorical impact." },
+    admission: { name: "Admission", rubric: "Evaluate this as a college admission essay. Focus on: (1) A compelling personal narrative, (2) A strong and unique authorial voice, (3) Clarity of thought and structure, and (4) Flawless grammar and style." }
 };
+
 interface AIUsageStatus {
     currentCount: number | undefined;
     limit: number | typeof Infinity;
@@ -61,14 +39,13 @@ interface AIUsageStatus {
     isPro: boolean;
 }
 
-// --- 1. ADD WORD LIMIT AND COUNTER ---
 const WORD_LIMIT = 3000;
 const countWords = (text: string): number => {
   if (!text.trim()) return 0;
-  return text.trim().split(/\s+/).length; // Splits on one or more whitespace characters
+  return text.trim().split(/\s+/).length;
 };
-// ---
 
+// (ScoreBadge component is unchanged)
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -103,12 +80,7 @@ export default function EssayGraderPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [gradedEssay, setGradedEssay] = useState<GradeEssayResponseData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [aiUsage, setAiUsage] = useState<AIUsageStatus | null>(null);
-  const [isUsageLoading, setIsUsageLoading] = useState(true);
-  const [history, setHistory] = useState<GradedEssayListItem[] | null>(null);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [outputTab, setOutputTab] = useState<'feedback' | 'history'>('feedback');
-  // --- 2. ADD WORD COUNT STATE ---
   const [wordCount, setWordCount] = useState(0);
 
   const { session } = useAuth();
@@ -116,6 +88,30 @@ export default function EssayGraderPage() {
   const { setPageContext } = usePageContext();
   const router = useRouter();
   const { openModal } = useUpgradeModal();
+
+  // --- 3. REPLACE useEffect/useState with useSWR ---
+  const { 
+    data: aiUsage, 
+    error: usageError, 
+    isLoading: isUsageLoading,
+    mutate: mutateUsage // Function to refetch usage
+  } = useSWR<AIUsageStatus>(
+    session ? '/api/usage/ai' : null,
+    (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
+    { revalidateOnFocus: true } // Re-fetches when tab is focused
+  );
+
+  const { 
+    data: history, 
+    error: historyError, 
+    isLoading: isHistoryLoading,
+    mutate: mutateHistory // Function to refetch history
+  } = useSWR<GradedEssayListItem[]>(
+    session ? '/api/graded-essays' : null,
+    (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
+    { revalidateOnFocus: true }
+  );
+  // --- END SWR REPLACEMENT ---
 
   useEffect(() => {
     if (gradedEssay?.id) {
@@ -126,43 +122,7 @@ export default function EssayGraderPage() {
     return () => setPageContext(null);
   }, [gradedEssay, setPageContext]);
 
-  useEffect(() => {
-    if (!session) {
-        setIsUsageLoading(false); 
-        return;
-    };
-    
-    const fetchUsage = async () => {
-      setIsUsageLoading(true);
-      try {
-        const response = await fetch('/api/usage/ai', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` },
-        });
-        const result: ApiResponse<AIUsageStatus> = await response.json();
-        if (result.success && result.data) setAiUsage(result.data);
-        else console.error("Failed to fetch AI usage:", result.error);
-      } catch (err) { console.error("Error fetching AI usage:", err); } 
-      finally { setIsUsageLoading(false); }
-    };
-
-    const fetchHistory = async () => {
-      setIsHistoryLoading(true);
-      try {
-        const response = await fetch('/api/graded-essays', {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
-        });
-        const result: ApiResponse<GradedEssayListItem[]> = await response.json();
-        if (result.success && result.data) setHistory(result.data);
-        else console.error("Failed to fetch essay history:", result.error);
-      } catch (err) { console.error("Error fetching essay history:", err); }
-      finally { setIsHistoryLoading(false); }
-    };
-
-    fetchUsage();
-    fetchHistory();
-    setOutputTab(gradedEssay ? 'feedback' : 'history');
-  }, [session, gradedEssay]); 
-
+  // (handleFileChange, handleTextChange are unchanged)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -184,7 +144,6 @@ export default function EssayGraderPage() {
        }
        setSelectedFile(file);
        setEssayText('');
-       // --- 3. RESET WORD COUNT ON FILE CHANGE ---
        setWordCount(0); 
        setGradedEssay(null);
        setOutputTab('history');
@@ -192,8 +151,6 @@ export default function EssayGraderPage() {
        setSelectedFile(null);
      }
    };
-
-   // --- 4. MODIFY handleTextChange ---
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
      const newText = e.target.value;
      const newWordCount = countWords(newText);
@@ -205,67 +162,62 @@ export default function EssayGraderPage() {
      setGradedEssay(null);
      setOutputTab('history');
 
-     // Check for word limit error
      if (newWordCount > WORD_LIMIT) {
        setError(`Word limit exceeded: ${newWordCount} / ${WORD_LIMIT} words.`);
      } else if (error && error.startsWith('Word limit exceeded')) {
-       setError(null); // Clear only the word limit error
+       setError(null);
      } else if (error && error.startsWith('Essay text is too short')) {
-       setError(null); // Clear short text error as user types
+       setError(null);
      }
    };
-   
-   const handleViewHistoryItem = async (essayId: string) => {
-        if (!session) return;
-        setIsLoading(true);
-        setError(null);
-        setGradedEssay(null);
-        setEssayText('');
-        setSelectedFile(null);
-        setOutputTab('feedback');
+
+  const handleViewHistoryItem = async (essayId: string) => {
+    if (!session) return;
+    setIsLoading(true);
+    setError(null);
+    setGradedEssay(null);
+    setEssayText('');
+    setSelectedFile(null);
+    setOutputTab('feedback');
+    
+    try {
+        // We use fetcher here for consistency with useSWR
+        const resultData = await fetcher<GradedEssay>(
+            `/api/graded-essays/${essayId}`, 
+            { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+        );
         
-        try {
-            const response = await fetch(`/api/graded-essays/${essayId}`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` },
-            });
-            const result: ApiResponse<GradedEssay> = await response.json();
-            if (!result.success || !result.data) {
-                throw new Error(result.error || 'Failed to fetch essay details.');
-            }
-            
-            const responseData: GradeEssayResponseData = {
-                id: result.data.id,
-                feedback: result.data.feedback as GradedEssayFeedback,
-                score: result.data.score,
-                suggestions: (result.data.feedback as any)?.suggestions || [],
-                graded_at: result.data.graded_at,
-                essay_content: result.data.essay_content,
-            };
+        const responseData: GradeEssayResponseData = {
+            id: resultData.id,
+            feedback: resultData.feedback as GradedEssayFeedback,
+            score: resultData.score,
+            suggestions: (resultData.feedback as any)?.suggestions || [],
+            graded_at: resultData.graded_at,
+            essay_content: resultData.essay_content,
+        };
 
-            setGradedEssay(responseData);
-            setEssayText(result.data.essay_content);
-            setRubricText(result.data.rubric_or_criteria || '');
-            // --- 5. UPDATE WORD COUNT WHEN LOADING HISTORY ---
-            setWordCount(countWords(result.data.essay_content)); 
-            
-            toast({ title: "History Loaded", description: `Displaying feedback for "${result.data.essay_title || 'graded essay'}".` });
+        setGradedEssay(responseData);
+        setEssayText(resultData.essay_content);
+        setRubricText(resultData.rubric_or_criteria || '');
+        setWordCount(countWords(resultData.essay_content)); 
+        
+        toast({ title: "History Loaded", description: `Displaying feedback for "${resultData.essay_title || 'graded essay'}".` });
 
-        } catch (err: any) {
-            setError(err.message || 'An unexpected error occurred while fetching history.');
-            toast({ title: "Failed to Load History", description: err.message, variant: "destructive" });
-            setOutputTab('history');
-        } finally {
-            setIsLoading(false);
-        }
-   };
+    } catch (err: any) {
+        setError(err.message || 'An unexpected error occurred while fetching history.');
+        toast({ title: "Failed to Load History", description: err.message, variant: "destructive" });
+        setOutputTab('history');
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    // --- 6. ADD WORD COUNT CHECK TO SUBMIT ---
+    // (Validation logic is unchanged)
     if (inputMode === 'text' && wordCount > WORD_LIMIT) {
         setError(`Word limit exceeded: ${wordCount} / ${WORD_LIMIT} words.`);
         return;
     }
-    // (Rest of the function is unchanged)
     if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
       setError('Please provide an essay by pasting text or uploading a file.');
       return;
@@ -278,9 +230,11 @@ export default function EssayGraderPage() {
       toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive" });
       return;
     }
+    
     setIsLoading(true);
     setError(null);
     setGradedEssay(null);
+
     try {
       let response: Response;
       const headers: HeadersInit = { 'Authorization': `Bearer ${session.access_token}` };
@@ -304,34 +258,22 @@ export default function EssayGraderPage() {
           throw new Error(result.message || 'AI generation limit reached.');
         }
          if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
-         // --- 7. CATCH NEW SERVER-SIDE WORD LIMIT ERROR ---
          if (result.error?.includes("word limit exceeded")) {
              throw new Error(result.error);
          }
         throw new Error(result.error || `Grading failed. Status: ${response.status}`);
       }
+      
       setGradedEssay(result.data);
       setOutputTab('feedback');
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
       
-      if (history) {
-        const newHistoryItem: GradedEssayListItem = {
-            id: result.data.id,
-            essay_title: (inputMode === 'file' ? selectedFile?.name : null) || `Graded Essay - ${new Date().toLocaleDateString()}`,
-            score: result.data.score,
-            graded_at: result.data.graded_at,
-        };
-        setHistory([newHistoryItem, ...history]);
-      }
+      // --- 4. MUTATE SWR DATA ON SUCCESS ---
+      // This tells SWR to refetch the history and usage lists.
+      mutateHistory();
+      mutateUsage();
+      // ---
       
-      if (aiUsage && aiUsage.currentCount !== undefined && aiUsage.limit !== Infinity) {
-        setAiUsage(prev => {
-             if (!prev) return null;
-             const newCount = (prev.currentCount ?? 0) + 1;
-             const newRemaining = Math.max(0, prev.limit - newCount);
-             return { ...prev, currentCount: newCount, remaining: newRemaining };
-         });
-      }
     } catch (err: any) {
       const errorMessage = err.message || 'An unexpected error occurred during grading.';
       if (!errorMessage.includes('limit reached')) {
@@ -345,7 +287,6 @@ export default function EssayGraderPage() {
   
   // (renderHighlightedEssay and renderFeedback are unchanged)
   const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
-    // ...
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     let parts: (string | React.ReactNode)[] = [text];
     const colors = {
@@ -396,7 +337,6 @@ export default function EssayGraderPage() {
   };
 
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
-    // ...
     if (!fb) return null;
     const categories: ('strengths' |'clarity' | 'argument' | 'grammar')[] = ['strengths','clarity', 'argument', 'grammar'];
     
@@ -408,11 +348,10 @@ export default function EssayGraderPage() {
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb.summary}</p>
           </div>
         )}
-        <Accordion type="multiple" defaultValue={['clarity', 'argument', 'grammar']} className="w-full">
+        <Accordion type="multiple" defaultValue={['strengths', 'clarity', 'argument', 'grammar']} className="w-full">
           {categories.map((key) => {
             const data = fb[key];
             if (!data) return null;
-            const isStrengths = key === 'strengths';
             if (typeof data === 'object' && data.summary) {
               return (
                 <AccordionItem value={key} key={key}>
@@ -450,34 +389,35 @@ export default function EssayGraderPage() {
     );
   };
   
-  const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= aiUsage.limit;
-  // --- 8. ADD WORD COUNT TO isOverTextLimit ---
+  // --- 5. USE SWR DATA TO CALCULATE LIMITS ---
+  const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= (aiUsage.limit ?? Infinity);
   const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
   return (
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
+          {/* --- 6. USE SWR DATA TO RENDER USAGE --- */}
           <div className="text-sm text-muted-foreground">
               {isUsageLoading ? (
                   <span className="flex items-center gap-1"><Loader2 className="h-4 w-4 animate-spin" /> Checking AI usage...</span>
+              ) : usageError ? (
+                  <span className="text-destructive">Could not load AI usage.</span>
               ) : aiUsage ? (
                   aiUsage.isPro ? (
-                      <span>Pro Plan: Unlimited AI Generations</span>
+                      <span className="font-medium text-primary flex items-center gap-1"><Star className="w-4 h-4" /> Pro Plan: Unlimited AI Generations</span>
                   ) : (
                       <span>
-                          AI Generations this month: <span className="font-medium text-foreground">{aiUsage.currentCount ?? '?'} / {aiUsage.limit}</span> used.
-                          (<span className="font-medium text-foreground">{aiUsage.remaining}</span> remaining)
+                          AI Generations: <span className="font-medium text-foreground">{aiUsage.currentCount ?? '?'} / {aiUsage.limit}</span>
                       </span>
                   )
-              ) : (
-                  <span className="text-destructive">Could not load AI usage.</span>
-              )}
+              ) : null}
           </div>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
+        {/* (Input Column is unchanged) */}
         <div className="lg:col-span-1 space-y-6">
            <Card>
                 <CardHeader>
@@ -490,7 +430,6 @@ export default function EssayGraderPage() {
                         <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setWordCount(0); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
                     </div>
                     {inputMode === 'text' && (
-                        // --- 9. ADD WRAPPER AND WORD COUNT DISPLAY ---
                         <div className="relative">
                             <Textarea
                                 placeholder="Paste your essay here..."
@@ -509,7 +448,6 @@ export default function EssayGraderPage() {
                                 {wordCount} / {WORD_LIMIT} words
                             </p>
                         </div>
-                        // ---
                     )}
                     {inputMode === 'file' && (
                         <div className="space-y-2">
@@ -562,10 +500,9 @@ export default function EssayGraderPage() {
              <Button
                 size="lg"
                 onClick={handleSubmit}
-                // --- 10. UPDATE DISABLED LOGIC ---
                 disabled={
                     isLoading || 
-                    isUsageLoading || 
+                    isUsageLoading || // <-- Use SWR loading state
                     isOverLimit || 
                     (inputMode === 'text' && (isOverTextLimit || wordCount === 0)) || 
                     (inputMode === 'file' && !selectedFile)
@@ -576,11 +513,13 @@ export default function EssayGraderPage() {
                 {isLoading ? 'Grading...' : isOverLimit ? 'AI Limit Reached' : 'Get Feedback'}
              </Button>
              {isOverLimit && (
-                 <p className="text-xs text-destructive text-center mt-1">You have used all your free AI generations for this month.</p>
+                 <Button variant="link" className="text-xs text-destructive text-center w-full" onClick={openModal}>
+                    You have used all your free AI generations. Upgrade to Pro?
+                 </Button>
              )}
         </div>
         
-        {/* (Column 2 Output remains unchanged) */}
+        {/* --- 7. REFACTOR OUTPUT COLUMN --- */}
         <div className="lg:col-span-1">
            <Card className="min-h-[400px] flex flex-col"> 
                 <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col">
@@ -593,13 +532,12 @@ export default function EssayGraderPage() {
                     
                     <TabsContent value="feedback" className="flex-1 flex flex-col mt-0">
                         <CardContent className="flex-1 flex flex-col">
-                            {isLoading && ( 
+                            {isLoading ? ( 
                                 <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
                                     <Loader2 className="w-8 h-8 animate-spin mb-4" />
                                     <p>Analyzing your essay...</p>
                                 </div>
-                            )}
-                            {!isLoading && gradedEssay && ( 
+                            ) : gradedEssay ? ( 
                                 <ScrollArea className="h-full max-h-[60vh] p-1 pr-3">
                                     <ScoreBadge score={gradedEssay.score} />
                                     {renderFeedback(gradedEssay.feedback)}
@@ -612,8 +550,7 @@ export default function EssayGraderPage() {
                                         </div>
                                     )}
                                 </ScrollArea>
-                            )}
-                             {!isLoading && !gradedEssay && ( 
+                            ) : ( 
                                  <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1 text-center">
                                     <FileSignature className="w-12 h-12 mb-4" />
                                     <p>Submit your essay to receive feedback.</p>
@@ -630,6 +567,11 @@ export default function EssayGraderPage() {
                                     <Skeleton className="h-12 w-full" />
                                     <Skeleton className="h-12 w-full" />
                                 </div>
+                             ) : historyError ? (
+                                <div className="flex flex-col items-center justify-center pt-10 text-destructive text-center">
+                                    <AlertCircle className="w-12 h-12 mb-4" />
+                                    <p>Failed to load history.</p>
+                                </div>
                             ) : !history || history.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground text-center">
                                     <History className="w-12 h-12 mb-4" />
@@ -637,6 +579,10 @@ export default function EssayGraderPage() {
                                 </div>
                             ) : (
                                 <ScrollArea className="h-full max-h-[60vh]">
+                                    <Button variant="outline" size="sm" className="w-full mb-2" onClick={() => mutateHistory()} disabled={isHistoryLoading}>
+                                        <RefreshCw className={cn("w-4 h-4 mr-2", isHistoryLoading && "animate-spin")} />
+                                        Refresh History
+                                    </Button>
                                     <div className="space-y-2">
                                         {history.map(item => (
                                             <div

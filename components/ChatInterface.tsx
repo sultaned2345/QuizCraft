@@ -87,7 +87,6 @@ export function ChatInterface({
   const router = useRouter();
   const { toast } = useToast();
 
-  // (All action handlers and useEffects remain the same)
   const handleGenerateQuizFromContext = () => {
     if (context?.type !== 'document' || !context.id) return;
     setIsActionLoading(true);
@@ -266,9 +265,7 @@ export function ChatInterface({
 
     setProactivePrompt(null); 
     setProactiveActions(null);
-    // --- THIS IS THE FIX: This line is removed ---
-    // setSuggestedQuestions(null);
-    // --- END FIX ---
+    setSuggestedQuestions(null); // Clear suggestions when user sends a message
     
     const userMessage: Message = { role: 'user', text: messageText };
     const history = [...messages, userMessage];
@@ -350,10 +347,11 @@ export function ChatInterface({
     }
   };
 
-  // --- 7. MODIFICATION: Add internal padding and border ---
   return (
     <div className={cn("flex flex-col h-full p-4", className)}>
-      <ScrollArea className="h-full flex-1 -mr-4">
+      {/* --- THIS IS THE FIX: Removed h-full from ScrollArea --- */}
+      <ScrollArea className="flex-1 -mr-4">
+      {/* --- END FIX --- */}
         <div className="space-y-4 pr-4"> 
           {isHistoryLoading ? (
             <div className="space-y-4">

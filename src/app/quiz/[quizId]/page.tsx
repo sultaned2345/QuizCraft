@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Quiz, Question, ApiResponse } from '@/types/database'; // Import ApiResponse
+import { Quiz, Question, ApiResponse } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input'; // Import Input
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import {
   Loader2,
@@ -25,11 +25,11 @@ import {
   X,
   AlertCircle,
   Trophy,
+  Lightbulb, // <-- 1. IMPORT HINT ICON
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// This is the shape from /api/quiz/[quizId]
 interface QuizData {
   quiz: Quiz;
   questions: Question[];
@@ -37,12 +37,12 @@ interface QuizData {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
-// Helper function to shuffle an array
+// (shuffleArray helper function is unchanged)
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // Swap
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
   return newArray;
 }
@@ -54,13 +54,13 @@ export default function TakeQuizPage() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [showHint, setShowHint] = useState(false); // <-- 2. ADD HINT STATE
 
   const router = useRouter();
   const params = useParams();
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
-  // Fetch from the GET route we created
   const { data, error, isLoading } = useSWR<QuizData>(
     session ? `/api/quiz/${quizId}` : null,
     (url: string) =>
@@ -70,20 +70,18 @@ export default function TakeQuizPage() {
     { revalidateOnFocus: false }
   );
 
-  // Shuffle questions and answers on load
+  // (useEffect for shuffling is unchanged)
   useEffect(() => {
     if (data?.questions && data.questions.length > 0) {
       const shuffledQuestions = shuffleArray(data.questions);
 
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        // Shuffle options for Multiple Choice
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
             options: shuffleArray(q.options as string[]),
           };
         }
-        // Shuffle options for Matching (the answer pool)
         if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
           return {
             ...q,
@@ -94,12 +92,12 @@ export default function TakeQuizPage() {
       });
 
       setQuizQuestions(questionsWithShuffledOptions);
-      // Reset all states
       setCurrentQuestionIndex(0);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
       setCorrectAnswers(0);
       setIsFinished(false);
+      setShowHint(false); // <-- 3. RESET HINT
     }
   }, [data]);
 
@@ -109,8 +107,9 @@ export default function TakeQuizPage() {
       ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
       : 0;
 
+  // (handleAnswerSelect is unchanged)
   const handleAnswerSelect = (answer: string) => {
-    if (answerStatus !== 'unanswered') return; // Already answered
+    if (answerStatus !== 'unanswered') return;
 
     const answerTrimmed = answer.trim();
     setSelectedAnswer(answerTrimmed);
@@ -122,9 +121,7 @@ export default function TakeQuizPage() {
     ) {
       isCorrect = currentQuestion.correct_answer === answerTrimmed;
     } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
-      // Correct answers are stored in the 'options' array
       const correctAnswers = (currentQuestion.options as string[]) || [];
-      // Case-insensitive check
       isCorrect = correctAnswers.some(
         (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
       );
@@ -143,14 +140,13 @@ export default function TakeQuizPage() {
       setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
+      setShowHint(false); // <-- 3. RESET HINT
     } else {
-      // Finish quiz
       setIsFinished(true);
     }
   };
 
   const handleRestart = () => {
-    // Just trigger the useEffect
     if (data?.questions && data.questions.length > 0) {
       const shuffledQuestions = shuffleArray(data.questions);
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
@@ -169,25 +165,21 @@ export default function TakeQuizPage() {
     setAnswerStatus('unanswered');
     setCorrectAnswers(0);
     setIsFinished(false);
+    setShowHint(false); // <-- 3. RESET HINT
   };
 
+  // (getOptionClass, isLoading, error, no-data states are unchanged)
   const getOptionClass = (optionText: string) => {
     if (answerStatus === 'unanswered') {
       return 'border-border hover:bg-muted/50';
     }
-
     const isThisCorrect = currentQuestion.correct_answer === optionText;
-
     if (isThisCorrect) {
-      // Is the correct answer
       return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
     }
     if (selectedAnswer === optionText && !isThisCorrect) {
-      // Is the selected, incorrect answer
       return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
     }
-
-    // Is neither selected nor correct (an incorrect option)
     return 'border-border opacity-60';
   };
 
@@ -206,11 +198,7 @@ export default function TakeQuizPage() {
         <AlertCircle className="h-12 w-12 mb-4" />
         <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
         <p className="text-center">{error.message}</p>
-        <Button
-          onClick={() => router.push('/quizzes')}
-          variant="outline"
-          className="mt-4"
-        >
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -223,11 +211,7 @@ export default function TakeQuizPage() {
         <AlertCircle className="h-12 w-12 mb-4" />
         <h2 className="text-2xl font-semibold">{data?.quiz.title || 'Quiz'}</h2>
         <p className="text-center">This quiz has no questions in it.</p>
-        <Button
-          onClick={() => router.push('/quizzes')}
-          variant="outline"
-          className="mt-4"
-        >
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -237,7 +221,7 @@ export default function TakeQuizPage() {
   return (
     <div className="flex flex-col h-full items-center py-8">
       <div className="w-full max-w-2xl">
-        {/* Header */}
+        {/* (Header, Progress Bar, Summary Screen are unchanged) */}
         <div className="flex items-center justify-between mb-2">
           <Button
             variant="ghost"
@@ -253,9 +237,8 @@ export default function TakeQuizPage() {
           >
             {data.quiz.title}
           </h1>
-          <div className="w-24"></div> {/* Spacer */}
+          <div className="w-24"></div>
         </div>
-
         {!isFinished && (
           <div className="flex items-center gap-4 mb-6">
             <span className="text-sm font-medium text-muted-foreground">
@@ -264,11 +247,8 @@ export default function TakeQuizPage() {
             <Progress value={progress} className="flex-1 h-2" />
           </div>
         )}
-
-        {/* Main Content Area: Quiz or Summary */}
         <AnimatePresence mode="wait">
           {isFinished ? (
-            // --- Summary Screen ---
             <motion.div
               key="summary"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -310,7 +290,7 @@ export default function TakeQuizPage() {
               </Card>
             </motion.div>
           ) : (
-            // --- Question Screen ---
+            // --- Question Screen (MODIFIED) ---
             <motion.div
               key={currentQuestionIndex}
               initial={{ opacity: 0, x: 50 }}
@@ -324,7 +304,7 @@ export default function TakeQuizPage() {
                     {currentQuestion.question_text}
                   </p>
                   <div className="space-y-3">
-                    {/* Multiple Choice */}
+                    {/* (All question type render logic is unchanged) */}
                     {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
                       (currentQuestion.options as string[]).map((option) => (
                         <Button
@@ -350,7 +330,6 @@ export default function TakeQuizPage() {
                         </Button>
                       ))}
 
-                    {/* True/False */}
                     {currentQuestion.question_type === 'TRUE_FALSE' &&
                       ['True', 'False'].map((option) => (
                         <Button
@@ -375,8 +354,7 @@ export default function TakeQuizPage() {
                             )}
                         </Button>
                       ))}
-
-                    {/* Fill in the Blank */}
+                      
                     {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
                       <div className="space-y-3">
                         <Input
@@ -411,7 +389,6 @@ export default function TakeQuizPage() {
                       </div>
                     )}
 
-                    {/* Matching (Placeholder) */}
                     {currentQuestion.question_type === 'MATCHING' && (
                       <div className="p-4 rounded-md border bg-muted/50 text-muted-foreground text-sm">
                         <p className="font-semibold">Matching Question</p>
@@ -424,18 +401,47 @@ export default function TakeQuizPage() {
                     )}
                   </div>
 
-                  {/* Feedback Message */}
+                  {/* --- 4. MODIFIED FEEDBACK & HINT BLOCK --- */}
                   <AnimatePresence>
+                    {/* HINT: Show hint if not answered and hint toggled */}
+                    {answerStatus === 'unanswered' &&
+                      showHint &&
+                      currentQuestion.explanation && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-4 flex flex-col font-medium text-yellow-600"
+                        >
+                          <div className="flex items-center">
+                            <Lightbulb className="w-5 h-5 mr-2" />
+                            Hint:
+                          </div>
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
+                          </p>
+                        </motion.div>
+                      )}
+
+                    {/* CORRECT: Show explanation */}
                     {answerStatus === 'correct' && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 flex items-center font-medium text-green-600"
+                        className="mt-4 flex flex-col font-medium text-green-600"
                       >
-                        <Check className="w-5 h-5 mr-2" />
-                        That's correct!
+                        <div className="flex items-center">
+                          <Check className="w-5 h-5 mr-2" />
+                          That's correct!
+                        </div>
+                        {currentQuestion.explanation && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
+                          </p>
+                        )}
                       </motion.div>
                     )}
+
+                    {/* INCORRECT: Show explanation */}
                     {answerStatus === 'incorrect' && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
@@ -447,8 +453,6 @@ export default function TakeQuizPage() {
                           That's not right.
                         </div>
 
-                        {/* --- THIS IS THE FIX --- */}
-                        {/* Show correct answer for FITB */}
                         {currentQuestion.question_type ===
                           'FILL_IN_THE_BLANK' && (
                           <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
@@ -459,7 +463,6 @@ export default function TakeQuizPage() {
                               : currentQuestion.correct_answer}
                           </p>
                         )}
-                        {/* --- END FIX --- */}
 
                         {currentQuestion.explanation && (
                           <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
@@ -469,8 +472,32 @@ export default function TakeQuizPage() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+                  {/* --- END MODIFICATION --- */}
                 </CardContent>
-                <CardFooter className="p-6 pt-0 flex justify-end">
+                <CardFooter className="p-6 pt-0 flex justify-between">
+                  {/* --- 5. ADD HINT BUTTON --- */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowHint(true)}
+                    disabled={
+                      answerStatus !== 'unanswered' ||
+                      showHint ||
+                      !currentQuestion.explanation
+                    }
+                    className={cn(
+                      'transition-all',
+                      answerStatus !== 'unanswered' ||
+                        showHint ||
+                        !currentQuestion.explanation
+                        ? 'opacity-0'
+                        : 'opacity-100'
+                    )}
+                  >
+                    <Lightbulb className="w-4 h-4 mr-2" />
+                    Show Hint
+                  </Button>
+                  {/* --- END HINT BUTTON --- */}
+
                   <Button
                     className="w-full sm:w-auto"
                     disabled={answerStatus === 'unanswered'}
