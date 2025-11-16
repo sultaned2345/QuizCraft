@@ -61,9 +61,7 @@ export default function TakeQuizPage() {
   const { session } = useAuth();
 
   // Fetch from the GET route we created
-  // --- THIS IS THE FIX ---
   const { data, error, isLoading } = useSWR<QuizData>(
-  // --- END THE FIX ---
     session ? `/api/quiz/${quizId}` : null,
     (url: string) =>
       fetcher(url, {
@@ -192,7 +190,7 @@ export default function TakeQuizPage() {
     // Is neither selected nor correct (an incorrect option)
     return 'border-border opacity-60';
   };
-  
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -208,7 +206,11 @@ export default function TakeQuizPage() {
         <AlertCircle className="h-12 w-12 mb-4" />
         <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
         <p className="text-center">{error.message}</p>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+        <Button
+          onClick={() => router.push('/quizzes')}
+          variant="outline"
+          className="mt-4"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -221,7 +223,11 @@ export default function TakeQuizPage() {
         <AlertCircle className="h-12 w-12 mb-4" />
         <h2 className="text-2xl font-semibold">{data?.quiz.title || 'Quiz'}</h2>
         <p className="text-center">This quiz has no questions in it.</p>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+        <Button
+          onClick={() => router.push('/quizzes')}
+          variant="outline"
+          className="mt-4"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -318,9 +324,6 @@ export default function TakeQuizPage() {
                     {currentQuestion.question_text}
                   </p>
                   <div className="space-y-3">
-                    
-                    {/* --- REBUILT RENDER LOGIC --- */}
-                    
                     {/* Multiple Choice */}
                     {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
                       (currentQuestion.options as string[]).map((option) => (
@@ -372,7 +375,7 @@ export default function TakeQuizPage() {
                             )}
                         </Button>
                       ))}
-                      
+
                     {/* Fill in the Blank */}
                     {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
                       <div className="space-y-3">
@@ -384,15 +387,24 @@ export default function TakeQuizPage() {
                           disabled={answerStatus !== 'unanswered'}
                           className="text-base"
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
+                            if (
+                              e.key === 'Enter' &&
+                              answerStatus === 'unanswered' &&
+                              selectedAnswer
+                            ) {
                               handleAnswerSelect(selectedAnswer.trim());
                             }
                           }}
                         />
                         <Button
                           className="w-full"
-                          disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()}
-                          onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
+                          disabled={
+                            answerStatus !== 'unanswered' ||
+                            !selectedAnswer?.trim()
+                          }
+                          onClick={() =>
+                            handleAnswerSelect(selectedAnswer!.trim())
+                          }
                         >
                           Submit Answer
                         </Button>
@@ -410,9 +422,6 @@ export default function TakeQuizPage() {
                         </p>
                       </div>
                     )}
-                    
-                    {/* --- END REBUILT RENDER LOGIC --- */}
-                    
                   </div>
 
                   {/* Feedback Message */}
@@ -437,14 +446,21 @@ export default function TakeQuizPage() {
                           <X className="w-5 h-5 mr-2" />
                           That's not right.
                         </div>
-                        
+
+                        {/* --- THIS IS THE FIX --- */}
                         {/* Show correct answer for FITB */}
-                        {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                            <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                                Correct answer(s): {(currentQuestion.options as string[]).join(', ')}
-                            </p>
+                        {currentQuestion.question_type ===
+                          'FILL_IN_THE_BLANK' && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            Correct answer(s):{' '}
+                            {Array.isArray(currentQuestion.options) &&
+                            currentQuestion.options.length > 0
+                              ? currentQuestion.options.join(', ')
+                              : currentQuestion.correct_answer}
+                          </p>
                         )}
-                        
+                        {/* --- END FIX --- */}
+
                         {currentQuestion.explanation && (
                           <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
                             {currentQuestion.explanation}

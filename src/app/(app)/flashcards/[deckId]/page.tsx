@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Card as Flashcard, Deck, ApiResponse } from '@/types/database';
+import { Card as Flashcard, Deck, ApiResponse } from '@/types/database'; // Import ApiResponse
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -115,18 +115,26 @@ export default function FlashcardStudyPage() {
       )
     );
 
-    if (studyMode !== 'cram') {
-      fetch(`/api/flashcards/${currentCard.id}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session!.access_token}`,
-        },
-        body: JSON.stringify({ quality: quality, isCramming: false }), // Send isCramming flag
-      }).catch((err) => {
+    const isCramming = studyMode === 'cram';
+
+    fetch(`/api/flashcards/${currentCard.id}/review`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session!.access_token}`,
+      },
+      // --- FIX: Send the correct 'isCramming' flag ---
+      body: JSON.stringify({ quality: quality, isCramming: isCramming }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to save review');
+        }
+      })
+      .catch((err) => {
         console.error('Failed to save review status:', err);
       });
-    }
 
     setTimeout(() => {
       if (currentIndex < studyDeck.length - 1) {
@@ -278,9 +286,9 @@ export default function FlashcardStudyPage() {
                 className="w-full h-80 [perspective:1000px] cursor-pointer"
                 onClick={handleCardFlip}
               >
-                {/* --- FIX: Use standard Tailwind classes --- */}
+                {/* --- FIX: Use correct 3D transform classes --- */}
                 <motion.div
-                  className="relative w-full h-full transform-style-preserve-3d"
+                  className="relative w-full h-full [transform-style:preserve-3d]"
                   animate={{ rotateY: isFlipped ? 180 : 0 }}
                   transition={{ duration: 0.5 }}
                 >
@@ -296,7 +304,7 @@ export default function FlashcardStudyPage() {
                     </Card>
                   </div>
                   {/* Back of Card */}
-                  {/* --- FIX: Use standard Tailwind classes --- */}
+                  {/* --- FIX: Use correct 3D transform classes --- */}
                   <div className="absolute backface-hidden w-full h-full [transform:rotateY(180deg)]">
                     {/* --- END FIX --- */}
                     <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary">
@@ -348,7 +356,6 @@ export default function FlashcardStudyPage() {
               </AnimatePresence>
             </motion.div>
           ) : (
-            // (Summary screen is unchanged)
             <motion.div
               key="summary"
               initial={{ opacity: 0, scale: 0.9 }}
