@@ -4,7 +4,7 @@
 import * as React from "react"
 import { GripVertical } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils" // This import assumes @/lib/utils.ts, which should resolve via src/lib/utils.ts
 import {
   PanelGroup as PanelGroupPrimitive,
   Panel as PanelPrimitive,

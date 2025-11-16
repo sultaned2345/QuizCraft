@@ -4,19 +4,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetcher } from '@/types/fetcher'; // Assuming you have a fetcher
+import { fetcher } from '@/lib/fetcher'; // <-- FIX: Was '@/types/fetcher'
 import useSWR from 'swr';
-import { Card as Flashcard, Deck, StudySession } from '@/types/database';
+import { Card as Flashcard, Deck } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ArrowLeft, RotateCw, Check, X, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Progress } from '@/components/ui/progress'; // We'll add a progress bar
+import { Progress } from '@/components/ui/progress';
 
 interface DeckData {
   deck: Deck;
   cards: Flashcard[];
 }
+
+// ... (the rest of the file is identical to my previous patch)
 
 interface StudyCard extends Flashcard {
   reviewStatus: 'correct' | 'incorrect' | 'pending';
@@ -34,7 +36,8 @@ export default function FlashcardStudyPage() {
   const deckId = params.deckId as string;
   const { session } = useAuth();
 
-  const { data, error, isLoading, mutate } = useSWR<DeckData>(
+  // Fetch deck data
+  const { data, error, isLoading } = useSWR<DeckData>(
     session ? `/api/decks/${deckId}` : null,
     (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: false }
@@ -72,9 +75,10 @@ export default function FlashcardStudyPage() {
     // Move to the next card
     if (currentIndex < studyDeck.length - 1) {
       setIsFlipped(false); // Flip back to front for next card
+      // Short delay so user can register the flip
       setTimeout(() => {
         setCurrentIndex(currentIndex + 1);
-      }, 150); // Small delay to show feedback
+      }, 150);
     } else {
       // End of deck
       setShowSummary(true);
@@ -82,6 +86,7 @@ export default function FlashcardStudyPage() {
   };
 
   const handleRestart = () => {
+    // Re-shuffle and reset all state
     if (data?.cards) {
       const shuffled = [...data.cards]
         .sort(() => Math.random() - 0.5)
@@ -96,12 +101,13 @@ export default function FlashcardStudyPage() {
 
   // Memoize summary calculations
   const summary = useMemo(() => {
+    if (!showSummary) return { correct: 0, incorrect: 0, total: 0, score: 0 };
     const correct = studyDeck.filter((c) => c.reviewStatus === 'correct').length;
     const incorrect = studyDeck.filter((c) => c.reviewStatus === 'incorrect').length;
     const total = studyDeck.length;
     const score = total > 0 ? Math.round((correct / total) * 100) : 0;
     return { correct, incorrect, total, score };
-  }, [studyDeck, showSummary]); // Only run when needed
+  }, [studyDeck, showSummary]);
 
 
   if (isLoading) {
@@ -130,7 +136,7 @@ export default function FlashcardStudyPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">{data?.deck.title}</h2>
+        <h2 className="text-2xl font-semibold">{data?.deck.title || 'Flashcard Deck'}</h2>
         <p className="text-center">This deck has no cards in it.</p>
         <Button onClick={() => router.push('/flashcards')} variant="outline" className="mt-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
@@ -140,8 +146,7 @@ export default function FlashcardStudyPage() {
   }
 
   const currentCard = studyDeck[currentIndex];
-  const progressPercent = (currentIndex / studyDeck.length) * 100;
-
+  
   return (
     <div className="flex flex-col h-full items-center py-8">
       <div className="w-full max-w-2xl">
@@ -156,12 +161,18 @@ export default function FlashcardStudyPage() {
           </h1>
           <div className="w-24"></div> {/* Spacer */}
         </div>
-        <p className="text-center text-muted-foreground text-sm mb-4">
-          Card {currentIndex + 1} of {studyDeck.length}
-        </p>
+        
+        {!showSummary && (
+          <p className="text-center text-muted-foreground text-sm mb-4">
+            Card {currentIndex + 1} of {studyDeck.length}
+          </p>
+        )}
 
         {/* Progress Bar */}
-        <Progress value={sessionStarted ? ((currentIndex + 1) / studyDeck.length) * 100 : 0} className="w-full h-2 mb-6" />
+        <Progress 
+          value={sessionStarted ? ((currentIndex + 1) / studyDeck.length) * 100 : 0} 
+          className="w-full h-2 mb-6" 
+        />
 
         {/* Main Content Area: Study or Summary */}
         <AnimatePresence mode="wait">
@@ -191,7 +202,7 @@ export default function FlashcardStudyPage() {
                   </div>
                   {/* Back of Card */}
                   <div className="absolute [backface_visibility:hidden] w-full h-full [transform:rotateY(180deg)]">
-                    <Card className="flex h-full items-center justify-center p-6 shadow-lg">
+                    <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary">
                       <p className="text-xl text-center">{currentCard.answer}</p>
                     </Card>
                   </div>
@@ -210,16 +221,16 @@ export default function FlashcardStudyPage() {
                   >
                     <Button
                       variant="outline"
-                      className="flex-1 text-destructive hover:border-destructive/80 hover:text-destructive/80 border-2 border-destructive/50"
+                      className="flex-1 text-destructive hover:border-destructive/80 hover:text-destructive/80 border-2 border-destructive/50 h-14 text-lg"
                       onClick={() => handleReview('incorrect')}
                     >
-                      <X className="mr-2 h-5 w-5" /> I didn't know
+                      <X className="mr-2 h-6 w-6" /> I didn't know
                     </Button>
                     <Button
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white border-2 border-green-600 hover:border-green-700"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white border-2 border-green-600 hover:border-green-700 h-14 text-lg"
                       onClick={() => handleReview('correct')}
                     >
-                      <Check className="mr-2 h-5 w-5" /> I knew this
+                      <Check className="mr-2 h-6 w-6" /> I knew this
                     </Button>
                   </motion.div>
                 )}

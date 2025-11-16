@@ -1,852 +1,367 @@
 // src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback, Fragment } from 'react'; // <-- IMPORT Fragment
-import * as React from 'react'; // <-- IMPORT React
-import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabaseHelpers } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'; // <-- ADDED
-import { Progress } from '@/components/ui/progress';
-import { useToast } from '@/hooks/use-toast';
-import {
-  ArrowLeft,
-  Share2,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  RefreshCw,
-  Eye,
-  Sparkles,
-  LogOut,
-  Timer,
-} from 'lucide-react';
+import { fetcher } from '@/lib/fetcher';
+import useSWR from 'swr';
 import { Quiz, Question } from '@/types/database';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Loader2, ArrowLeft, RotateCw, Check, X, AlertCircle, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { motion, AnimatePresence } from 'framer-motion';
 
-// Define a type for storing user answers
-type UserAnswer = {
-  questionId: string;
-  selectedAnswer: string; // For MATCHING, this will be a stringified array
-  isCorrect: boolean;
-};
-
-// --- NEW: Helper function to render text with blanks safely ---
-function renderWithBlanks(text: string) {
-  if (!text.includes('____')) {
-    return text;
-  }
-  
-  return text.split('____').map((part, index, arr) => (
-    <React.Fragment key={index}>
-      {part}
-      {index < arr.length - 1 && <strong>[BLANK]</strong>}
-    </React.Fragment>
-  ));
+interface QuizData {
+  quiz: Quiz;
+  questions: Question[];
 }
-// --- END NEW HELPER ---
 
-// --- MODIFIED Header ---
-const DashboardHeader = () => {
-  const { user, signOut } = useAuth();
-  const router = useRouter();
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/login');
-  };
-  return (
-    <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <Link href="/quizzes" className="flex items-center gap-2"> {/* <-- MODIFIED LINK */}
-        <Sparkles className="w-6 h-6 text-primary" />
-        <span className="text-xl font-bold">QuizCraft</span>
-      </Link>
-      {user && (
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      )}
-    </header>
-  );
-};
-// --- END MODIFICATION ---
+type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
-export default function QuizPage() {
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+// Helper function to shuffle an array (same as in PopQuizModal)
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // Swap
+  }
+  return newArray;
+}
+
+export default function TakeQuizPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [viewMode, setViewMode] = useState<'quiz' | 'results' | 'review'>(
-    'quiz'
-  );
-  const [error, setError] = useState('');
-  const [fillInBlankAnswer, setFillInBlankAnswer] = useState('');
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [matchingAnswers, setMatchingAnswers] = useState<string[]>([]);
-  const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+  const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [isFinished, setIsFinished] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
 
-  // --- THIS IS THE FIX ---
-  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-  // --- END OF FIX ---
-
-  const { user, loading: authLoading, session } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const { toast } = useToast();
   const quizId = params.quizId as string;
+  const { session } = useAuth();
 
-  // ... (all helper functions like saveAttempt, handleQuizEnd, loadQuizData, etc. remain unchanged) ...
-  // ... (handleAnswerSelect, handleNextQuestion, handleRestartQuiz, handleMatchingAnswerChange, renderQuestion) ...
-  // ... (loading and error states) ...
-  
-  const saveAttempt = useCallback(
-    async (score: number, total: number) => {
-      if (!session || !quizId) {
-        console.warn('No session or quizId, cannot save attempt.');
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/quiz/attempt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            quizId: quizId,
-            score: score,
-            total: total,
-          }),
-        });
-
-        if (!response.ok) {
-          const result = await response.json();
-          throw new Error(result.error || 'Failed to save attempt');
-        }
-
-        console.log('Quiz attempt saved successfully.');
-      } catch (error) {
-        console.error('Error saving quiz attempt:', error);
-      }
-    },
-    [session, quizId]
+  const { data, error, isLoading }_ = useSWR<QuizData>(
+    session ? `/api/quiz/${quizId}` : null,
+    (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
+    { revalidateOnFocus: false }
   );
 
-  const handleQuizEnd = useCallback(() => {
-    if (viewMode === 'results') return;
-
-    const finalScore = userAnswers.filter((a) => a.isCorrect).length;
-    if (questions.length > 0) {
-      saveAttempt(finalScore, questions.length);
-    }
-    setViewMode('results');
-  }, [userAnswers, questions, saveAttempt, viewMode]);
-
-  const loadQuizData = useCallback(async () => {
-    if (!user || !quizId) return;
-
-    setIsLoading(true);
-    setError('');
-    try {
-      console.log(
-        `[QuizPage loadQuizData] Calling supabaseHelpers.getQuiz for ID: ${quizId} with User ID: ${user.id}`
-      );
-      const quizData = await supabaseHelpers.getQuiz(quizId);
-
-      console.log(
-        `[QuizPage loadQuizData] Received quizData:`,
-        quizData ? `Title: ${quizData.title}` : null
-      );
-
-      if (!quizData) {
-        console.log(
-          '[QuizPage loadQuizData] Setting error: Quiz not found or no permission.'
-        );
-        setError('Quiz not found or you may not have permission to view it.');
-        setQuiz(null);
-        setQuestions([]);
-      } else if (!quizData.questions || quizData.questions.length === 0) {
-        console.log(
-          '[QuizPage loadQuizData] Setting error: Quiz found but no questions.'
-        );
-        setError('This quiz exists but has no questions yet.');
-        setQuiz(quizData);
-        setQuestions([]);
-      } else {
-        console.log(
-          `[QuizPage loadQuizData] Success: Found quiz "${quizData.title}" with ${quizData.questions.length} questions.`
-        );
-        setQuiz(quizData);
-        setQuestions(quizData.questions);
-        if (quizData.time_limit_minutes) {
-          setTimeLeft(quizData.time_limit_minutes * 60);
-        }
-      }
-    } catch (err: any) {
-      console.error('[QuizPage loadQuizData] Error caught during fetch:', err);
-      setError(
-        err.message || 'An unexpected error occurred while fetching the quiz.'
-      );
-      setQuiz(null);
-      setQuestions([]);
-    } finally {
-      console.log('[QuizPage loadQuizData] Setting isLoading to false.');
-      setIsLoading(false);
-    }
-  }, [user, quizId]);
-
+  // Shuffle questions and answers on load
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-      return;
-    }
-    if (!authLoading && user && quizId) {
-      loadQuizData();
-    }
-  }, [user, authLoading, quizId, router, loadQuizData]);
-
-  useEffect(() => {
-    if (timeLeft === null || timeLeft === 0 || viewMode !== 'quiz') return;
-
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(interval);
-          toast({
-            title: "Time's Up!",
-            description: 'Your quiz is being submitted automatically.',
-            variant: 'destructive',
-          });
-          handleQuizEnd();
-          return 0;
+    if (data?.questions && data.questions.length > 0) {
+      const shuffledQuestions = shuffleArray(data.questions);
+      
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
+          const options = q.options as { text: string; is_correct: boolean }[];
+          return {
+            ...q,
+            options: shuffleArray(options),
+          };
         }
-        return prev - 1;
+        return q;
       });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeLeft, viewMode, toast, handleQuizEnd]);
-
-  // --- MODIFICATION: Reset state on question change ---
-  useEffect(() => {
-    const currentQuestion = questions[currentQuestionIndex];
-    if (currentQuestion?.question_type === 'MATCHING') {
-      const prompts = currentQuestion.prompts;
-      setMatchingAnswers(
-        Array(Array.isArray(prompts) ? prompts.length : 0).fill('')
-      );
-      // Shuffle options for display
-      const options = Array.isArray(currentQuestion.options)
-        ? currentQuestion.options
-        : [];
-      setShuffledOptions([...options].sort(() => Math.random() - 0.5));
-    } else {
-      setMatchingAnswers([]);
-      setShuffledOptions([]);
+      
+      setQuizQuestions(questionsWithShuffledOptions);
+      // Reset all states
+      setCurrentQuestionIndex(0);
+      setSelectedAnswer(null);
+      setAnswerStatus('unanswered');
+      setCorrectAnswers(0);
+      setIsFinished(false);
     }
-    // Reset other answer states
-    setSelectedAnswer(null);
-    setFillInBlankAnswer('');
-    setIsAnswered(false);
-  }, [currentQuestionIndex, questions]);
-  // --- END MODIFICATION ---
+  }, [data]);
 
-  // --- MODIFICATION: Updated answer selection logic ---
+  const currentQuestion = quizQuestions[currentQuestionIndex];
+  const progress = quizQuestions.length > 0 ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100 : 0;
+
   const handleAnswerSelect = (answer: string) => {
-    if (isAnswered) return;
-    const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+    if (answerStatus !== 'unanswered') return; // Already answered
+
+    setSelectedAnswer(answer);
+    
+    let isCorrect = false;
+    if (currentQuestion.question_type === 'multiple_choice') {
+      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
+      isCorrect = options.find((opt) => opt.text === answer)?.is_correct ?? false;
+    } else if (currentQuestion.question_type === 'true_false') {
+      isCorrect = currentQuestion.answer === answer;
+    }
+
+    if (isCorrect) {
+      setAnswerStatus('correct');
+      setCorrectAnswers((prev) => prev + 1);
+    } else {
+      setAnswerStatus('incorrect');
+    }
+  };
+
+  const handleNext = () => {
+    if (currentQuestionIndex < quizQuestions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setSelectedAnswer(null);
+      setAnswerStatus('unanswered');
+    } else {
+      // Finish quiz
+      setIsFinished(true);
+    }
+  };
+
+  const handleRestart = () => {
+    // Just trigger the useEffect
+    if (data?.questions && data.questions.length > 0) {
+      const shuffledQuestions = shuffleArray(data.questions);
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
+          const options = q.options as { text: string; is_correct: boolean }[];
+          return {
+            ...q,
+            options: shuffleArray(options),
+          };
+        }
+        return q;
+      });
+      setQuizQuestions(questionsWithShuffledOptions);
+    }
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setAnswerStatus('unanswered');
+    setCorrectAnswers(0);
+    setIsFinished(false);
+  };
+
+  const getOptionClass = (optionText: string) => {
+    if (answerStatus === 'unanswered') {
+      return 'border-border hover:bg-muted/50';
+    }
 
     let isCorrect = false;
-    let selectedAnswerForStorage = answer;
-
-    switch (currentQuestion.question_type) {
-      case 'MULTIPLE_CHOICE':
-      case 'TRUE_FALSE':
-        isCorrect =
-          answer.toLowerCase().trim() ===
-          (currentQuestion.correct_answer || '').toLowerCase().trim();
-        break;
-
-      case 'FILL_IN_THE_BLANK':
-        const validAnswers = Array.isArray(currentQuestion.options)
-          ? currentQuestion.options
-          : [];
-        isCorrect = validAnswers.some(
-          (opt) => opt.toLowerCase().trim() === answer.toLowerCase().trim()
-        );
-        selectedAnswerForStorage = answer.trim(); // Store the user's typed answer
-        break;
-
-      case 'MATCHING':
-        try {
-          const userAnswersArray = JSON.parse(answer) as string[];
-          const correctAnswersArray = Array.isArray(currentQuestion.options)
-            ? currentQuestion.options
-            : [];
-          isCorrect =
-            userAnswersArray.length === correctAnswersArray.length &&
-            userAnswersArray.every((ans, i) => ans === correctAnswersArray[i]);
-          selectedAnswerForStorage = answer; // Store the stringified array
-        } catch (e) {
-          console.error('Failed to parse matching answers', e);
-          isCorrect = false;
-        }
-        break;
-
-      default:
-        isCorrect =
-          answer.toLowerCase().trim() ===
-          (currentQuestion.correct_answer || '').toLowerCase().trim();
+    if (currentQuestion.question_type === 'multiple_choice') {
+      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
+      isCorrect = options.find((opt) => opt.text === optionText)?.is_correct ?? false;
+    } else if (currentQuestion.question_type === 'true_false') {
+      isCorrect = currentQuestion.answer === optionText;
     }
 
-    setSelectedAnswer(selectedAnswerForStorage);
-    setIsAnswered(true);
-    setUserAnswers([
-      ...userAnswers,
-      {
-        questionId: currentQuestion.id,
-        selectedAnswer: selectedAnswerForStorage,
-        isCorrect,
-      },
-    ]);
-  };
-  // --- END MODIFICATION ---
-
-  // --- MODIFICATION: Simplified next question logic ---
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    } else {
-      handleQuizEnd();
+    if (isCorrect) {
+      // Is the correct answer
+      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
     }
-  };
-  // --- END MODIFICATION ---
-
-  // --- MODIFICATION: Simplified restart logic ---
-  const handleRestartQuiz = () => {
-    setCurrentQuestionIndex(0);
-    setUserAnswers([]);
-    if (quiz?.time_limit_minutes) {
-      setTimeLeft(quiz.time_limit_minutes * 60);
-    } else {
-      setTimeLeft(null);
+    if (selectedAnswer === optionText && !isCorrect) {
+      // Is the selected, incorrect answer
+      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
     }
-    setViewMode('quiz');
-    // useEffect on currentQuestionIndex will handle resetting answer states
-  };
-  // --- END MODIFICATION ---
-
-  // --- NEW: Handler for MATCHING dropdowns ---
-  const handleMatchingAnswerChange = (
-    promptIndex: number,
-    selectedAnswer: string
-  ) => {
-    if (isAnswered) return;
-    const newAnswers = [...matchingAnswers];
-    newAnswers[promptIndex] = selectedAnswer;
-    setMatchingAnswers(newAnswers);
-  };
-  // --- END NEW ---
-
-  const renderQuestion = () => {
-    if (!questions[currentQuestionIndex]) {
-      console.error(
-        `[renderQuestion] Attempted to render question at index ${currentQuestionIndex}, but it's undefined.`
-      );
-      return <p>Error: Could not load question data.</p>;
-    }
-
-    const question = questions[currentQuestionIndex];
-    switch (question.question_type) {
-      case 'MULTIPLE_CHOICE':
-        const options = Array.isArray(question.options) ? question.options : [];
-        if (options.length === 0)
-          console.warn(
-            `[renderQuestion] MULTIPLE_CHOICE question (ID: ${question.id}) has no options.`
-          );
-        return (
-          <div className="space-y-2">
-            {options.map((option, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${
-                  isAnswered && option === question.correct_answer
-                    ? 'bg-green-100 border-green-400 dark:bg-green-900/50'
-                    : ''
-                } ${
-                  isAnswered &&
-                  selectedAnswer === option &&
-                  option !== question.correct_answer
-                    ? 'bg-red-100 border-red-400 dark:bg-red-900/50'
-                    : ''
-                }`}
-                onClick={() => handleAnswerSelect(option)}
-                disabled={isAnswered}
-              >
-                {option}
-              </Button>
-            ))}
-          </div>
-        );
-      case 'TRUE_FALSE':
-        return (
-          <div className="space-y-2">
-            {['True', 'False'].map((option, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${
-                  isAnswered && option === question.correct_answer
-                    ? 'bg-green-100 border-green-400 dark:bg-green-900/50'
-                    : ''
-                } ${
-                  isAnswered &&
-                  selectedAnswer === option &&
-                  option !== question.correct_answer
-                    ? 'bg-red-100 border-red-400 dark:bg-red-900/50'
-                    : ''
-                }`}
-                onClick={() => handleAnswerSelect(option)}
-                disabled={isAnswered}
-              >
-                {option}
-              </Button>
-            ))}
-          </div>
-        );
-      case 'FILL_IN_THE_BLANK':
-        return (
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                value={fillInBlankAnswer}
-                onChange={(e) => setFillInBlankAnswer(e.target.value)}
-                placeholder="Type your answer here..."
-                disabled={isAnswered}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isAnswered) {
-                    e.preventDefault();
-                    handleAnswerSelect(fillInBlankAnswer);
-                  }
-                }}
-              />
-              <Button
-                onClick={() => handleAnswerSelect(fillInBlankAnswer)}
-                disabled={isAnswered}
-              >
-                Submit
-              </Button>
-            </div>
-          </div>
-        );
-      // --- MODIFICATION: Added MATCHING UI ---
-      case 'MATCHING':
-        const prompts = Array.isArray(question.prompts) ? question.prompts : [];
-        if (prompts.length === 0) {
-          console.warn(
-            `[renderQuestion] MATCHING question (ID: ${question.id}) has no prompts.`
-          );
-          return <p>Error: This matching question is set up incorrectly.</p>;
-        }
-        return (
-          <div className="space-y-4">
-            <div className="space-y-3">
-              {prompts.map((prompt, index) => (
-                <div
-                  key={index}
-                  className="flex flex-col sm:flex-row items-center gap-2"
-                >
-                  <div className="p-3 border rounded-md bg-muted w-full sm:w-1/2 break-words">
-                    {prompt}
-                  </div>
-                  <Select
-                    value={matchingAnswers[index] || ''}
-                    onValueChange={(value) =>
-                      handleMatchingAnswerChange(index, value)
-                    }
-                    disabled={isAnswered}
-                  >
-                    <SelectTrigger className="w-full sm:w-1/2">
-                      <SelectValue placeholder="Select an answer..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shuffledOptions.map((option, optIndex) => (
-                        <SelectItem key={optIndex} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-            <Button
-              onClick={() => handleAnswerSelect(JSON.stringify(matchingAnswers))} // Pass answers as string
-              disabled={isAnswered || matchingAnswers.some((a) => a === '')}
-            >
-              Submit
-            </Button>
-          </div>
-        );
-      // --- END MODIFICATION ---
-      default:
-        console.error(
-          `[renderQuestion] Unsupported question type encountered: ${question.question_type} for question ID: ${question.id}`
-        );
-        return <p>Error: Unsupported question type.</p>;
-    }
+    
+    // Is neither selected nor correct (an incorrect option)
+    return 'border-border opacity-60';
   };
 
-  if (isLoading || authLoading) {
-    // ... (loading render)
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="ml-2">Loading Quiz...</p>
       </div>
     );
   }
 
   if (error) {
-    // --- MODIFIED: Back button link ---
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-        <DashboardHeader />
-        <main className="container mx-auto px-4 py-8 md:py-12 text-center">
-          <p className="text-destructive font-semibold">{error}</p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => router.push('/quizzes')}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Quizzes
-          </Button>
-        </main>
-      </div>
-    );
-    // --- END MODIFICATION ---
-  }
-
-  if (!quiz) {
-    // ... (error render)
-     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-destructive">
-          An unexpected error occurred. Could not load quiz data.
-        </p>
+      <div className="flex flex-col items-center justify-center h-full text-destructive">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
+        <p className="text-center">{error.message}</p>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
+        </Button>
       </div>
     );
   }
 
-  const score = userAnswers.filter((a) => a.isCorrect).length;
-  const currentQuestion = questions[currentQuestionIndex];
-  const minutes = timeLeft ? Math.floor(timeLeft / 60) : 0;
-  const seconds = timeLeft ? timeLeft % 60 : 0;
+  if (!data || quizQuestions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <h2 className="text-2xl font-semibold">{data?.quiz.title || 'Quiz'}</h2>
+        <p className="text-center">This quiz has no questions in it.</p>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <DashboardHeader />
-      <main className="container mx-auto px-4 py-8 md:py-12">
-        {/* --- MODIFIED: Back button link --- */}
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => router.push('/quizzes')}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Quizzes
-        </Button>
-        {/* --- END MODIFICATION --- */}
-        <Card className="max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold">{quiz.title}</CardTitle>
-            {viewMode === 'quiz' && (
-              <>
-                <div className="flex justify-between items-center pt-1">
-                  <CardDescription>
-                    Question {currentQuestionIndex + 1} of{' '}
-                    {questions.length > 0 ? questions.length : 0}
-                  </CardDescription>
-                  {quiz.time_limit_minutes && timeLeft !== null && (
-                    <CardDescription
-                      className={cn(
-                        'flex items-center font-medium',
-                        timeLeft <= 60 && 'text-destructive'
-                      )}
-                    >
-                      <Timer className="w-4 h-4 mr-1.5" />
-                      {minutes}:{String(seconds).padStart(2, '0')}
-                    </CardDescription>
-                  )}
-                </div>
-                <Progress
-                  value={
-                    questions.length > 0
-                      ? ((currentQuestionIndex + 1) / questions.length) * 100
-                      : 0
-                  }
-                  className="mt-2"
-                />
-              </>
-            )}
-          </CardHeader>
-          <CardContent>
-            {/* Handle quiz view */}
-            {viewMode === 'quiz' && questions.length > 0 && currentQuestion && (
-              <div>
-                {/* --- MODIFICATION: Use safe renderWithBlanks --- */}
-                {currentQuestion.question_type === 'FILL_IN_THE_BLANK' ? (
-                  <div
-                    className="text-lg font-semibold mb-4"
-                  >
-                    {renderWithBlanks(currentQuestion.question_text)}
-                  </div>
-                ) : (
-                  <div className="text-lg font-semibold mb-4">
+    <div className="flex flex-col h-full items-center py-8">
+      <div className="w-full max-w-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2">
+          <Button variant="ghost" onClick={() => router.push('/quizzes')} className="pl-0">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Quizzes
+          </Button>
+          <h1 className="text-xl font-semibold truncate text-center" title={data.quiz.title}>
+            {data.quiz.title}
+          </h1>
+          <div className="w-24"></div> {/* Spacer */}
+        </div>
+
+        {!isFinished && (
+          <div className="flex items-center gap-4 mb-6">
+            <span className="text-sm font-medium text-muted-foreground">
+              Question {currentQuestionIndex + 1} of {quizQuestions.length}
+            </span>
+            <Progress value={progress} className="flex-1 h-2" />
+          </div>
+        )}
+
+        {/* Main Content Area: Quiz or Summary */}
+        <AnimatePresence mode="wait">
+          {isFinished ? (
+            // --- Summary Screen ---
+            <motion.div
+              key="summary"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center"
+            >
+              <Card className="w-full max-w-md shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-center text-2xl">Quiz Complete!</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center gap-4">
+                  <Trophy className="w-16 h-16 text-yellow-500" />
+                  <h3 className="text-4xl font-bold mt-4">
+                    {correctAnswers} / {quizQuestions.length}
+                  </h3>
+                  <p className="text-lg text-muted-foreground">
+                    Your score: {Math.round((correctAnswers / quizQuestions.length) * 100)}%
+                  </p>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-3">
+                  <Button className="w-full" onClick={handleRestart}>
+                    <RotateCw className="mr-2 h-4 w-4" />
+                    Take Again
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={() => router.push('/quizzes')}>
+                    Back to Quizzes
+                  </Button>
+                </CardFooter>
+              </Card>
+            </motion.div>
+          ) : (
+            // --- Question Screen ---
+            <motion.div
+              key={currentQuestionIndex}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card className="shadow-lg">
+                <CardContent className="p-6">
+                  <p className="text-lg font-semibold mb-4 min-h-[60px]">
                     {currentQuestion.question_text}
-                  </div>
-                )}
-                {/* --- END MODIFICATION --- */}
-
-                {renderQuestion()}
-
-                {/* --- MODIFICATION: Updated Feedback Block --- */}
-                {isAnswered && currentQuestion && (
-                  <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    {userAnswers.find(
-                      (a) => a.questionId === currentQuestion.id
-                    )?.isCorrect ? (
-                      <div className="flex items-center text-green-600 dark:text-green-400">
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        <p className="font-semibold">Correct!</p>
-                      </div>
-                    ) : (
-                      <div className="text-red-600 dark:text-red-400">
-                        <div className="flex items-center font-semibold">
-                          <XCircle className="w-5 h-5 mr-2" />
-                          <p>Incorrect.</p>
-                        </div>
-                        {currentQuestion.question_type ===
-                          'FILL_IN_THE_BLANK' && (
-                          <p className="text-sm mt-1">
-                            Accepted answers:{' '}
-                            {(Array.isArray(currentQuestion.options)
-                              ? currentQuestion.options
-                              : []
-                            ).join(', ')}
-                          </p>
-                        )}
-                        {currentQuestion.question_type === 'MATCHING' && (
-                          <p className="text-sm mt-1">
-                            Check the review section at the end for correct
-                            pairs.
-                          </p>
-                        )}
-                        {(currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
-                          currentQuestion.question_type === 'TRUE_FALSE') && (
-                          <p className="text-sm mt-1">
-                            Correct answer: {currentQuestion.correct_answer}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {currentQuestion.explanation && (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {currentQuestion.explanation}
-                      </p>
-                    )}
-
-                    <Button
-                      className="mt-4 w-full"
-                      onClick={handleNextQuestion}
-                    >
-                      {currentQuestionIndex < questions.length - 1
-                        ? 'Next Question'
-                        : 'Finish Quiz'}
-                    </Button>
-                  </div>
-                )}
-                {/* --- END MODIFICATION --- */}
-              </div>
-            )}
-
-            {/* Handle empty quiz */}
-            {viewMode === 'quiz' && questions.length === 0 && (
-              <div className="text-center text-muted-foreground py-8">
-                <p>This quiz currently has no questions.</p>
-                {/* --- MODIFIED: Back button link --- */}
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => router.push('/quizzes')}
-                >
-                  Back to Quizzes
-                </Button>
-                {/* --- END MODIFICATION --- */}
-              </div>
-            )}
-            
-            {/* ... (rest of viewMode === 'results' and viewMode === 'review' are unchanged) ... */}
-            {/* Handle results view */}
-            {viewMode === 'results' && (
-              <div className="text-center py-8">
-                <h2 className="text-xl font-semibold">Quiz Complete!</h2>
-                <p className="text-6xl font-bold my-4">
-                  {score} / {questions.length > 0 ? questions.length : 0}
-                </p>
-                <div className="flex justify-center gap-2">
-                  <Button onClick={handleRestartQuiz}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Try Again
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setViewMode('review')}
-                    disabled={questions.length === 0}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    Review Answers
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* --- MODIFICATION: Updated Review View --- */}
-            {viewMode === 'review' && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-center">
-                  Review Your Answers
-                </h2>
-                {questions.map((q, index) => {
-                  const userAnswer = userAnswers.find(
-                    (a) => a.questionId === q.id
-                  );
-                  const isCorrect = userAnswer?.isCorrect;
-
-                  return (
-                    <div
-                      key={q.id}
-                      className={cn(
-                        'p-4 rounded-lg border',
-                        isCorrect
-                          ? 'border-green-500/50 bg-green-500/5'
-                          : 'border-destructive/50 bg-destructive/5'
+                  </p>
+                  <div className="space-y-3">
+                    {/* Multiple Choice */}
+                    {currentQuestion.question_type === 'multiple_choice' &&
+                      (currentQuestion.options as { text: string; is_correct: boolean }[]).map(
+                        (option)_ => (
+                          <Button
+                            key={option.text}
+                            variant="outline"
+                            className={cn(
+                              'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
+                              answerStatus !== 'unanswered' && 'pointer-events-none',
+                              getOptionClass(option.text)
+                            )}
+                            onClick={() => handleAnswerSelect(option.text)}
+                          >
+                            <span className="flex-1">{option.text}</span>
+                            {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('green') && (
+                              <Check className="w-5 h-5 ml-2 text-green-600" />
+                            )}
+                            {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('destructive') && (
+                              <X className="w-5 h-5 ml-2 text-destructive" />
+                            )}
+                          </Button>
+                        )
                       )}
-                    >
-                      {/* --- MODIFICATION: Use safe renderWithBlanks --- */}
-                      <p
-                        className="font-semibold"
+
+                    {/* True/False */}
+                    {currentQuestion.question_type === 'true_false' &&
+                      ['True', 'False'].map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            'h-12 w-full text-left p-4',
+                            answerStatus !== 'unanswered' && 'pointer-events-none',
+                            getOptionClass(option)
+                          )}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                          <span className="flex-1">{option}</span>
+                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && (
+                            <Check className="w-5 h-5 ml-2 text-green-600" />
+                          )}
+                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('destructive') && (
+                            <X className="w-5 h-5 ml-2 text-destructive" />
+                          )}
+                        </Button>
+                      ))}
+                  </div>
+
+                  {/* Feedback Message */}
+                  <AnimatePresence>
+                    {answerStatus === 'correct' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex items-center font-medium text-green-600"
                       >
-                        {index + 1}. {renderWithBlanks(q.question_text)}
-                      </p>
-                      {/* --- END MODIFICATION --- */}
-
-                      {q.question_type === 'MATCHING' ? (
-                        <div className="mt-2 text-sm">
-                          <p
-                            className={cn(
-                              isCorrect
-                                ? 'text-green-700 dark:text-green-400'
-                                : 'text-destructive'
-                            )}
-                          >
-                            Your submission was {isCorrect ? 'Correct' : 'Incorrect'}.
-                          </p>
-                          <div className="mt-2 space-y-1">
-                            <h4 className="font-medium">Correct Pairs:</h4>
-                            {(Array.isArray(q.prompts) ? q.prompts : []).map(
-                              (prompt, i) => (
-                                <p key={i} className="text-muted-foreground">
-                                  {prompt} &rarr;{' '}
-                                  {Array.isArray(q.options) ? q.options[i] : 'N/A'}
-                                </p>
-                              )
-                            )}
-                          </div>
+                        <Check className="w-5 h-5 mr-2" />
+                        That's correct!
+                      </motion.div>
+                    )}
+                    {answerStatus === 'incorrect' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex flex-col font-medium text-destructive"
+                      >
+                        <div className="flex items-center">
+                          <X className="w-5 h-5 mr-2" />
+                          That's not right.
                         </div>
-                      ) : q.question_type === 'FILL_IN_THE_BLANK' ? (
-                        <div className="mt-2 text-sm">
-                          <p
-                            className={cn(
-                              isCorrect
-                                ? 'text-green-700 dark:text-green-400'
-                                : 'text-destructive'
-                            )}
-                          >
-                            Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
+                        {currentQuestion.explanation && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
                           </p>
-                          {!isCorrect && (
-                            <p className="mt-1 text-green-700 dark:text-green-400">
-                              Accepted answers:{' '}
-                              {(Array.isArray(q.options) ? q.options : []).join(
-                                ', '
-                              )}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        // MC and T/F
-                        <div className="mt-2 text-sm">
-                          <p
-                            className={cn(
-                              isCorrect
-                                ? 'text-green-700 dark:text-green-400'
-                               : 'text-destructive'
-                            )}
-                          >
-                            Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
-                          </p>
-                          {!isCorrect && (
-                            <p className="mt-1 text-green-700 dark:text-green-400">
-                              Correct answer: {q.correct_answer}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {q.explanation && (
-                        <p className="mt-2 text-xs text-muted-foreground border-t pt-2">
-                          {q.explanation}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-                <Button className="w-full" onClick={handleRestartQuiz}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Take Quiz Again
-                </Button>
-              </div>
-            )}
-            {/* --- END MODIFICATION --- */}
-          </CardContent>
-        </Card>
-      </main>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+                <CardFooter className="p-6 pt-0 flex justify-end">
+                  <Button
+                    className="w-full sm:w-auto"
+                    disabled={answerStatus === 'unanswered'}
+                    onClick={handleNext}
+                  >
+                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next Question'}
+                  </Button>
+                </CardFooter>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
