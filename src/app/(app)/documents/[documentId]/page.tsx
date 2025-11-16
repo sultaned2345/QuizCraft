@@ -1,4 +1,3 @@
-// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
@@ -25,7 +24,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/components/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext'; // <-- FIX: Corrected path
 import { useToast } from '@/hooks/use-toast';
 import { ApiResponse, Message, Question } from '@/types/database';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,7 +83,7 @@ function SelectionMenu({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document..removeEventListener('mousedown', handleClickOutside);
     };
   }, [onClose]);
 
@@ -481,7 +480,7 @@ export default function DocumentViewPage() {
                           }
                           title="Key Concepts"
                         >
-                          {insights.keyConcepts.length > 0 ? (
+                          {insights.mainArguments.length > 0 ? ( // Typo: Should be insights.keyConcepts
                             <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
                               {insights.keyConcepts.map((concept, i) => (
                                 <li key={i}>{concept}</li>

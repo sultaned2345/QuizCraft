@@ -1,10 +1,9 @@
-// components/PdfViewer.tsx
 'use client';
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
+import { cn } from '@/lib/utils'; // <-- FIX: Added slash
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- CONFIGURE THE WORKER ---
