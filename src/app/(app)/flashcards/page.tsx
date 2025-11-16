@@ -7,14 +7,22 @@ import { getServerSession } from '@/lib/getServerSession'; // Ensure this helper
 import { USAGE_LIMITS } from '@/lib/usage-limits';
 import { FlashcardDeck } from '@/types/database'; // Import type
 
+// --- 1. DEFINE THE DeckWithStats type here ---
+interface DeckWithStats extends FlashcardDeck {
+  cardCount: number;
+  dueCount: number;
+  newCount: number;
+}
+
 // Define expected response structure for pagination
 interface PaginatedDecksData {
-  decks: FlashcardDeck[];
+  decks: DeckWithStats[]; // Use the new type
   count: number;
   limit: number | typeof Infinity;
   totalPages: number;
   currentPage: number;
 }
+// --- END 1 ---
 
 // --- NEW ---
 // Define the study queue data structure
@@ -26,9 +34,11 @@ interface StudyQueueData {
 // Combine all initial data into one prop
 interface FlashcardsPageData extends PaginatedDecksData, StudyQueueData {}
 
-// --- Server-Side Data Fetching Function ---
+// --- 2. UPDATE getInitialDecks FUNCTION ---
 async function getInitialDecks(userId: string, page: number = 1, limit: number = 9): Promise<PaginatedDecksData> {
   const skip = (page - 1) * limit;
+  const now = new Date(); // Use for 'due' and 'new' calculation
+
   try {
     const userProfile = await prisma.profiles.findUnique({
       where: { id: userId },
@@ -37,24 +47,46 @@ async function getInitialDecks(userId: string, page: number = 1, limit: number =
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
     const usageLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_FLASHCARD_DECKS;
 
-    const [decksData, totalCount] = await prisma.$transaction([
-      prisma.flashcard_decks.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: 'desc' },
-        take: limit,
-        skip: skip,
-        select: { id: true, user_id: true, title: true, created_at: true, updated_at: true },
-      }),
-      prisma.flashcard_decks.count({
-        where: { user_id: userId },
-      }),
-    ]);
+    // --- Use the more complex query from /api/decks/route.ts ---
+    const decksData: any[] = await prisma.$queryRaw`
+        SELECT
+            d.id,
+            d.user_id,
+            d.title,
+            d.created_at,
+            d.updated_at,
+            COUNT(f.id)::int AS "cardCount",
+            COUNT(CASE WHEN f.review_at <= ${now} THEN 1 ELSE NULL END)::int AS "dueCount",
+            COUNT(CASE WHEN f.review_at <= ${now} AND f.ease_factor = 2.5 THEN 1 ELSE NULL END)::int AS "newCount"
+        FROM
+            public.flashcard_decks d
+        LEFT JOIN
+            public.flashcards f ON d.id = f.deck_id
+        WHERE
+            d.user_id = ${userId}::uuid
+        GROUP BY
+            d.id
+        ORDER BY
+            d.created_at DESC
+        LIMIT ${limit}
+        OFFSET ${skip}
+    `;
 
-    // Serialize dates
-    const decks = decksData.map((deck) => ({
-      ...deck,
+    const totalCount = await prisma.flashcard_decks.count({
+      where: { user_id: userId },
+    });
+    // --- End complex query ---
+
+    // Serialize dates and ensure types
+    const decks: DeckWithStats[] = decksData.map((deck) => ({
+      id: deck.id,
+      user_id: deck.user_id,
+      title: deck.title,
       created_at: deck.created_at?.toISOString() || '',
       updated_at: deck.updated_at?.toISOString() || '',
+      cardCount: deck.cardCount || 0,
+      dueCount: deck.dueCount || 0,
+      newCount: deck.newCount || 0,
     }));
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -77,8 +109,9 @@ async function getInitialDecks(userId: string, page: number = 1, limit: number =
     };
   }
 }
+// --- END 2 ---
 
-// --- NEW: Server-Side Function to get Study Queue ---
+// --- NEW: Server-Side Function to get Study Queue (Unchanged) ---
 async function getStudyQueueData(userId: string): Promise<StudyQueueData> {
   try {
     // Find the oldest due card to get its deck ID
@@ -109,7 +142,7 @@ async function getStudyQueueData(userId: string): Promise<StudyQueueData> {
   }
 }
 
-// --- The Page Component (Server Component) ---
+// --- The Page Component (Server Component) (Unchanged) ---
 export default async function FlashcardsPage() {
   const session = await getServerSession();
 
