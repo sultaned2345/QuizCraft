@@ -5,7 +5,11 @@
 /**
  * Extracts text from a file (PDF, TXT, DOCX, PPTX) by calling the server-side API.
  */
-export async function extractTextFromFile(file: File): Promise<string> {
+// --- MODIFICATION: Added 'token' argument ---
+export async function extractTextFromFile(
+  file: File,
+  token: string, // <-- ADDED
+): Promise<string> {
   try {
     // Create FormData to send file to API
     const formData = new FormData();
@@ -15,14 +19,21 @@ export async function extractTextFromFile(file: File): Promise<string> {
     const response = await fetch('/api/parse-file', {
       method: 'POST',
       body: formData,
-      // Note: We don't need to send Auth header here,
-      // as the browser will send the auth cookie automatically.
-      // If using token-based auth, you'd add it here.
+      // --- MODIFICATION: Add Authorization header ---
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      // ---
     });
 
     const result = await response.json();
 
     if (!response.ok || !result.success) {
+      // --- MODIFICATION: Pass auth error message through ---
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      // ---
       throw new Error(result.error || 'Failed to parse file');
     }
 

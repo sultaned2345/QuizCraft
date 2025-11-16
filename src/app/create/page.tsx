@@ -50,7 +50,7 @@ import {
 } from '@/lib/file-parser';
 // ---
 import { QuestionType, ApiResponse, DocumentMetadata } from '@/types/database';
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. IMPORT HOOK (FIXED PATH)
+import { useUpgradeModal } from '@/components/UpgradeModalContext';
 
 interface QuizSettings {
   questionCount: number;
@@ -71,7 +71,9 @@ const DashboardHeader = () => {
 
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <Link href="/quizzes" className="flex items-center gap-2"> {/* <-- MODIFIED */}
+      <Link href="/quizzes" className="flex items-center gap-2">
+        {' '}
+        {/* <-- MODIFIED */}
         <Sparkles className="w-6 h-6 text-primary" />
         <span className="text-xl font-bold">QuizCraft</span>
       </Link>
@@ -106,7 +108,7 @@ export default function CreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams(); // Hook to read query params
   const { toast } = useToast();
-  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+  const { openModal } = useUpgradeModal();
 
   // Effect to handle initial login state
   useEffect(() => {
@@ -161,12 +163,9 @@ export default function CreatePage() {
       const maxSize = 3 * 1024 * 1024; // 3MB
 
       // Updated validation
-      const isValidType = [
-        '.pdf',
-        '.txt',
-        '.docx',
-        '.pptx',
-      ].some((ext) => file.name.toLowerCase().endsWith(ext));
+      const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some((ext) =>
+        file.name.toLowerCase().endsWith(ext)
+      );
 
       if (!isValidType) {
         setError('Unsupported file. Please upload PDF, TXT, DOCX, or PPTX.'); // Updated message
@@ -225,11 +224,17 @@ export default function CreatePage() {
     let response; // Declare response outside try block
     try {
       let finalTextContent = textContent.trim();
-      // --- MODIFIED: Simplified file text extraction ---
+      // --- MODIFIED: Pass the session token ---
       if (selectedFile) {
-        toast({ title: 'Processing file...', description: 'Extracting text from your document.'});
-        finalTextContent = await extractTextFromFile(selectedFile);
-        toast({ title: 'Text extracted!', description: 'Now generating quiz...'});
+        toast({
+          title: 'Processing file...',
+          description: 'Extracting text from your document.',
+        });
+        finalTextContent = await extractTextFromFile(
+          selectedFile,
+          session.access_token // <-- PASS TOKEN HERE
+        );
+        toast({ title: 'Text extracted!', description: 'Now generating quiz...' });
       }
       // ---
       if (finalTextContent.length < 100)
@@ -266,14 +271,20 @@ export default function CreatePage() {
             // Add another try-catch for text()
             errorBody = await response.text(); // Fallback to text
           } catch (textError) {
-            console.error('Failed to even get text from error response:', textError);
+            console.error(
+              'Failed to even get text from error response:',
+              textError
+            );
             errorBody = response.statusText; // Ultimate fallback
           }
         }
         console.error('API Error Response Body:', errorBody);
 
         // --- 3. CATCH LIMIT ERROR ---
-        if (typeof errorBody === 'object' && errorBody.error === 'limit_exceeded') {
+        if (
+          typeof errorBody === 'object' &&
+          errorBody.error === 'limit_exceeded'
+        ) {
           openModal();
           throw new Error(errorBody.message || 'AI generation limit reached.');
         }
@@ -311,8 +322,9 @@ export default function CreatePage() {
       window.location.href = '/quizzes'; // <-- MODIFIED: Force full reload to /quizzes
     } catch (err) {
       // Catch errors from fetch itself, parsing, or thrown checks
-      const errorMessage = err instanceof Error ? err.message : 'Something went wrong.';
-      
+      const errorMessage =
+        err instanceof Error ? err.message : 'Something went wrong.';
+
       // --- 4. AVOID DOUBLE-TOASTING LIMIT ERRORS ---
       if (!errorMessage.includes('limit reached')) {
         console.error('--- Error in handleSubmit ---', err); // Log the full error
@@ -410,7 +422,7 @@ export default function CreatePage() {
                   <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
                   <p className="mt-2 font-semibold">
                     {selectedFile ? selectedFile.name : 'Drag & drop or click'}
-                  </p>
+                  </play>
                   <p className="mt-1 text-xs text-muted-foreground">
                     PDF, TXT, DOCX, PPTX (max 3MB).
                     {selectedFile && ` (${formatFileSize(selectedFile.size)})`}
