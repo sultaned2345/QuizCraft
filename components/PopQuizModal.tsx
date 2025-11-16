@@ -1,240 +1,306 @@
 // components/PopQuizModal.tsx
-// NEW FILE
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Question } from '@/types/database';
-import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogClose
+  DialogFooter,
 } from '@/components/ui/dialog';
+import { Button }ANd { buttonVariants } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle, XCircle, RefreshCw, Eye } from 'lucide-react';
+import { Question } from '@/types/database';
+import { Loader2, Check, X, RotateCw, Trophy, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-
-type UserAnswer = {
-  questionId: string;
-  selectedAnswer: string;
-  isCorrect: boolean;
-};
-
-type ViewMode = 'quiz' | 'results' | 'review';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface PopQuizModalProps {
   isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (isOpen: boolean) => void;
   questions: Question[];
+  title?: string;
 }
 
-export function PopQuizModal({ isOpen, onOpenChange, questions }: PopQuizModalProps) {
+type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
+
+export function PopQuizModal({
+  isOpen,
+  onOpenChange,
+  questions,
+  title = 'Pop Quiz!',
+}: PopQuizModalProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('quiz');
-  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-  
-  // Reset state when modal opens or questions change
+  const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [isFinished, setIsFinished] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+
+  // Shuffle questions and answers on load
   useEffect(() => {
-    if (isOpen) {
+    if (questions.length > 0) {
+      const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        if (q.question_type === 'multiple_choice' && q.options) {
+          const options = q.options as { text: string; is_correct: boolean }[];
+          return {
+            ...q,
+            options: [...options].sort(() => Math.random() - 0.5),
+          };
+        }
+        return q;
+      });
+      setQuizQuestions(questionsWithShuffledOptions);
+      // Reset all states
       setCurrentQuestionIndex(0);
       setSelectedAnswer(null);
-      setIsAnswered(false);
-      setViewMode('quiz');
-      setUserAnswers([]);
+      setAnswerStatus('unanswered');
+      setCorrectAnswers(0);
+      setIsFinished(false);
     }
-  }, [isOpen, questions]);
+  }, [isOpen, questions]); // Reruns when modal is opened
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const score = userAnswers.filter((a) => a.isCorrect).length;
+  const currentQuestion = quizQuestions[currentQuestionIndex];
+  const progress = ((currentQuestionIndex + 1) / quizQuestions.length) * 100;
 
   const handleAnswerSelect = (answer: string) => {
-    if (isAnswered) return;
-    if (!currentQuestion) return;
+    if (answerStatus !== 'unanswered') return; // Already answered
 
-    const isCorrect = answer.toLowerCase().trim() === (currentQuestion.correct_answer || '').toLowerCase().trim();
-    
     setSelectedAnswer(answer);
-    setIsAnswered(true);
-    setUserAnswers([
-      ...userAnswers,
-      {
-        questionId: currentQuestion.id,
-        selectedAnswer: answer,
-        isCorrect,
-      },
-    ]);
+    const isCorrect =
+      currentQuestion.question_type === 'multiple_choice'
+        ? (currentQuestion.options as { text: string; is_correct: boolean }[]).find(
+            (opt) => opt.text === answer
+          )?.is_correct
+        : currentQuestion.answer === answer; // Assuming True/False has answer field
+
+    if (isCorrect) {
+      setAnswerStatus('correct');
+      setCorrectAnswers((prev) => prev + 1);
+    } else {
+      setAnswerStatus('incorrect');
+    }
   };
 
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+  const handleNext = () => {
+    if (currentQuestionIndex < quizQuestions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
-      setIsAnswered(false);
+      setAnswerStatus('unanswered');
     } else {
-      setViewMode('results');
+      // Finish quiz
+      setIsFinished(true);
     }
   };
 
   const handleRestart = () => {
+    // Reshuffle and reset
+    if (questions.length > 0) {
+      const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        if (q.question_type === 'multiple_choice' && q.options) {
+          const options = q.options as { text: string; is_correct: boolean }[];
+          return {
+            ...q,
+            options: [...options].sort(() => Math.random() - 0.5),
+          };
+        }
+        return q;
+      });
+      setQuizQuestions(questionsWithShuffledOptions);
+    }
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
-    setIsAnswered(false);
-    setViewMode('quiz');
-    setUserAnswers([]);
+    setAnswerStatus('unanswered');
+    setCorrectAnswers(0);
+    setIsFinished(false);
   };
 
-  const renderQuestion = () => {
-    if (!currentQuestion) return <p>No question to display.</p>;
-    
-    const options = (currentQuestion.options as string[]) || [];
-    
-    return (
-      <div className="space-y-2">
-        {options.map((option, index) => (
-          <Button
-            key={index}
-            variant="outline"
-            className={`w-full justify-start h-auto p-4 text-left whitespace-normal ${
-              isAnswered && option === currentQuestion.correct_answer
-                ? 'bg-green-100 border-green-400 dark:bg-green-900/50' : ''
-            } ${
-              isAnswered &&
-              selectedAnswer === option &&
-              option !== currentQuestion.correct_answer
-                ? 'bg-red-100 border-red-400 dark:bg-red-900/50' : ''
-            }`}
-            onClick={() => handleAnswerSelect(option)}
-            disabled={isAnswered}
-          >
-            {option}
-          </Button>
-        ))}
-      </div>
-    );
+  const getOptionClass = (optionText: string) => {
+    if (answerStatus === 'unanswered') {
+      return 'border-border';
+    }
+
+    const isCorrect =
+      currentQuestion.question_type === 'multiple_choice'
+        ? (currentQuestion.options as { text: string; is_correct: boolean }[]).find(
+            (opt) => opt.text === optionText
+          )?.is_correct
+        : currentQuestion.answer === optionText;
+
+    if (isCorrect) {
+      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500'; // Correct answer
+    }
+    if (selectedAnswer === optionText && !isCorrect) {
+      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive'; // Selected incorrect
+    }
+    return 'border-border opacity-60'; // Not selected
   };
-  
-  const renderReview = () => (
-    <ScrollArea className="h-[450px] pr-4">
-      <div className="space-y-4">
-        {questions.map((q, index) => {
-          const userAnswer = userAnswers.find((a) => a.questionId === q.id);
-          const isCorrect = userAnswer?.isCorrect;
-          return (
-            <div
-              key={q.id}
-              className={cn(
-                'p-4 rounded-lg border',
-                isCorrect ? 'border-green-500/50 bg-green-500/5' : 'border-destructive/50 bg-destructive/5'
-              )}
-            >
-              <p className="font-semibold">{index + 1}. {q.question_text}</p>
-              <div className="mt-2 text-sm">
-                <p className={cn(isCorrect ? 'text-green-700 dark:text-green-400' : 'text-destructive')}>
-                  Your answer: {userAnswer?.selectedAnswer || 'Not answered'}
-                </p>
-                {!isCorrect && (
-                  <p className="mt-1 text-green-700 dark:text-green-400">
-                    Correct answer: {q.correct_answer}
-                  </p>
-                )}
-              </div>
-              {q.explanation && (
-                <p className="mt-2 text-xs text-muted-foreground border-t pt-2">
-                  {q.explanation}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
-  );
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Pop Quiz</DialogTitle>
-          {viewMode === 'quiz' && (
-            <>
-              <DialogDescription>
-                Question {currentQuestionIndex + 1} of {questions.length}
-              </DialogDescription>
-              <Progress value={((currentQuestionIndex + 1) / questions.length) * 100} className="mt-2" />
-            </>
-          )}
-        </DialogHeader>
-        
-        <div className="flex-1 overflow-hidden">
-          {viewMode === 'quiz' && currentQuestion && (
-            <div className="space-y-4">
-              <div className="text-lg font-semibold mb-4">
-                {currentQuestion.question_text}
-              </div>
-              {renderQuestion()}
-              {isAnswered && (
-                <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-3">
-                  {userAnswers.find((a) => a.questionId === currentQuestion.id)?.isCorrect ? (
-                    <div className="flex items-center text-green-600 dark:text-green-400">
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      <p className="font-semibold">Correct!</p>
-                    </div>
-                  ) : (
-                    <div className="text-red-600 dark:text-red-400">
-                      <div className="flex items-center font-semibold">
-                        <XCircle className="w-5 h-5 mr-2" />
-                        <p>Incorrect. Correct answer: {currentQuestion.correct_answer}</p>
-                      </div>
-                    </div>
-                  )}
-                  {currentQuestion.explanation && (
-                    <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
-                  )}
-                  <Button className="w-full" onClick={handleNextQuestion}>
-                    {currentQuestionIndex < questions.length - 1 ? 'Next Question' : 'Finish Quiz'}
+      <DialogContent className="sm:max-w-2xl p-0" onInteractOutside={(e) => e.preventDefault()}>
+        <AnimatePresence mode="wait">
+          {!quizQuestions || quizQuestions.length === 0 ? (
+            <div className="flex h-64 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : isFinished ? (
+            // --- Summary Screen ---
+            <motion.div
+              key="summary"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+            >
+              <DialogHeader className="p-6 pb-4">
+                <DialogTitle className="text-2xl text-center">Quiz Complete!</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col items-center p-6 pt-0">
+                <Trophy className="w-16 h-16 text-yellow-500" />
+                <h3 className="text-4xl font-bold mt-4">
+                  {correctAnswers} / {quizQuestions.length}
+                </h3>
+                <p className="text-lg text-muted-foreground">
+                  Your score: {Math.round((correctAnswers / quizQuestions.length) * 100)}%
+                </p>
+                <div className="flex w-full gap-4 mt-8">
+                  <Button variant="outline" className="w-full" onClick={handleRestart}>
+                    <RotateCw className="mr-2 h-4 w-4" />
+                    Try Again
+                  </Button>
+                  <Button className="w-full" onClick={() => onOpenChange(false)}>
+                    Close
                   </Button>
                 </div>
-              )}
-            </div>
-          )}
-
-          {viewMode === 'results' && (
-            <div className="text-center py-8 flex flex-col items-center">
-              <h2 className="text-xl font-semibold">Quiz Complete!</h2>
-              <p className="text-6xl font-bold my-4">
-                {score} / {questions.length}
-              </p>
-              <div className="flex justify-center gap-2">
-                <Button onClick={handleRestart}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Try Again
-                </Button>
-                <Button variant="outline" onClick={() => setViewMode('review')}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  Review
-                </Button>
               </div>
-            </div>
-          )}
+            </motion.div>
+          ) : (
+            // --- Question Screen ---
+            <motion.div
+              key={currentQuestionIndex}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.3 }}
+            >
+              <DialogHeader className="p-6 pb-2">
+                <DialogTitle className="text-xl">{title}</DialogTitle>
+                <div className="flex items-center gap-4 pt-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Question {currentQuestionIndex + 1} of {quizQuestions.length}
+                  </span>
+                  <Progress value={progress} className="flex-1 h-2" />
+                </div>
+              </DialogHeader>
 
-          {viewMode === 'review' && renderReview()}
-        </div>
-        
-        {viewMode !== 'quiz' && (
-          <div className="pt-4 border-t">
-            <Button variant="outline" className="w-full" onClick={handleRestart}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Retake Pop Quiz
-            </Button>
-          </div>
-        )}
+              <div className="p-6">
+                <Card className="border-none shadow-none">
+                  <CardContent className="p-0">
+                    <p className="text-lg font-semibold mb-4 min-h-[60px]">
+                      {currentQuestion.question_text}
+                    </p>
+                    <div className="space-y-3">
+                      {/* Multiple Choice */}
+                      {currentQuestion.question_type === 'multiple_choice' &&
+                        (currentQuestion.options as { text: string; is_correct: boolean }[]).map(
+                          (option) => (
+                            <Button
+                              key={option.text}
+                              variant="outline"
+                              className={cn(
+                                'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
+                                answerStatus !== 'unanswered' && 'pointer-events-none',
+                                selectedAnswer === option.text && 'ring-2 ring-primary',
+                                answerStatus !== 'unanswered' && getOptionClass(option.text)
+                              )}
+                              onClick={() => handleAnswerSelect(option.text)}
+                            >
+                              <span className="flex-1">{option.text}</span>
+                              {answerStatus === 'correct' && selectedAnswer === option.text && (
+                                <Check className="w-5 h-5 ml-2 text-green-600" />
+                              )}
+                              {answerStatus === 'incorrect' && selectedAnswer === option.text && (
+                                <X className="w-5 h-5 ml-2 text-destructive" />
+                              )}
+                            </Button>
+                          )
+                        )}
+
+                      {/* True/False */}
+                      {currentQuestion.question_type === 'true_false' &&
+                        ['True', 'False'].map((option) => (
+                          <Button
+                            key={option}
+                            variant="outline"
+                            className={cn(
+                              'h-12 w-full text-left p-4',
+                              answerStatus !== 'unanswered' && 'pointer-events-none',
+                              selectedAnswer === option && 'ring-2 ring-primary',
+                              answerStatus !== 'unanswered' && getOptionClass(option)
+                            )}
+                            onClick={() => handleAnswerSelect(option)}
+                          >
+                            <span className="flex-1">{option}</span>
+                            {answerStatus === 'correct' && selectedAnswer === option && (
+                              <Check className="w-5 h-5 ml-2 text-green-600" />
+                            )}
+                            {answerStatus === 'incorrect' && selectedAnswer === option && (
+                              <X className="w-5 h-5 ml-2 text-destructive" />
+                            )}
+                          </Button>
+                        ))}
+                    </div>
+
+                    {/* Feedback Message */}
+                    <AnimatePresence>
+                      {answerStatus === 'correct' && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-4 flex items-center font-medium text-green-600"
+                        >
+                          <Check className="w-5 h-5 mr-2" />
+                          That's correct!
+                        </motion.div>
+                      )}
+                      {answerStatus === 'incorrect' && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-4 flex flex-col font-medium text-destructive"
+                        >
+                          <div className="flex items-center">
+                            <X className="w-5 h-5 mr-2" />
+                            That's not right.
+                          </div>
+                          {currentQuestion.explanation && (
+                            <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                              {currentQuestion.explanation}
+                            </p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <DialogFooter className="p-6 pt-0">
+                <Button
+                  className="w-full"
+                  disabled={answerStatus === 'unanswered'}
+                  onClick={handleNext}
+                >
+                  {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next'}
+                </Button>
+              </DialogFooter>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );

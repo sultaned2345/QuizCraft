@@ -227,9 +227,11 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-20">
           {/* The AppHeader is a client component, so it's fine here */}
           <AppHeader /> 
-          <main className="flex-1 p-4 sm:px-6 sm:py-0">
+          {/* --- THIS IS THE FIX --- */}
+          <main className="flex-1 p-4 sm:px-6 sm:py-0 flex flex-col overflow-hidden">
             {children} {/* This children prop will be the Server Component page */}
           </main>
+          {/* --- END FIX --- */}
         </div>
 
         {!isDocumentPage && (

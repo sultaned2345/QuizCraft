@@ -6,13 +6,7 @@ import { Loader2, FileText } from "lucide-react"; // Import icon
 export default function DocumentsLoading() {
   return (
     <>
-      {/* --- Branded Loading Header --- */}
-      <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground text-center mb-8 p-8 border border-dashed rounded-lg bg-card/50">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <h2 className="text-2xl font-semibold text-foreground">Loading Documents...</h2>
-        <p className="text-sm">Getting your files ready.</p>
-      </div>
-      {/* --- END Branded Header --- */}
+      {/* --- Branded Loading Header (REMOVED) --- */}
 
       {/* Header & Upload Skeleton (unchanged) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">

@@ -18,6 +18,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import dynamic from 'next/dynamic';
 import { MarkdownViewer } from '@/components/MarkdownViewer';
 
+// --- NEW: Import Resizable Panels ---
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"; // Make sure to create this ui component
+// ---
+
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
   {
@@ -176,7 +184,8 @@ export default function DocumentViewPage() {
 
   return (
     <>
-      <div className="flex flex-col h-[calc(100vh-100px)]">
+      {/* --- THIS IS THE FIX: Use h-full and flex-col --- */}
+      <div className="flex flex-col h-full">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-4">
           <Button variant="ghost" onClick={() => router.push('/documents')}>
@@ -189,138 +198,145 @@ export default function DocumentViewPage() {
           <div className="w-32"></div> 
         </div>
 
-        {/* --- 2. MODIFICATION: Changed to lg:grid-cols-2 --- */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden h-full">
-          
-          {/* --- 3. MODIFICATION: Changed to lg:col-span-1 --- */}
-          <Card className="flex flex-col h-full overflow-hidden lg:col-span-1">
-            <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
-              <CardHeader className="pb-0">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="document">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Document
-                  </TabsTrigger>
-                  <TabsTrigger value="insights">
-                    <Brain className="w-4 h-4 mr-2" />
-                    AI Insights
-                  </TabsTrigger>
-                </TabsList>
-              </CardHeader>
+        {/* --- THIS IS THE FIX: Use ResizablePanelGroup --- */}
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="flex-1 rounded-lg border overflow-hidden"
+        >
+          <ResizablePanel defaultSize={50} minSize={30}>
+            {/* --- Document Panel Content --- */}
+            <Card className="flex flex-col h-full overflow-hidden border-0 rounded-none">
+              <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
+                <CardHeader className="pb-0 pt-4 px-4">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="document">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Document
+                    </TabsTrigger>
+                    <TabsTrigger value="insights">
+                      <Brain className="w-4 h-4 mr-2" />
+                      AI Insights
+                    </TabsTrigger>
+                  </TabsList>
+                </CardHeader>
 
-              <TabsContent value="document" className="flex-1 overflow-auto mt-0">
-                <CardContent className="h-full">
-                  {isLoadingContent ? (
-                    <div className="flex justify-center items-center h-full min-h-[60vh]">
-                      <Loader2 className="h-6 w-6 animate-spin" />
-                    </div>
-                  ) : viewingContent.pdfUrl ? (
-                    <iframe
-                      src={viewingContent.pdfUrl}
-                      className="w-full h-full min-h-[65vh] border rounded-md"
-                      title={`PDF Viewer for ${viewingContent.title}`}
-                    />
-                  ) : (
-                    <ScrollArea className="h-full max-h-[65vh] pr-3">
-                      <MarkdownViewer
-                        content={viewingContent.text || "No text extracted or file is empty."}
-                        className="p-4 border rounded-md"
+                <TabsContent value="document" className="flex-1 overflow-auto mt-0">
+                  <CardContent className="h-full p-0">
+                    {isLoadingContent ? (
+                      <div className="flex justify-center items-center h-full min-h-[60vh]">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      </div>
+                    ) : viewingContent.pdfUrl ? (
+                      <iframe
+                        src={viewingContent.pdfUrl}
+                        className="w-full h-full min-h-[65vh] border-0"
+                        title={`PDF Viewer for ${viewingContent.title}`}
                       />
-                    </ScrollArea>
-                  )}
-                </CardContent>
-              </TabsContent>
+                    ) : (
+                      <ScrollArea className="h-full max-h-[65vh] pr-0">
+                        <MarkdownViewer
+                          content={viewingContent.text || "No text extracted or file is empty."}
+                          className="p-4"
+                        />
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </TabsContent>
 
-              <TabsContent value="insights" className="flex-1 overflow-auto mt-0">
-                <CardContent>
-                  {isLoadingInsights ? (
-                    <div className="space-y-4 p-4">
-                      <Skeleton className="h-6 w-1/3" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-6 w-1/3 mt-4" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                    </div>
-                  ) : !insights ? (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-muted-foreground text-center">
-                      <Brain className="w-12 h-12 mb-4" />
-                      <p className="font-medium">No AI Insights Generated</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6 p-1">
-                      <InsightSection icon={<HelpCircle className="w-4 h-4 text-blue-500" />} title="Potential Exam Questions">
-                        {insights.examQuestions.length > 0 ? (
-                           <>
-                              <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
-                                {insights.examQuestions.map((q, i) => (
-                                  <li key={i}>{q}</li>
-                                ))}
-                              </ul>
-                              <Button 
-                                size="sm" 
-                                className="mt-4" 
-                                onClick={handleStartPopQuiz}
-                                disabled={isPopQuizLoading}
-                              >
-                                {isPopQuizLoading ? (
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Zap className="w-4 h-4 mr-2" />
-                                )}
-                                Start Pop Quiz
-                              </Button>
-                           </>
-                        ) : (
-                           <p className="text-sm text-muted-foreground italic">No specific exam questions were generated.</p>
-                        )}
-                      </InsightSection>
-                      
-                      <InsightSection icon={<Target className="w-4 h-4 text-primary" />} title="Main Arguments">
-                        {insights.mainArguments.length > 0 ? (
-                           <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
-                            {insights.mainArguments.map((arg, i) => (
-                              <li key={i}>{arg}</li>
-                            ))}
-                          </ul>
-                        ) : <p className="text-sm text-muted-foreground italic">No main arguments extracted.</p>}
-                      </InsightSection> 
-                      {/* // <-- FIX HERE: Was </Section> */}
-                      
-                      <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
-                         {insights.keyConcepts.length > 0 ? (
-                            <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
-                              {insights.keyConcepts.map((concept, i) => (
-                                <li key={i}>{concept}</li>
+                <TabsContent value="insights" className="flex-1 overflow-auto mt-0">
+                  <CardContent className="p-4">
+                    {isLoadingInsights ? (
+                      <div className="space-y-4 p-4">
+                        <Skeleton className="h-6 w-1/3" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-6 w-1/3 mt-4" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    ) : !insights ? (
+                      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-muted-foreground text-center">
+                        <Brain className="w-12 h-12 mb-4" />
+                        <p className="font-medium">No AI Insights Generated</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-6 p-1">
+                        <InsightSection icon={<HelpCircle className="w-4 h-4 text-blue-500" />} title="Potential Exam Questions">
+                          {insights.examQuestions.length > 0 ? (
+                             <>
+                                <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                                  {insights.examQuestions.map((q, i) => (
+                                    <li key={i}>{q}</li>
+                                  ))}
+                                </ul>
+                                <Button 
+                                  size="sm" 
+                                  className="mt-4" 
+                                  onClick={handleStartPopQuiz}
+                                  disabled={isPopQuizLoading}
+                                >
+                                  {isPopQuizLoading ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Zap className="w-4 h-4 mr-2" />
+                                  )}
+                                  Start Pop Quiz
+                                </Button>
+                             </>
+                          ) : (
+                             <p className="text-sm text-muted-foreground italic">No specific exam questions were generated.</p>
+                          )}
+                        </InsightSection>
+                        
+                        <InsightSection icon={<Target className="w-4 h-4 text-primary" />} title="Main Arguments">
+                          {insights.mainArguments.length > 0 ? (
+                             <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                              {insights.mainArguments.map((arg, i) => (
+                                <li key={i}>{arg}</li>
                               ))}
                             </ul>
-                         ) : <p className="text-sm text-muted-foreground italic">No key concepts extracted.</p>}
-                      </InsightSection>
-                    </div>
-                  )}
-                </CardContent>
-              </TabsContent>
-            </Tabs>
-          </Card>
+                          ) : <p className="text-sm text-muted-foreground italic">No main arguments extracted.</p>}
+                        </InsightSection>
+                        
+                        <InsightSection icon={<Sparkles className="w-4 h-4 text-yellow-500" />} title="Key Concepts">
+                           {insights.keyConcepts.length > 0 ? (
+                              <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                                {insights.keyConcepts.map((concept, i) => (
+                                  <li key={i}>{concept}</li>
+                                ))}
+                              </ul>
+                           ) : <p className="text-sm text-muted-foreground italic">No key concepts extracted.</p>}
+                        </InsightSection>
+                      </div>
+                    )}
+                  </CardContent>
+                </TabsContent>
+              </Tabs>
+            </Card>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={50} minSize={30}>
+            {/* --- Chat Panel Content --- */}
+            <Card className="flex flex-col h-full overflow-hidden border-0 rounded-none">
+              <CardHeader className="pt-4 pb-2">
+                <CardTitle className="flex items-center gap-2">
+                   <Sparkles className="w-5 h-5 text-primary" />
+                   AI Tutor
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden h-full p-0">
+                <ChatInterface
+                  context={pageContext}
+                  initialMessages={chatHistory}
+                  isLoadingHistory={isHistoryLoading}
+                  className="h-full" 
+                />
+              </CardContent>
+            </Card>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+        {/* --- END RESIZABLE FIX --- */}
 
-          {/* --- 5. MODIFICATION: Changed to lg:col-span-1 --- */}
-          <Card className="flex flex-col h-full overflow-hidden lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                 <Sparkles className="w-5 h-5 text-primary" />
-                 AI Tutor
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden h-full p-0">
-              <ChatInterface
-                context={pageContext}
-                initialMessages={chatHistory}
-                isLoadingHistory={isHistoryLoading}
-                className="h-full" 
-              />
-            </CardContent>
-          </Card>
-        </div>
       </div>
       
       {isPopQuizOpen && (

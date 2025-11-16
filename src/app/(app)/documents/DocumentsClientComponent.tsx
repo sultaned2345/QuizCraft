@@ -83,7 +83,9 @@ export function DocumentsClientComponent() {
     // Pass the fetcher and authorization token
     (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     {
-      revalidateOnFocus: true, // This is the key! It will refetch on tab focus.
+      // --- THIS IS THE FIX ---
+      revalidateOnFocus: false, // Prevents re-fetching when window/tab regains focus
+      // --- END FIX ---
       dedupingInterval: 5000, // Don't refetch more than once every 5s
       revalidateOnReconnect: true, // Refetch on network recovery
     }
@@ -296,7 +298,7 @@ export function DocumentsClientComponent() {
         <h3 className="mt-4 text-lg font-semibold text-destructive">Failed to Load Documents</h3>
         <p className="mt-1 text-sm text-muted-foreground">{swrError.message}</p>
         <Button className="mt-6" variant="outline" onClick={() => refreshFirstPage(undefined, { revalidate: true })}>
-          <RefreshCw className="w-4 h-4 mr-2" /> {/* Changed to RefreshCw */}
+          <Loader2 className="w-4 h-4 mr-2" /> {/* Changed to RefreshCw */}
           Try Again
         </Button>
       </div>

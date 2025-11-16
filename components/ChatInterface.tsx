@@ -266,7 +266,9 @@ export function ChatInterface({
 
     setProactivePrompt(null); 
     setProactiveActions(null);
-    setSuggestedQuestions(null);
+    // --- THIS IS THE FIX: This line is removed ---
+    // setSuggestedQuestions(null);
+    // --- END FIX ---
     
     const userMessage: Message = { role: 'user', text: messageText };
     const history = [...messages, userMessage];
