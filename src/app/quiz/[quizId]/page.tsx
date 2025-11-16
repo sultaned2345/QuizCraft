@@ -1,19 +1,35 @@
 // src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Quiz, Question } from '@/types/database';
+import { Quiz, Question, ApiResponse } from '@/types/database'; // Import ApiResponse
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input'; // Import Input
 import { Progress } from '@/components/ui/progress';
-import { Loader2, ArrowLeft, RotateCw, Check, X, AlertCircle, Trophy } from 'lucide-react';
+import {
+  Loader2,
+  ArrowLeft,
+  RotateCw,
+  Check,
+  X,
+  AlertCircle,
+  Trophy,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// This is the shape from /api/quiz/[quizId]
 interface QuizData {
   quiz: Quiz;
   questions: Question[];
@@ -21,7 +37,7 @@ interface QuizData {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
-// Helper function to shuffle an array (same as in PopQuizModal)
+// Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -44,9 +60,13 @@ export default function TakeQuizPage() {
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
-  const { data, error, isLoading } = useSWR<QuizData>(
+  // Fetch from the GET route we created
+  const { data, error, isLoading }_ = useSWR<QuizData>(
     session ? `/api/quiz/${quizId}` : null,
-    (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
+    (url: string) =>
+      fetcher(url, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      }),
     { revalidateOnFocus: false }
   );
 
@@ -54,18 +74,25 @@ export default function TakeQuizPage() {
   useEffect(() => {
     if (data?.questions && data.questions.length > 0) {
       const shuffledQuestions = shuffleArray(data.questions);
-      
+
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
-          const options = q.options as { text: string; is_correct: boolean }[];
+        // Shuffle options for Multiple Choice
+        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
-            options: shuffleArray(options),
+            options: shuffleArray(q.options as string[]),
+          };
+        }
+        // Shuffle options for Matching (the answer pool)
+        if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
+          return {
+            ...q,
+            options: shuffleArray(q.options as string[]),
           };
         }
         return q;
       });
-      
+
       setQuizQuestions(questionsWithShuffledOptions);
       // Reset all states
       setCurrentQuestionIndex(0);
@@ -77,19 +104,30 @@ export default function TakeQuizPage() {
   }, [data]);
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
-  const progress = quizQuestions.length > 0 ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100 : 0;
+  const progress =
+    quizQuestions.length > 0
+      ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
+      : 0;
 
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return; // Already answered
 
-    setSelectedAnswer(answer);
-    
+    const answerTrimmed = answer.trim();
+    setSelectedAnswer(answerTrimmed);
+
     let isCorrect = false;
-    if (currentQuestion.question_type === 'multiple_choice') {
-      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
-      isCorrect = options.find((opt) => opt.text === answer)?.is_correct ?? false;
-    } else if (currentQuestion.question_type === 'true_false') {
-      isCorrect = currentQuestion.answer === answer;
+    if (
+      currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
+      currentQuestion.question_type === 'TRUE_FALSE'
+    ) {
+      isCorrect = currentQuestion.correct_answer === answerTrimmed;
+    } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
+      // Correct answers are stored in the 'options' array
+      const correctAnswers = (currentQuestion.options as string[]) || [];
+      // Case-insensitive check
+      isCorrect = correctAnswers.some(
+        (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
+      );
     }
 
     if (isCorrect) {
@@ -116,11 +154,10 @@ export default function TakeQuizPage() {
     if (data?.questions && data.questions.length > 0) {
       const shuffledQuestions = shuffleArray(data.questions);
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'multiple_choice' && Array.isArray(q.options)) {
-          const options = q.options as { text: string; is_correct: boolean }[];
+        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
-            options: shuffleArray(options),
+            options: shuffleArray(q.options as string[]),
           };
         }
         return q;
@@ -139,27 +176,22 @@ export default function TakeQuizPage() {
       return 'border-border hover:bg-muted/50';
     }
 
-    let isCorrect = false;
-    if (currentQuestion.question_type === 'multiple_choice') {
-      const options = currentQuestion.options as { text: string; is_correct: boolean }[];
-      isCorrect = options.find((opt) => opt.text === optionText)?.is_correct ?? false;
-    } else if (currentQuestion.question_type === 'true_false') {
-      isCorrect = currentQuestion.answer === optionText;
-    }
+    const isThisCorrect = currentQuestion.correct_answer === optionText;
 
-    if (isCorrect) {
+    if (isThisCorrect) {
       // Is the correct answer
       return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
     }
-    if (selectedAnswer === optionText && !isCorrect) {
+    if (selectedAnswer === optionText && !isThisCorrect) {
       // Is the selected, incorrect answer
       return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
     }
-    
+
     // Is neither selected nor correct (an incorrect option)
     return 'border-border opacity-60';
   };
-
+  
+  // (Loading and Error states are unchanged)
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -200,11 +232,18 @@ export default function TakeQuizPage() {
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <Button variant="ghost" onClick={() => router.push('/quizzes')} className="pl-0">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/quizzes')}
+            className="pl-0"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Quizzes
           </Button>
-          <h1 className="text-xl font-semibold truncate text-center" title={data.quiz.title}>
+          <h1
+            className="text-xl font-semibold truncate text-center"
+            title={data.quiz.title}
+          >
             {data.quiz.title}
           </h1>
           <div className="w-24"></div> {/* Spacer */}
@@ -231,7 +270,9 @@ export default function TakeQuizPage() {
             >
               <Card className="w-full max-w-md shadow-lg">
                 <CardHeader>
-                  <CardTitle className="text-center text-2xl">Quiz Complete!</CardTitle>
+                  <CardTitle className="text-center text-2xl">
+                    Quiz Complete!
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-4">
                   <Trophy className="w-16 h-16 text-yellow-500" />
@@ -239,7 +280,11 @@ export default function TakeQuizPage() {
                     {correctAnswers} / {quizQuestions.length}
                   </h3>
                   <p className="text-lg text-muted-foreground">
-                    Your score: {Math.round((correctAnswers / quizQuestions.length) * 100)}%
+                    Your score:{' '}
+                    {Math.round(
+                      (correctAnswers / quizQuestions.length) * 100
+                    )}
+                    %
                   </p>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-3">
@@ -247,7 +292,11 @@ export default function TakeQuizPage() {
                     <RotateCw className="mr-2 h-4 w-4" />
                     Take Again
                   </Button>
-                  <Button variant="outline" className="w-full" onClick={() => router.push('/quizzes')}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => router.push('/quizzes')}
+                  >
                     Back to Quizzes
                   </Button>
                 </CardFooter>
@@ -268,55 +317,101 @@ export default function TakeQuizPage() {
                     {currentQuestion.question_text}
                   </p>
                   <div className="space-y-3">
+                    
+                    {/* --- REBUILT RENDER LOGIC --- */}
+                    
                     {/* Multiple Choice */}
-                    {currentQuestion.question_type === 'multiple_choice' &&
-                      (currentQuestion.options as { text: string; is_correct: boolean }[]).map(
-                        // --- THIS IS THE FIX ---
-                        (option) => (
-                        // --- END FIX ---
-                          <Button
-                            key={option.text}
-                            variant="outline"
-                            className={cn(
-                              'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
-                              answerStatus !== 'unanswered' && 'pointer-events-none',
-                              getOptionClass(option.text)
-                            )}
-                            onClick={() => handleAnswerSelect(option.text)}
-                          >
-                            <span className="flex-1">{option.text}</span>
-                            {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('green') && (
+                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
+                      (currentQuestion.options as string[]).map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
+                            answerStatus !== 'unanswered' &&
+                              'pointer-events-none',
+                            getOptionClass(option)
+                          )}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                          <span className="flex-1">{option}</span>
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('green') && (
                               <Check className="w-5 h-5 ml-2 text-green-600" />
                             )}
-                            {answerStatus !== 'unanswered' && getOptionClass(option.text).includes('destructive') && (
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('destructive') && (
                               <X className="w-5 h-5 ml-2 text-destructive" />
                             )}
-                          </Button>
-                        )
-                      )}
+                        </Button>
+                      ))}
 
                     {/* True/False */}
-                    {currentQuestion.question_type === 'true_false' &&
+                    {currentQuestion.question_type === 'TRUE_FALSE' &&
                       ['True', 'False'].map((option) => (
                         <Button
                           key={option}
                           variant="outline"
                           className={cn(
                             'h-12 w-full text-left p-4',
-                            answerStatus !== 'unanswered' && 'pointer-events-none',
+                            answerStatus !== 'unanswered' &&
+                              'pointer-events-none',
                             getOptionClass(option)
                           )}
                           onClick={() => handleAnswerSelect(option)}
                         >
                           <span className="flex-1">{option}</span>
-                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && (
-                            <Check className="w-5 h-5 ml-2 text-green-600" />
-                          )}
-                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('destructive') && (
-                            <X className="w-5 h-5 ml-2 text-destructive" />
-                          )}
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('green') && (
+                              <Check className="w-5 h-5 ml-2 text-green-600" />
+                            )}
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('destructive') && (
+                              <X className="w-5 h-5 ml-2 text-destructive" />
+                            )}
                         </Button>
                       ))}
+                      
+                    {/* Fill in the Blank */}
+                    {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                      <div className="space-y-3">
+                        <Input
+                          type="text"
+                          placeholder="Type your answer..."
+                          value={selectedAnswer || ''}
+                          onChange={(e) => setSelectedAnswer(e.target.value)}
+                          disabled={answerStatus !== 'unanswered'}
+                          className="text-base"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
+                              handleAnswerSelect(selectedAnswer.trim());
+                            }
+                          }}
+                        />
+                        <Button
+                          className="w-full"
+                          disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()}
+                          onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
+                        >
+                          Submit Answer
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Matching (Placeholder) */}
+                    {currentQuestion.question_type === 'MATCHING' && (
+                      <div className="p-4 rounded-md border bg-muted/50 text-muted-foreground text-sm">
+                        <p className="font-semibold">Matching Question</p>
+                        <p>
+                          This question type is not yet supported in the
+                          quiz-taker. Please edit this quiz to change the
+                          question type.
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* --- END REBUILT RENDER LOGIC --- */}
+                    
                   </div>
 
                   {/* Feedback Message */}
@@ -341,6 +436,14 @@ export default function TakeQuizPage() {
                           <X className="w-5 h-5 mr-2" />
                           That's not right.
                         </div>
+                        
+                        {/* Show correct answer for FITB */}
+                        {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                            <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                                Correct answer(s): {(currentQuestion.options as string[]).join(', ')}
+                            </p>
+                        )}
+                        
                         {currentQuestion.explanation && (
                           <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
                             {currentQuestion.explanation}
@@ -356,7 +459,9 @@ export default function TakeQuizPage() {
                     disabled={answerStatus === 'unanswered'}
                     onClick={handleNext}
                   >
-                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next Question'}
+                    {currentQuestionIndex === quizQuestions.length - 1
+                      ? 'Finish Quiz'
+                      : 'Next Question'}
                   </Button>
                 </CardFooter>
               </Card>
