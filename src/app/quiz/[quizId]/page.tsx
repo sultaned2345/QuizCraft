@@ -25,7 +25,7 @@ import {
   X,
   AlertCircle,
   Trophy,
-  Lightbulb, // <-- 1. IMPORT HINT ICON
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,7 +54,8 @@ export default function TakeQuizPage() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
-  const [showHint, setShowHint] = useState(false); // <-- 2. ADD HINT STATE
+  const [showHint, setShowHint] = useState(false);
+  const [isSubmittingScore, setIsSubmittingScore] = useState(false); // <-- 1. ADD STATE
 
   const router = useRouter();
   const params = useParams();
@@ -97,9 +98,58 @@ export default function TakeQuizPage() {
       setAnswerStatus('unanswered');
       setCorrectAnswers(0);
       setIsFinished(false);
-      setShowHint(false); // <-- 3. RESET HINT
+      setShowHint(false);
     }
   }, [data]);
+
+  // --- 2. ADD useEffect TO SUBMIT SCORE ---
+  useEffect(() => {
+    // Only run this when the quiz is finished and we haven't submitted yet
+    if (isFinished && !isSubmittingScore && session && quizQuestions.length > 0) {
+      const submitScore = async () => {
+        setIsSubmittingScore(true); // Prevent double submission
+        try {
+          const response = await fetch('/api/quiz/attempt', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              quizId: quizId,
+              score: correctAnswers,
+              total: quizQuestions.length,
+            }),
+          });
+
+          const result: ApiResponse = await response.json();
+
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Failed to save quiz attempt.');
+          }
+
+          console.log('Quiz attempt saved successfully.');
+          // Optional: We could show a success toast here.
+        } catch (error: any) {
+          console.error('Failed to submit score:', error);
+          // Don't bother the user with a toast, just log it.
+        } finally {
+          // We set this regardless of success/failure
+          setIsSubmittingScore(false);
+        }
+      };
+
+      submitScore();
+    }
+  }, [
+    isFinished,
+    quizId,
+    correctAnswers,
+    quizQuestions.length,
+    session,
+    isSubmittingScore,
+  ]);
+  // --- END OF ADDITION ---
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const progress =
@@ -135,16 +185,18 @@ export default function TakeQuizPage() {
     }
   };
 
+  // --- 3. MODIFY handleNext ---
   const handleNext = () => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
-      setShowHint(false); // <-- 3. RESET HINT
+      setShowHint(false);
     } else {
-      setIsFinished(true);
+      setIsFinished(true); // This will now trigger the useEffect
     }
   };
+  // --- END OF MODIFICATION ---
 
   const handleRestart = () => {
     if (data?.questions && data.questions.length > 0) {
@@ -165,7 +217,7 @@ export default function TakeQuizPage() {
     setAnswerStatus('unanswered');
     setCorrectAnswers(0);
     setIsFinished(false);
-    setShowHint(false); // <-- 3. RESET HINT
+    setShowHint(false);
   };
 
   // (getOptionClass, isLoading, error, no-data states are unchanged)
@@ -290,7 +342,7 @@ export default function TakeQuizPage() {
               </Card>
             </motion.div>
           ) : (
-            // --- Question Screen (MODIFIED) ---
+            // --- Question Screen (Unchanged) ---
             <motion.div
               key={currentQuestionIndex}
               initial={{ opacity: 0, x: 50 }}
@@ -401,7 +453,7 @@ export default function TakeQuizPage() {
                     )}
                   </div>
 
-                  {/* --- 4. MODIFIED FEEDBACK & HINT BLOCK --- */}
+                  {/* (Feedback & Hint Block is unchanged) */}
                   <AnimatePresence>
                     {/* HINT: Show hint if not answered and hint toggled */}
                     {answerStatus === 'unanswered' &&
@@ -472,10 +524,9 @@ export default function TakeQuizPage() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {/* --- END MODIFICATION --- */}
                 </CardContent>
                 <CardFooter className="p-6 pt-0 flex justify-between">
-                  {/* --- 5. ADD HINT BUTTON --- */}
+                  {/* (Hint Button is unchanged) */}
                   <Button
                     variant="outline"
                     onClick={() => setShowHint(true)}
@@ -496,7 +547,6 @@ export default function TakeQuizPage() {
                     <Lightbulb className="w-4 h-4 mr-2" />
                     Show Hint
                   </Button>
-                  {/* --- END HINT BUTTON --- */}
 
                   <Button
                     className="w-full sm:w-auto"

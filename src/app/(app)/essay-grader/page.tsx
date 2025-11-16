@@ -9,7 +9,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, Info, History, Eye, CheckCircle, Star, RefreshCw } from 'lucide-react';
+import {
+  Loader2,
+  Sparkles,
+  FileSignature,
+  Upload,
+  FileText,
+  AlertCircle,
+  Info,
+  History,
+  Eye,
+  CheckCircle,
+  Star,
+  RefreshCw,
+  BrainCircuit, // <-- 1. IMPORT ICON
+} from 'lucide-react';
 import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, GradedEssay } from '@/types/database';
 import { Input } from '@/components/ui/input';
 import { formatFileSize } from '@/lib/file-parser';
@@ -21,8 +35,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import useSWR from 'swr'; // <-- 1. IMPORT SWR
-import { fetcher } from '@/lib/fetcher'; // <-- 2. IMPORT FETCHER
+import useSWR from 'swr';
+import { fetcher } from '@/lib/fetcher';
 
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 
@@ -89,7 +103,7 @@ export default function EssayGraderPage() {
   const router = useRouter();
   const { openModal } = useUpgradeModal();
 
-  // --- 3. REPLACE useEffect/useState with useSWR ---
+  // (useSWR hooks are unchanged)
   const { 
     data: aiUsage, 
     error: usageError, 
@@ -111,7 +125,15 @@ export default function EssayGraderPage() {
     (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: true }
   );
-  // --- END SWR REPLACEMENT ---
+
+  // --- 2. DEFINE ICON MAPPING ---
+  const feedbackIcons = {
+    strengths: <Star className="w-5 h-5 text-green-500" />,
+    clarity: <Eye className="w-5 h-5 text-blue-500" />,
+    argument: <BrainCircuit className="w-5 h-5 text-purple-500" />,
+    grammar: <FileSignature className="w-5 h-5 text-red-500" />,
+  };
+  // --- END OF ADDITION ---
 
   useEffect(() => {
     if (gradedEssay?.id) {
@@ -122,7 +144,7 @@ export default function EssayGraderPage() {
     return () => setPageContext(null);
   }, [gradedEssay, setPageContext]);
 
-  // (handleFileChange, handleTextChange are unchanged)
+  // (handleFileChange, handleTextChange, handleViewHistoryItem, handleSubmit, renderHighlightedEssay are unchanged)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
@@ -213,7 +235,6 @@ export default function EssayGraderPage() {
   };
 
   const handleSubmit = async () => {
-    // (Validation logic is unchanged)
     if (inputMode === 'text' && wordCount > WORD_LIMIT) {
         setError(`Word limit exceeded: ${wordCount} / ${WORD_LIMIT} words.`);
         return;
@@ -268,11 +289,8 @@ export default function EssayGraderPage() {
       setOutputTab('feedback');
       toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
       
-      // --- 4. MUTATE SWR DATA ON SUCCESS ---
-      // This tells SWR to refetch the history and usage lists.
       mutateHistory();
       mutateUsage();
-      // ---
       
     } catch (err: any) {
       const errorMessage = err.message || 'An unexpected error occurred during grading.';
@@ -285,7 +303,6 @@ export default function EssayGraderPage() {
     }
   };
   
-  // (renderHighlightedEssay and renderFeedback are unchanged)
   const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
     const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
     let parts: (string | React.ReactNode)[] = [text];
@@ -336,6 +353,7 @@ export default function EssayGraderPage() {
     return <pre className="text-sm whitespace-pre-wrap break-words p-4">{parts.map((part, i) => <Fragment key={i}>{part}</Fragment>)}</pre>;
   };
 
+  // --- 3. MODIFY renderFeedback ---
   const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
     if (!fb) return null;
     const categories: ('strengths' |'clarity' | 'argument' | 'grammar')[] = ['strengths','clarity', 'argument', 'grammar'];
@@ -352,10 +370,19 @@ export default function EssayGraderPage() {
           {categories.map((key) => {
             const data = fb[key];
             if (!data) return null;
+
+            const icon = feedbackIcons[key]; // Get the icon
+
             if (typeof data === 'object' && data.summary) {
               return (
                 <AccordionItem value={key} key={key}>
-                  <AccordionTrigger className="text-base font-semibold capitalize">{key}</AccordionTrigger>
+                  <AccordionTrigger className="text-base font-semibold capitalize">
+                    {/* Add icon here */}
+                    <span className="flex items-center gap-2">
+                      {icon}
+                      {key}
+                    </span>
+                  </AccordionTrigger>
                   <AccordionContent className="space-y-3">
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
                     {data.highlights && data.highlights.length > 0 && (
@@ -375,7 +402,13 @@ export default function EssayGraderPage() {
             if (typeof data === 'string') {
                return (
                  <AccordionItem value={key} key={key}>
-                    <AccordionTrigger className="text-base font-semibold capitalize">{key.replace(/_/g, ' ')}</AccordionTrigger>
+                    <AccordionTrigger className="text-base font-semibold capitalize">
+                       {/* Also add icon here */}
+                      <span className="flex items-center gap-2">
+                        {icon}
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                    </AccordionTrigger>
                     <AccordionContent>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data}</p>
                     </AccordionContent>
@@ -388,8 +421,8 @@ export default function EssayGraderPage() {
       </div>
     );
   };
+  // --- END OF MODIFICATION ---
   
-  // --- 5. USE SWR DATA TO CALCULATE LIMITS ---
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= (aiUsage.limit ?? Infinity);
   const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
@@ -397,7 +430,6 @@ export default function EssayGraderPage() {
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
-          {/* --- 6. USE SWR DATA TO RENDER USAGE --- */}
           <div className="text-sm text-muted-foreground">
               {isUsageLoading ? (
                   <span className="flex items-center gap-1"><Loader2 className="h-4 w-4 animate-spin" /> Checking AI usage...</span>
@@ -519,7 +551,7 @@ export default function EssayGraderPage() {
              )}
         </div>
         
-        {/* --- 7. REFACTOR OUTPUT COLUMN --- */}
+        {/* (Output Column is unchanged) */}
         <div className="lg:col-span-1">
            <Card className="min-h-[400px] flex flex-col"> 
                 <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col">
