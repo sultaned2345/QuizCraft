@@ -44,7 +44,7 @@ export default function TakeQuizPage() {
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
-  const { data, error, isLoading } = useSWR<QuizData>( // <-- FIX WAS HERE
+  const { data, error, isLoading } = useSWR<QuizData>(
     session ? `/api/quiz/${quizId}` : null,
     (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: false }

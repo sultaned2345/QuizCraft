@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button, buttonVariants } from '@/components/ui/button'; // <-- FIX WAS HERE
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Question } from '@/types/database';
