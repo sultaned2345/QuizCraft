@@ -21,11 +21,9 @@ sultaned2345/quizcraft/QuizCraft-e21caa5b2dd496e323be15b2e7bd151e7f4700b9/tsconf
     ],
     "baseUrl": ".",
     "paths": {
-      // Specific aliases for root folders (must come first)
       "@/components/*": ["./components/*"],
       "@/lib/*": ["./lib/*"],
       "@/hooks/*": ["./hooks/*"],
-      // General src alias (fallback)
       "@/*": ["./src/*"]
     }
   },
