@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuth } from '@/components/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext'; // <-- THIS IMPORT IS FIXED
 import {
   Bot,
   Loader2,
@@ -27,11 +27,11 @@ import {
   Layers,
   MessageSquareText,
 } from 'lucide-react';
-import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
+import { cn } from '@lib/utils';
 import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@hooks/use-toast'; // <-- THIS IMPORT IS FIXED
+import { useToast } from '@hooks/use-toast';
 import {
   Tooltip,
   TooltipContent,
@@ -661,7 +661,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
               isLoading ||
               isHistoryLoading ||
               isActionLoading ||
-              isSuggestionsLoading ||
+isSuggestionsLoading ||
               !input.trim()
             }
           >

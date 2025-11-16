@@ -1,5 +1,4 @@
 // components/NoteEditor.tsx
-// HEAVILY REFACTORED
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,18 +6,31 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, ArrowLeft, FileText, StickyNote, Link as LinkIcon } from 'lucide-react';
+import {
+  Loader2,
+  Save,
+  ArrowLeft,
+  FileText,
+  StickyNote,
+  Link as LinkIcon,
+} from 'lucide-react';
 import { Note, ApiResponse, RelatedItem } from '@/types/database';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/contexts/AuthContext';
 import NextLink from 'next/link';
-import { useToast } from '@hooks/use-toast'; // <-- MODIFIED
+import { useToast } from '@hooks/use-toast'; // <-- THIS IMPORT IS FIXED
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { BacklinksWidget } from '@/components/BacklinksWidget';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { Skeleton } from '@/components/ui/skeleton'; // <-- 1. IMPORT SKELETON
+import { Skeleton } from '@/components/ui/skeleton';
 
-// RelatedContentWidget (copied from old file, with minor update)
-function RelatedContentWidget({ note, onLinkClick }: { note: Note | null; onLinkClick: () => void }) {
+// (RelatedContentWidget is unchanged)
+function RelatedContentWidget({
+  note,
+  onLinkClick,
+}: {
+  note: Note | null;
+  onLinkClick: () => void;
+}) {
   const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { session } = useAuth();
@@ -61,9 +73,13 @@ function RelatedContentWidget({ note, onLinkClick }: { note: Note | null; onLink
         <LinkIcon className="w-4 h-4" />
         Related Materials
       </h4>
-      {isLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+      {isLoading && (
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      )}
       {!isLoading && relatedItems.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">No related content found.</p>
+        <p className="text-xs text-muted-foreground italic">
+          No related content found.
+        </p>
       )}
       {!isLoading &&
         relatedItems.length > 0 &&
@@ -105,7 +121,6 @@ function RelatedContentWidget({ note, onLinkClick }: { note: Note | null; onLink
   );
 }
 
-// Main Editor Component
 interface NoteEditorProps {
   note: Note | null; // Null for a new note
 }
@@ -137,10 +152,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
     setIsLoaded(true);
   }, [note]);
 
-  // --- NEW: Add logic to parse content for [[...]] links ---
   const parseLinks = (htmlContent: string) => {
-    // This is a simplified parser. A robust one would use Tiptap extensions.
-    // This finds hrefs like "/notes/UUID"
     const regex = /href="\/notes\/([0-9a-fA-F-]{36})"/g;
     const ids = new Set<string>();
     let match;
@@ -158,13 +170,13 @@ export function NoteEditor({ note }: NoteEditorProps) {
     setIsSaving(true);
 
     const tagsArray = tags.split(',').map((tag) => tag.trim()).filter(Boolean);
-    const linkedIds = parseLinks(content); // Parse links from HTML
+    const linkedIds = parseLinks(content);
 
     const noteData = {
       title,
       content,
       tags: tagsArray,
-      linked_note_ids: linkedIds, // Add linked IDs
+      linked_note_ids: linkedIds,
     };
 
     try {
@@ -182,25 +194,21 @@ export function NoteEditor({ note }: NoteEditorProps) {
 
       const result: ApiResponse<Note> = await response.json();
       if (!response.ok || !result.success || !result.data) {
-        // --- CATCH LIMIT ERROR ---
         if (result.error === 'limit_exceeded') {
           openModal();
           throw new Error(result.message || 'Note limit reached.');
         }
-        // ---
         throw new Error(result.error);
       }
 
       toast({ title: `Note ${isUpdating ? 'Updated' : 'Created'}` });
-      
+
       if (!isUpdating) {
-        // If it was a new note, redirect to the new edit page
         router.replace(`/notes/${result.data.id}`);
       } else {
-        router.refresh(); // Refresh server component data
+        router.refresh();
       }
     } catch (error: any) {
-      // --- AVOID DOUBLE-TOASTING ---
       if (!error.message.includes('limit reached')) {
         toast({
           title: 'Save Failed',
@@ -208,7 +216,6 @@ export function NoteEditor({ note }: NoteEditorProps) {
           variant: 'destructive',
         });
       }
-      // ---
     } finally {
       setIsSaving(false);
     }
@@ -216,6 +223,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
 
   const isDisabled = isSaving || !isLoaded;
 
+  // (JSX is unchanged)
   return (
     <div className="flex flex-col h-full">
       {/* Header Bar */}
@@ -243,7 +251,9 @@ export function NoteEditor({ note }: NoteEditorProps) {
         {/* Main Editor */}
         <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-2">
           <div className="grid gap-2">
-            <Label htmlFor="title-input" className="text-base">Title</Label>
+            <Label htmlFor="title-input" className="text-base">
+              Title
+            </Label>
             <Input
               id="title-input"
               value={title}
@@ -254,7 +264,9 @@ export function NoteEditor({ note }: NoteEditorProps) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="tags-input" className="text-base">Tags</Label>
+            <Label htmlFor="tags-input" className="text-base">
+              Tags
+            </Label>
             <Input
               id="tags-input"
               value={tags}
@@ -263,7 +275,6 @@ export function NoteEditor({ note }: NoteEditorProps) {
               disabled={isDisabled}
             />
           </div>
-          {/* --- 2. ADD CONDITIONAL RENDER --- */}
           <div className="grid gap-2 flex-1">
             <Label className="text-base">Content</Label>
             {isLoaded ? (
@@ -276,7 +287,6 @@ export function NoteEditor({ note }: NoteEditorProps) {
               <Skeleton className="w-full min-h-[300px] rounded-md" />
             )}
           </div>
-          {/* --- END MODIFICATION --- */}
         </div>
 
         {/* Sidebar */}
