@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetcher } from '@/lib/fetcher'; // <-- FIX: Was '@/types/fetcher'
+import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
 import { Card as Flashcard, Deck } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -17,8 +17,6 @@ interface DeckData {
   deck: Deck;
   cards: Flashcard[];
 }
-
-// ... (the rest of the file is identical to my previous patch)
 
 interface StudyCard extends Flashcard {
   reviewStatus: 'correct' | 'incorrect' | 'pending';
@@ -37,7 +35,7 @@ export default function FlashcardStudyPage() {
   const { session } = useAuth();
 
   // Fetch deck data
-  const { data, error, isLoading } = useSWR<DeckData>(
+  const { data, error, isLoading }_ = useSWR<DeckData>(
     session ? `/api/decks/${deckId}` : null,
     (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: false }
@@ -45,59 +43,24 @@ export default function FlashcardStudyPage() {
 
   // Initialize the study deck once data is loaded
   useEffect(() => {
-    if (data?.cards) {
-      // Shuffle the deck for a study session
-      const shuffled = [...data.cards]
-        .sort(() => Math.random() - 0.5)
-        .map((card) => ({ ...card, reviewStatus: 'pending' as const }));
-      setStudyDeck(shuffled);
-      setCurrentIndex(0);
-      setShowSummary(false);
-      setSessionStarted(false);
-      setIsFlipped(false);
-    }
-  }, [data]);
-
-  const handleCardFlip = () => {
-    setIsFlipped((prev) => !prev);
-  };
-
-  const handleReview = (status: 'correct' | 'incorrect') => {
-    if (!sessionStarted) setSessionStarted(true);
-
-    // Update the card's status
-    setStudyDeck((prev) =>
-      prev.map((card, index) =>
-        index === currentIndex ? { ...card, reviewStatus: status } : card
-      )
-    );
-
-    // Move to the next card
-    if (currentIndex < studyDeck.length - 1) {
-      setIsFlipped(false); // Flip back to front for next card
-      // Short delay so user can register the flip
-      setTimeout(() => {
-        setCurrentIndex(currentIndex + 1);
-      }, 150);
-    } else {
-      // End of deck
-      setShowSummary(true);
-    }
-  };
-
-  const handleRestart = () => {
-    // Re-shuffle and reset all state
+    // FIX: Check for data.cards before shuffling
     if (data?.cards) {
       const shuffled = [...data.cards]
         .sort(() => Math.random() - 0.5)
         .map((card) => ({ ...card, reviewStatus: 'pending' as const }));
       setStudyDeck(shuffled);
+    } else if (data && !data.cards) {
+      // Handle case where data exists but cards are missing
+      setStudyDeck([]);
     }
+    
+    // Reset state regardless
     setCurrentIndex(0);
     setShowSummary(false);
     setSessionStarted(false);
     setIsFlipped(false);
-  };
+
+  }, [data]); // Only depends on data
 
   // Memoize summary calculations
   const summary = useMemo(() => {
@@ -132,12 +95,15 @@ export default function FlashcardStudyPage() {
     );
   }
 
-  if (!data || studyDeck.length === 0) {
+  // --- FIX: More robust check for data and deck ---
+  // If data or data.deck is missing, or if there are no cards
+  if (!data || !data.deck || studyDeck.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">{data?.deck.title || 'Flashcard Deck'}</h2>
-        <p className="text-center">This deck has no cards in it.</p>
+        {/* FIX: Safely access title */}
+        <h2 className="text-2xl font-semibold">{data?.deck?.title || 'Flashcard Deck'}</h2>
+        <p className="text-center">This deck has no cards in it or failed to load properly.</p>
         <Button onClick={() => router.push('/flashcards')} variant="outline" className="mt-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
         </Button>
@@ -156,8 +122,9 @@ export default function FlashcardStudyPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Decks
           </Button>
-          <h1 className="text-xl font-semibold truncate text-center" title={data.deck.title}>
-            {data.deck.title}
+          {/* FIX: Safely access title with optional chaining */}
+          <h1 className="text-xl font-semibold truncate text-center" title={data?.deck?.title}>
+            {data?.deck?.title}
           </h1>
           <div className="w-24"></div> {/* Spacer */}
         </div>
@@ -187,7 +154,7 @@ export default function FlashcardStudyPage() {
               {/* Flippable Card */}
               <div
                 className="w-full h-80 [perspective:1000px] cursor-pointer"
-                onClick={handleCardFlip}
+                onClick={() => setIsFlipped((prev) => !prev)}
               >
                 <motion.div
                   className="relative w-full h-full [transform_style:preserve-3d]"
