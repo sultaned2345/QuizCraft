@@ -15,9 +15,9 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import { Note, ApiResponse, RelatedItem } from '@/types/database';
-import { useAuth } from '@/components/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext'; // <-- FIX: Corrected path
 import NextLink from 'next/link';
-import { useToast } from '@hooks/use-toast'; // <-- THIS IMPORT IS FIXED
+import { useToast } from '@/hooks/use-toast'; // <-- FIX: Added slash
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { BacklinksWidget } from '@/components/BacklinksWidget';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';

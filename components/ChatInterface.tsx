@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuth } from '@/contexts/AuthContext'; // <-- THIS IMPORT IS FIXED
+import { useAuth } from '@/contexts/AuthContext'; // This path is correct
 import {
   Bot,
   Loader2,
@@ -27,11 +27,11 @@ import {
   Layers,
   MessageSquareText,
 } from 'lucide-react';
-import { cn } from '@lib/utils';
+import { cn } from '@/lib/utils'; // <-- FIX: Added slash
 import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@hooks/use-toast';
+import { useToast } from '@/hooks/use-toast'; // <-- FIX: Added slash
 import {
   Tooltip,
   TooltipContent,

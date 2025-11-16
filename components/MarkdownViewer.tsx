@@ -1,12 +1,12 @@
 // components/MarkdownViewer.tsx
 'use client';
 
-import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
+import { cn } from '@/lib/utils'; // <-- FIX: Added slash
 
 interface MarkdownViewerProps {
   content: string;
   className?: string;
-  onMouseUpCapture?: (e: React.MouseEvent) => void; // <-- ADDED THIS PROP
+  onMouseUpCapture?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -38,7 +38,7 @@ export function MarkdownViewer({
           className,
         )}
         dangerouslySetInnerHTML={{ __html: content }}
-        onMouseUpCapture={onMouseUpCapture} // <-- ATTACH HANDLER
+        onMouseUpCapture={onMouseUpCapture}
       />
     );
   }
@@ -50,7 +50,7 @@ export function MarkdownViewer({
         'text-sm whitespace-pre-wrap break-words font-sans text-foreground',
         className,
       )}
-      onMouseUpCapture={onMouseUpCapture} // <-- ATTACH HANDLER
+      onMouseUpCapture={onMouseUpCapture}
     >
       {content}
     </pre>
