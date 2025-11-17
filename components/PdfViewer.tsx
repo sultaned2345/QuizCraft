@@ -1,10 +1,10 @@
 // components/PdfViewer.tsx
 'use client';
 
-import *d React from 'react';
+import * as React from 'react'; // <-- THIS IS THE FIX (was 'import *d React...')
 import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils'; // <-- THIS WAS THE FIX (@lib/utils -> @/lib/utils)
+import { cn } from '@/lib/utils'; // <-- This path is now correct
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- CONFIGURE THE WORKER ---
@@ -18,7 +18,6 @@ interface PdfViewerProps {
   className?: string;
 }
 
-// --- MODIFIED PROPS FOR PdfPage ---
 interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy; // Pass the document
   pageNum: number; // Pass the page number
@@ -191,7 +190,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   return (
     <ScrollArea className={cn('h-full bg-muted/50', className)}>
       <div className="flex flex-col items-center p-4 gap-4">
-        {/* --- THIS MAPPING IS THE KEY FIX --- */}
         {pages.map((pageNum) => (
           <PdfPage
             key={pageNum}
