@@ -8,7 +8,7 @@ import { ApiResponse } from '@/types/database';
  */
 export const fetcher = async <T = any>(
   input: RequestInfo,
-  init?: RequestInit
+  init?: RequestInit,
 ): Promise<T> => {
   const res = await fetch(input, init);
 
@@ -31,7 +31,9 @@ export const fetcher = async <T = any>(
 
   if (result.success === false || result.data === undefined) {
     // This is an error from our API wrapper (e.g., success: false)
-    const error = new Error(result.error || 'API returned success=false but no error message.');
+    const error = new Error(
+      result.error || 'API returned success=false but no error message.',
+    );
     (error as any).info = result;
     (error as any).status = res.status;
     throw error;

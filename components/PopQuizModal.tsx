@@ -47,6 +47,9 @@ export function PopQuizModal({
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  // --- FIX: Add the missing state for the card flip ---
+  const [isFlipped, setIsFlipped] = useState(false);
+  // --- END FIX ---
 
   // Shuffle questions and answers when modal opens
   useEffect(() => {
@@ -71,11 +74,15 @@ export function PopQuizModal({
       setAnswerStatus('unanswered');
       setCorrectAnswers(0);
       setIsFinished(false);
+      setIsFlipped(false); // Also reset flip state
     }
   }, [isOpen, questions]); // Reruns when modal is opened or questions change
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / quizQuestions.length) * 100;
+  const progress =
+    quizQuestions.length > 0
+      ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
+      : 0;
 
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return; // Already answered
@@ -101,10 +108,17 @@ export function PopQuizModal({
   };
 
   const handleNext = () => {
+    // --- FIX: Reset flip state when moving to next question ---
+    // The key={currentQuestionIndex} on motion.div handles this
+    // by re-mounting, which re-initializes `isFlipped` state.
+    // But we'll add it to handleRestart for safety.
+    // --- END FIX ---
+
     if (currentQuestionIndex < quizQuestions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
+      setIsFlipped(false); // Explicitly reset flip
     } else {
       // Finish quiz
       setIsFinished(true);
@@ -131,13 +145,22 @@ export function PopQuizModal({
     setAnswerStatus('unanswered');
     setCorrectAnswers(0);
     setIsFinished(false);
+    // --- FIX: Reset flip state on restart ---
+    setIsFlipped(false);
+    // --- END FIX ---
   };
+
+  // --- FIX: Define the missing event handler ---
+  const handleCardFlip = () => {
+    setIsFlipped((prev) => !prev);
+  };
+  // --- END FIX ---
 
   const getOptionClass = (optionText: string) => {
     if (answerStatus === 'unanswered') {
       return 'border-border hover:bg-muted/50';
     }
-    
+
     // --- FIX: PopQuiz data is simple ---
     const isCorrect = currentQuestion.correct_answer === optionText;
     // --- END FIX ---
@@ -234,12 +257,12 @@ export function PopQuizModal({
                     {/* Flippable Card Container */}
                     <div
                       className="w-full h-64 [perspective:1000px] cursor-pointer"
-                      onClick={handleCardFlip}
+                      onClick={handleCardFlip} // <-- Now this works
                     >
                       {/* --- FIX: Use standard Tailwind classes --- */}
                       <motion.div
                         className="relative w-full h-full transform-style-preserve-3d"
-                        animate={{ rotateY: isFlipped ? 180 : 0 }}
+                        animate={{ rotateY: isFlipped ? 180 : 0 }} // <-- Now this works
                         transition={{ duration: 0.5 }}
                       >
                         {/* Front of Card (Shows Options) */}

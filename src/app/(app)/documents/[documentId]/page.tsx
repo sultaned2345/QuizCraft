@@ -1,3 +1,4 @@
+// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
@@ -36,6 +37,10 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
 import { PdfViewer } from '@/components/PdfViewer';
+// --- FIX: Import SWR and our fetcher ---
+import useSWR from 'swr';
+import { fetcher } from '@/lib/fetcher';
+// --- END FIX ---
 
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
@@ -131,17 +136,8 @@ function SelectionMenu({
 }
 
 export default function DocumentViewPage() {
-  // (All state and refs are unchanged)
-  const [viewingContent, setViewingContent] = useState<ViewingContentState>({
-    title: '',
-    text: null,
-    pdfUrl: null,
-  });
-  const [isLoadingContent, setIsLoadingContent] = useState(true);
-  const [chatHistory, setChatHistory] = useState<Message[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
-  const [insights, setInsights] = useState<AIDocumentInsights | null>(null);
-  const [isLoadingInsights, setIsLoadingInsights] = useState(true);
+  // --- REFACTORED STATE ---
+  // We no longer need useState for data or loading. SWR handles it.
   const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
   const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
   const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
@@ -151,6 +147,8 @@ export default function DocumentViewPage() {
     y: 0,
     text: '',
   });
+  // --- END REFACTORED STATE ---
+
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
@@ -166,87 +164,92 @@ export default function DocumentViewPage() {
     [documentId],
   );
 
-  // (All useEffect hooks and handlers are unchanged)
   useEffect(() => {
     setPageContext(pageContext);
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
 
-  useEffect(() => {
-    if (!session || !documentId) {
-      if (!authLoading && !user) router.push('/login');
-      return;
-    }
-    const fetchData = async () => {
-      setIsLoadingContent(true);
-      setIsHistoryLoading(true);
-      setIsLoadingInsights(true);
-      try {
-        const [contentRes, historyRes, insightsRes] = await Promise.all([
-          fetch(`/api/documents/${documentId}/content`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          }),
-          fetch(`/api/chat/history?context_id=${documentId}`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          }),
-          fetch(`/api/documents/${documentId}/insights`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          }),
-        ]);
-        const contentResult: ApiResponse<{
-          extracted_text: string | null;
-          file_name: string;
-        }> = await contentRes.json();
-        if (!contentRes.ok || !contentResult.success || !contentResult.data) {
-          throw new Error(
-            contentResult.error || 'Failed to fetch document content.',
-          );
-        }
-        setViewingContent((prev) => ({
-          ...prev,
-          title: contentResult.data!.file_name,
-          text: contentResult.data!.extracted_text,
-          pdfUrl: null,
-        }));
-        setIsLoadingContent(false);
-        const historyResult: ApiResponse<Message[]> = await historyRes.json();
-        if (historyResult.success && historyResult.data) {
-          setChatHistory(historyResult.data);
-        }
-        setIsHistoryLoading(false);
-        const insightsResult: ApiResponse<AIDocumentInsights | null> =
-          await insightsRes.json();
-        if (insightsResult.success && insightsResult.data) {
-          setInsights(insightsResult.data);
-        }
-        setIsLoadingInsights(false);
-        const isPdf =
-          contentResult.data.file_name.toLowerCase().endsWith('.pdf');
-        if (isPdf) {
-          const urlRes = await fetch(`/api/documents/${documentId}/url`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          const urlResult: ApiResponse<{ signedUrl: string }> =
-            await urlRes.json();
-          if (urlResult.success && urlResult.data) {
-            setViewingContent((prev) => ({
-              ...prev,
-              pdfUrl: urlResult.data.signedUrl,
-            }));
-          }
-        }
-      } catch (error: any) {
-        toast({
-          title: 'Error Loading Document',
-          description: error.message,
-          variant: 'destructive',
-        });
-        router.push('/documents');
-      }
-    };
-    fetchData();
-  }, [documentId, session, authLoading, user, router, toast]);
+  // --- FIX: Data fetching refactored to useSWR ---
+  const swrOptions = {
+    revalidateOnFocus: false, // <-- THIS IS THE CORE FIX
+    onError: (error: any) => {
+      toast({
+        title: 'Error Loading Document',
+        description: error.message || 'Failed to fetch data.',
+        variant: 'destructive',
+      });
+      router.push('/documents');
+    },
+  };
 
+  // 1. Fetch Document Content
+  const { data: contentResult, error: contentError } = useSWR<
+    ApiResponse<{
+      extracted_text: string | null;
+      file_name: string;
+    }>
+  >(
+    session ? `/api/documents/${documentId}/content` : null,
+    (url) => fetcher(url, session!.access_token),
+    swrOptions,
+  );
+
+  // 2. Fetch Chat History
+  const { data: historyResult, error: historyError } = useSWR<
+    ApiResponse<Message[]>
+  >(
+    session ? `/api/chat/history?context_id=${documentId}` : null,
+    (url) => fetcher(url, session!.access_token),
+    swrOptions,
+  );
+
+  // 3. Fetch AI Insights
+  const { data: insightsResult, error: insightsError } = useSWR<
+    ApiResponse<AIDocumentInsights | null>
+  >(
+    session ? `/api/documents/${documentId}/insights` : null,
+    (url) => fetcher(url, session!.access_token),
+    swrOptions,
+  );
+
+  // 4. Conditionally Fetch PDF URL
+  const isPdf =
+    contentResult?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
+
+  const { data: urlResult, error: urlError } = useSWR<
+    ApiResponse<{ signedUrl: string }>
+  >(
+    session && isPdf ? `/api/documents/${documentId}/url` : null,
+    (url) => fetcher(url, session!.access_token),
+    swrOptions,
+  );
+  // --- END FIX ---
+
+  // --- DERIVED STATE (from SWR) ---
+  const isLoadingContent = !contentResult && !contentError;
+  const isHistoryLoading = !historyResult && !historyError;
+  const isLoadingInsights = !insightsResult && !insightsError;
+
+  const viewingContent = useMemo((): ViewingContentState => {
+    return {
+      title: contentResult?.data?.file_name || 'Loading...',
+      text: contentResult?.data?.extracted_text || null,
+      pdfUrl: urlResult?.data?.signedUrl || null,
+    };
+  }, [contentResult, urlResult]);
+
+  const chatHistory = historyResult?.data || [];
+  const insights = insightsResult?.data || null;
+  // --- END DERIVED STATE ---
+
+  // Redirect if auth fails (no change)
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  // Pop Quiz handler (no change, this is a POST mutation)
   const handleStartPopQuiz = async () => {
     if (!session || isPopQuizLoading) return;
     setIsPopQuizLoading(true);
@@ -281,6 +284,7 @@ export default function DocumentViewPage() {
     }
   };
 
+  // Selection handlers (no change)
   const handleMouseUpCapture = (e: React.MouseEvent) => {
     const chatPanel = (e.target as HTMLElement).closest(
       'div[data-chat-panel="true"]',
@@ -314,13 +318,15 @@ export default function DocumentViewPage() {
     setMenu({ visible: false, x: 0, y: 0, text: '' });
   };
 
-  if (isLoadingContent || authLoading) {
+  // --- FIX: Updated loading state ---
+  if (authLoading || isLoadingContent) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
+  // --- END FIX ---
 
   return (
     <>
@@ -372,6 +378,7 @@ export default function DocumentViewPage() {
                   className="flex-1 overflow-auto mt-0"
                 >
                   <CardContent className="h-full p-0">
+                    {/* --- FIX: Loading state simplified --- */}
                     {isLoadingContent ? (
                       <div className="flex justify-center items-center h-full min-h-[60vh]">
                         <Loader2 className="h-6 w-6 animate-spin" />
@@ -394,6 +401,7 @@ export default function DocumentViewPage() {
                         />
                       </ScrollArea>
                     )}
+                    {/* --- END FIX --- */}
                   </CardContent>
                 </TabsContent>
                 <TabsContent
@@ -401,6 +409,7 @@ export default function DocumentViewPage() {
                   className="flex-1 overflow-auto mt-0"
                 >
                   <CardContent className="p-4">
+                    {/* --- FIX: Loading state simplified --- */}
                     {isLoadingInsights ? (
                       <div className="space-y-4 p-4">
                         <Skeleton className="h-6 w-1/3" />
@@ -490,6 +499,7 @@ export default function DocumentViewPage() {
                         </InsightSection>
                       </div>
                     )}
+                    {/* --- END FIX --- */}
                   </CardContent>
                 </TabsContent>
               </Tabs>

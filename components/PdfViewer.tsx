@@ -1,9 +1,10 @@
+// components/PdfViewer.tsx
 'use client';
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils'; // <-- FIX: Added slash
+import { cn } from '@lib/utils'; // <-- THIS IMPORT IS FIXED
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- CONFIGURE THE WORKER ---
@@ -17,24 +18,40 @@ interface PdfViewerProps {
   className?: string;
 }
 
+// --- MODIFIED PROPS FOR PdfPage ---
 interface PdfPageProps {
-  page: pdfjs.PDFPageProxy;
+  doc: pdfjs.PDFDocumentProxy; // Pass the document
+  pageNum: number;             // Pass the page number
   scale: number;
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
 /**
  * Renders a single page of the PDF.
+ * This component now fetches its own page object asynchronously.
  */
-function PdfPage({ page, scale, onTextSelect }: PdfPageProps) {
+function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
+  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
+  // Effect 1: Fetch the specific page object from the doc
+  React.useEffect(() => {
+    doc.getPage(pageNum).then(setPage);
+    // When the page is set, the effect below will trigger
+  }, [doc, pageNum]);
+
+  // Effect 2: Render the page (canvas + text layer)
   React.useEffect(() => {
     const canvas = canvasRef.current;
     const textLayer = textLayerRef.current;
-    if (!canvas || !textLayer) return;
 
+    // --- GUARD CLAUSE ---
+    // Wait until the page is fetched and refs are available
+    if (!page || !canvas || !textLayer) return;
+
+    // --- SAFE TO CALL ---
+    // 'page' is now guaranteed to be a PDFPageProxy object
     const viewport = page.getViewport({ scale });
     const context = canvas.getContext('2d');
     if (!context) return;
@@ -71,14 +88,24 @@ function PdfPage({ page, scale, onTextSelect }: PdfPageProps) {
       renderTask?.cancel();
       textRenderTask?.cancel();
     };
+    // This effect now correctly depends on the 'page' state
   }, [page, scale]);
 
+  // --- GUARD CLAUSE ---
+  // Don't render the div structure until the page is fetched.
+  // This prevents layout errors.
+  if (!page) {
+    return null;
+  }
+
+  // Get viewport for the container div
+  const viewport = page.getViewport({ scale });
   return (
     <div
       className="relative shadow-md"
       style={{
-        width: page.getViewport({ scale }).width,
-        height: page.getViewport({ scale }).height,
+        width: viewport.width,
+        height: viewport.height,
       }}
     >
       <canvas ref={canvasRef} />
@@ -164,10 +191,12 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   return (
     <ScrollArea className={cn('h-full bg-muted/50', className)}>
       <div className="flex flex-col items-center p-4 gap-4">
+        {/* --- THIS MAPPING IS THE KEY FIX --- */}
         {pages.map((pageNum) => (
           <PdfPage
             key={pageNum}
-            page={pdfDoc!.getPage(pageNum)} // We know pdfDoc is not null here
+            doc={pdfDoc!} // Pass the whole doc
+            pageNum={pageNum}     // Pass the page number
             scale={scale}
             onTextSelect={onTextSelect}
           />
