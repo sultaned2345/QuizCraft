@@ -14,24 +14,23 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuth } from '@/contexts/AuthContext'; // This path is correct
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Bot,
   Loader2,
   Send,
-  Sparkles,
   User as UserIcon,
-  FileText,
-  StickyNote,
+  Sparkles,
   FileQuestion,
+  StickyNote,
   Layers,
-  MessageSquareText,
+  MessageSquare,
 } from 'lucide-react';
-import { cn } from '@/lib/utils'; // <-- FIX: Added slash
+import { cn } from '@/lib/utils';
 import { PageContextType } from '@/contexts/PageContext';
 import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast'; // <-- FIX: Added slash
+import { useToast } from '@/hooks/use-toast';
 import {
   Tooltip,
   TooltipContent,
@@ -60,58 +59,37 @@ export interface ChatInterfaceHandle {
   sendMessage: (messageText: string) => void;
 }
 
-// (getSourceHref and getSourceIcon are unchanged)
 function getSourceHref(source: Source): string {
-  if (source.content_type === 'note') {
-    return `/notes/${source.content_id}`;
-  }
-  if (source.content_type === 'document') {
-    return `/documents/${source.content_id}`;
-  }
-  return '#';
-}
-function getSourceIcon(source: Source) {
-  if (source.content_type === 'note') {
-    return <StickyNote className="w-3 h-3" />;
-  }
-  if (source.content_type === 'document') {
-    return <FileText className="w-3 h-3" />;
-  }
-  return null;
+  return source.content_type === 'note' 
+    ? `/notes/${source.content_id}` 
+    : `/documents/${source.content_id}`;
 }
 
 export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(
   (
     {
       context,
-      initialMessages,
-      isLoadingHistory: isHistoryLoadingProp = false,
+      initialMessages = [],
+      isLoadingHistory = false,
       className,
     },
     ref,
   ) => {
-    const [messages, setMessages] = useState<Message[]>(initialMessages || []);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isHistoryLoading, setIsHistoryLoading] =
-      useState(isHistoryLoadingProp);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+    
     const { session } = useAuth();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
-    const [proactiveActions, setProactiveActions] =
-      useState<React.ReactNode | null>(null);
-    const [isActionLoading, setIsActionLoading] = useState(false);
-    const [suggestedQuestions, setSuggestedQuestions] = useState<string[] | null>(
-      null,
-    );
-    const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
     const router = useRouter();
     const { toast } = useToast();
 
-    // (All handler functions: handleGenerateQuiz, handleGenerateNotes, handleGenerateFlashcards are unchanged)
+    // --- 1. RESTORED ACTION HANDLERS ---
     const handleGenerateQuizFromContext = () => {
-      if (context?.type !== 'document' || !context.id) return;
+      if (!context.id) return;
       setIsActionLoading(true);
       toast({ title: 'Preparing Quiz...' });
       router.push(`/create?docId=${context.id}`);
@@ -121,556 +99,279 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
     const handleGenerateNotesFromContext = async () => {
       if (context?.type !== 'document' || !context.id || !session) return;
       setIsActionLoading(true);
-      toast({
-        title: 'Generating Notes...',
-        description: 'Please wait, this may take a moment.',
-      });
+      toast({ title: 'Summarizing Notes...', description: 'This may take a moment.' });
+      
       try {
+        // 1. Get content first
         const cRes = await fetch(`/api/documents/${context.id}/content`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        const cResult: ApiResponse<{ extracted_text: string | null }> =
-          await cRes.json();
-        if (!cResult.success || !cResult.data?.extracted_text)
-          throw new Error(cResult.error || 'Failed to fetch document content.');
+        const cResult = await cRes.json();
+        
+        if (!cResult.success || !cResult.data?.extracted_text) throw new Error("Could not read document.");
 
+        // 2. Generate
         const gRes = await fetch(`/api/generate-notes`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            text: cResult.data.extracted_text,
-          }),
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ text: cResult.data.extracted_text }),
         });
-        const gResult: ApiResponse = await gRes.json();
-        if (!gRes.ok || !gResult.success)
-          throw new Error(gResult.error || 'Failed to generate notes.');
+        const gResult = await gRes.json();
 
-        toast({ title: 'Notes Generated!' });
+        if (!gResult.success) throw new Error(gResult.error);
+
+        toast({ title: 'Notes Created!' });
         router.push('/notes');
       } catch (e: any) {
-        toast({
-          title: 'Note Generation Failed',
-          description: e.message,
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: e.message, variant: 'destructive' });
       } finally {
         setIsActionLoading(false);
       }
     };
 
     const handleGenerateFlashcardsFromContext = async () => {
-      if (context?.type !== 'document' || !context.id || !session) return;
+      if (!context.id || !session) return;
       setIsActionLoading(true);
-      toast({
-        title: 'Generating Flashcards...',
-        description: 'Please wait, this may take a moment.',
-      });
+      toast({ title: 'Generating Flashcards...' });
       try {
-        const response = await fetch(`/api/generate-flashcards`, {
+        const res = await fetch(`/api/generate-flashcards`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
           body: JSON.stringify({ documentId: context.id, numberOfCards: 15 }),
         });
-        const result: ApiResponse<GeneratedDeckInfo> = await response.json();
-        if (!response.ok || !result.success || !result.data)
-          throw new Error(result.error || 'Failed to generate flashcards.');
-
-        toast({
-          title: 'Flashcards Generated!',
-          description: `Deck "${result.data.title}" created.`,
-        });
-        router.push(`/flashcards/${result.data.id}`);
+        const data = await res.json();
+        if (data.success) {
+          toast({ title: 'Success', description: `Deck "${data.data.title}" created.` });
+          router.push(`/flashcards/${data.data.id}`);
+        } else throw new Error(data.error);
       } catch (e: any) {
-        toast({
-          title: 'Card Generation Failed',
-          description: e.message,
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: e.message, variant: 'destructive' });
       } finally {
         setIsActionLoading(false);
       }
     };
 
-    // (All useEffect hooks are unchanged)
+    // --- 2. RESTORED SUGGESTIONS FETCHING ---
     useEffect(() => {
-      if (initialMessages && initialMessages.length > 0) {
-        setMessages(initialMessages);
-        setIsHistoryLoading(isHistoryLoadingProp);
-      } else if (isHistoryLoadingProp) {
-        setMessages([]);
-        setIsHistoryLoading(true);
-      } else if (session) {
-        setIsHistoryLoading(true);
-        setProactiveActions(null);
-        setSuggestedQuestions(null);
-
-        let historyFetchUrl = '/api/chat/history';
-
-        if (context?.type === 'quiz' && context.id) {
-          setProactivePrompt(
-            "I see you're looking at a quiz. Need help refining a question or adding a new one? (e.g., \"Make question 2 harder\" or \"Add a true/false question about...\")",
-          );
-          historyFetchUrl = `/api/chat/history?context_id=${context.id}`;
-        } else if (context?.type === 'essay' && context.id) {
-          setProactivePrompt(
-            "I see you just got feedback on your essay. Have any follow-up questions? (e.g., \"Can you give me an example of a better thesis for this essay?\")",
-          );
-          historyFetchUrl = `/api/chat/history?context_id=${context.id}`;
-        } else if (context?.type === 'document' && context.id) {
-          setProactivePrompt(
-            "I see you're viewing this document. What would you like to do?",
-          );
-          historyFetchUrl = `/api/chat/history?context_id=${context.id}`;
-
-          setIsSuggestionsLoading(true);
-          fetch(`/api/documents/${context.id}/suggest-questions`, {
-            headers: { Authorization: `Bearer ${session?.access_token}` },
+      if (context?.type === 'document' && context.id && session && messages.length === 0) {
+         fetch(`/api/documents/${context.id}/suggest-questions`, {
+            headers: { Authorization: `Bearer ${session.access_token}` },
           })
             .then((res) => res.json())
-            .then((data: ApiResponse<string[]>) => {
-              if (data.success && data.data && data.data.length > 0) {
-                setSuggestedQuestions(data.data);
-              } else {
-                setSuggestedQuestions([]);
-              }
+            .then((data) => {
+              if (data.success && data.data) setSuggestedQuestions(data.data);
             })
-            .catch(() => setSuggestedQuestions([]))
-            .finally(() => setIsSuggestionsLoading(false));
-
-          setProactiveActions(
-            <div className="flex flex-col sm:flex-row gap-2 mt-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleGenerateQuizFromContext}
-                disabled={isActionLoading}
-              >
-                {isActionLoading ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <FileQuestion className="w-4 h-4 mr-2" />
-                )}
-                Generate Quiz
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleGenerateNotesFromContext}
-                disabled={isActionLoading}
-              >
-                {isActionLoading ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <StickyNote className="w-4 h-4 mr-2" />
-                )}
-                Summarize Notes
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleGenerateFlashcardsFromContext}
-                disabled={isActionLoading}
-              >
-                {isActionLoading ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Layers className="w-4 h-4 mr-2" />
-                )}
-                Make Flashcards
-              </Button>
-            </div>,
-          );
-        } else {
-          setProactivePrompt(null);
-          historyFetchUrl = '/api/chat/history';
-        }
-
-        fetch(historyFetchUrl, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        })
-          .then((res) => res.json())
-          .then((data: ApiResponse<Message[]>) => {
-            if (data.success && data.data) {
-              if (data.data.length > 0) {
-                setMessages(data.data);
-              } else if (!proactivePrompt && !proactiveActions) {
-                setMessages([
-                  {
-                    role: 'model',
-                    text: 'Hi! How can I help you with your study materials?',
-                  },
-                ]);
-              } else {
-                setMessages([]);
-              }
-            } else {
-              setMessages([
-                {
-                  role: 'model',
-                  text: 'Hi! How can I help you with your study materials?',
-                },
-              ]);
-            }
-          })
-          .catch(() => {
-            setMessages([
-              {
-                role: 'model',
-                text: 'Could not load chat history. How can I help?',
-              },
-            ]);
-          })
-          .finally(() => {
-            setIsHistoryLoading(false);
-          });
+            .catch(() => {}); // Silent fail is fine for suggestions
       }
-    }, [context, session, initialMessages, isHistoryLoadingProp]);
+    }, [context, session, messages.length]);
 
     useEffect(() => {
-      if (initialMessages) {
-        setMessages(initialMessages);
-      }
+      setMessages(initialMessages);
     }, [initialMessages]);
 
     useEffect(() => {
-      setIsHistoryLoading(isHistoryLoadingProp);
-    }, [isHistoryLoadingProp]);
-
-    useEffect(() => {
       if (scrollAreaRef.current) {
-        const scrollableViewport = scrollAreaRef.current.querySelector(
-          'div[data-radix-scroll-area-viewport]',
-        );
-        if (scrollableViewport) {
-          scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
-        }
+        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) viewport.scrollTop = viewport.scrollHeight;
       }
-    }, [messages, isHistoryLoading]);
+    }, [messages, isLoading, suggestedQuestions]);
 
-    useEffect(() => {
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      }
-    }, [input]);
+    const sendMessage = useCallback(async (messageText: string) => {
+      if (!messageText.trim() || !session || isLoading) return;
 
-    const sendMessage = useCallback(
-      async (messageText: string) => {
-        if (!messageText || !session || isLoading) return;
+      const userMessage: Message = { role: 'user', text: messageText };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput('');
+      setIsLoading(true);
 
-        setProactivePrompt(null);
-        setProactiveActions(null);
-        setSuggestedQuestions(null);
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            history: messages, 
+            message: messageText,
+            context: context,
+          }),
+        });
 
-        const userMessage: Message = { role: 'user', text: messageText };
-        setMessages((prevMessages) => [...prevMessages, userMessage]);
-        setInput('');
-        setIsLoading(true);
+        if (!response.ok || !response.body) throw new Error('Failed to send message');
 
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              history: messages,
-              message: messageText,
-              context: context,
-            }),
-          });
+        const sourcesHeader = response.headers.get('X-Ai-Sources');
+        const sources: Source[] = sourcesHeader ? JSON.parse(sourcesHeader) : [];
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
 
-          if (!response.ok || !response.body) {
-            const errorData = await response
-              .json()
-              .catch(
-                () => ({
-                  error: `Request failed with status ${response.status}`,
-                }),
-              );
-            throw new Error(
-              errorData.error ||
-                `Request failed with status ${response.status}`,
-            );
-          }
+        setMessages((prev) => [...prev, { role: 'model', text: '', sources }]);
 
-          const sourcesHeader = response.headers.get('X-Ai-Sources');
-          const sources: Source[] = sourcesHeader
-            ? JSON.parse(sourcesHeader)
-            : [];
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullResponse = '';
-
-          setMessages((prev) => [
-            ...prev,
-            { role: 'model', text: '', sources: sources },
-          ]);
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            fullResponse += chunk;
-
-            setMessages((prev) => {
-              const newMessages = [...prev];
-              newMessages[newMessages.length - 1].text = fullResponse;
-              newMessages[newMessages.length - 1].sources = sources;
-              return newMessages;
-            });
-          }
-        } catch (error: any) {
-          const errorMessage =
-            error.message ||
-            'Sorry, I encountered an error. Please try again.';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullResponse += decoder.decode(value, { stream: true });
+          
           setMessages((prev) => {
-            const newMessages = [...prev];
-            if (
-              newMessages.length > 0 &&
-              newMessages[newMessages.length - 1].role === 'model' &&
-              newMessages[newMessages.length - 1].text === ''
-            ) {
-              newMessages[newMessages.length - 1].text = errorMessage;
-              return newMessages;
-            }
-            return [...prev, { role: 'model', text: errorMessage }];
+            const newMsg = [...prev];
+            newMsg[newMsg.length - 1].text = fullResponse;
+            return newMsg;
           });
-          console.error('Chat error:', error);
-        } finally {
-          setIsLoading(false);
         }
-      },
-      [session, isLoading, messages, context],
-    );
-
-    useImperativeHandle(
-      ref,
-      () => ({
-        sendMessage,
-      }),
-      [sendMessage],
-    );
-
-    const handleFormSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      sendMessage(input.trim());
-    };
-
-    const sendSuggestedQuestion = (question: string) => {
-      sendMessage(question);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleFormSubmit(e as any);
+      } catch (error) {
+        setMessages((prev) => [...prev, { role: 'model', text: 'Sorry, something went wrong.' }]);
+      } finally {
+        setIsLoading(false);
       }
-    };
+    }, [session, isLoading, messages, context]);
 
-    // (JSX rendering is unchanged)
+    useImperativeHandle(ref, () => ({ sendMessage }), [sendMessage]);
+
     return (
-      <div className={cn('flex flex-col h-full p-4', className)}>
-        <ScrollArea className="flex-1 -mr-4">
-          <div className="space-y-4 pr-4">
-            {isHistoryLoading ? (
+      <div className={cn('flex flex-col h-full bg-background/50', className)}>
+        <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+          <div className="space-y-6">
+            
+            {/* LOADING STATE */}
+            {isLoadingHistory && messages.length === 0 && (
               <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <Skeleton className="w-10 h-10 rounded-full" />
-                  <Skeleton className="h-12 w-3/4 rounded-lg" />
-                </div>
-                <div className="flex items-start gap-3 justify-end">
-                  <Skeleton className="h-8 w-1/2 rounded-lg" />
-                  <Skeleton className="w-10 h-10 rounded-full" />
-                </div>
+                 <Skeleton className="h-10 w-2/3 rounded-xl bg-muted/50" />
+                 <Skeleton className="h-20 w-full rounded-xl bg-muted/50" />
               </div>
-            ) : (
-              <>
-                {messages.length === 0 &&
-                  (proactivePrompt ||
-                    proactiveActions ||
-                    isSuggestionsLoading ||
-                    (suggestedQuestions && suggestedQuestions.length > 0)) && (
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
-                        <Bot className="w-5 h-5" />
-                      </div>
-                      <div className="rounded-lg p-3 bg-secondary w-full space-y-3">
-                        {proactivePrompt && (
-                          <p className="text-sm">{proactivePrompt}</p>
-                        )}
-
-                        {proactiveActions}
-
-                        {isSuggestionsLoading && (
-                          <div className="space-y-2 pt-2">
-                            <Skeleton className="h-7 w-full rounded-md" />
-                            <Skeleton className="h-7 w-2/3 rounded-md" />
-                          </div>
-                        )}
-                        {suggestedQuestions && suggestedQuestions.length > 0 && (
-                          <div className="space-y-2 pt-2">
-                            <h4 className="text-xs font-semibold text-muted-foreground">
-                              Suggested Questions:
-                            </h4>
-                            {suggestedQuestions.map((q, i) => (
-                              <Button
-                                key={i}
-                                size="sm"
-                                variant="outline"
-                                className="h-auto text-xs w-full justify-start text-left bg-background"
-                                onClick={() => sendSuggestedQuestion(q)}
-                                disabled={isLoading}
-                              >
-                                <MessageSquareText className="w-3 h-3 mr-2 shrink-0" />
-                                {q}
-                              </Button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                <TooltipProvider delayDuration={100}>
-                  {messages.map((msg, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        'flex flex-col',
-                        msg.role === 'user' ? 'items-end' : 'items-start',
-                      )}
-                    >
-                      <div
-                        className={`flex items-start gap-3 w-full ${
-                          msg.role === 'user' ? 'justify-end' : ''
-                        }`}
-                      >
-                        {msg.role === 'model' && (
-                          <div className="bg-primary rounded-full p-2 text-primary-foreground flex-shrink-0">
-                            <Bot className="w-5 h-5" />
-                          </div>
-                        )}
-                        <div
-                          className={cn(
-                            'rounded-lg p-3 max-w-[85%]',
-                            msg.role === 'user'
-                              ? 'bg-muted'
-                              : 'bg-secondary border',
-                          )}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">
-                            {msg.text}
-                          </p>
-                        </div>
-                        {msg.role === 'user' && (
-                          <div className="bg-muted rounded-full p-2 flex-shrink-0">
-                            <UserIcon className="w-5 h-5" />
-                          </div>
-                        )}
-                      </div>
-                      {msg.role === 'model' &&
-                        msg.sources &&
-                        msg.sources.length > 0 && (
-                          <div className="mt-2 ml-12 pl-1">
-                            <h4 className="text-xs font-semibold text-muted-foreground mb-1">
-                              Sources:
-                            </h4>
-                            <div className="flex flex-wrap gap-2">
-                              {msg.sources.map((source) => (
-                                <Tooltip key={source.citation}>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      asChild
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs px-2 py-1 bg-background"
-                                    >
-                                      <Link
-                                        href={getSourceHref(source)}
-                                        title={source.content_title}
-                                        target="_blank"
-                                      >
-                                        {getSourceIcon(source)}
-                                        <span className="ml-1.5 mr-1 font-mono">
-                                          [{source.citation}]
-                                        </span>
-                                        <span className="truncate max-w-28">
-                                          {source.content_title}
-                                        </span>
-                                      </Link>
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs">
-                                    <p className="text-xs text-muted-foreground line-clamp-3">
-                                      {source.content_chunk}
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                  ))}
-                </TooltipProvider>
-              </>
             )}
-            {isLoading && (
-              <div className="flex items-start gap-3">
-                <div className="bg-primary rounded-full p-2 text-primary-foreground">
-                  <Bot className="w-5 h-5" />
+
+            {/* EMPTY STATE WITH ACTIONS (Restored & Redesigned) */}
+            {!isLoadingHistory && messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-6 opacity-90">
+                <div className="bg-primary/5 p-4 rounded-full ring-1 ring-primary/10">
+                   <Sparkles className="w-6 h-6 text-primary" />
                 </div>
-                <div className="rounded-lg p-3 bg-secondary flex items-center">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <div className="space-y-1">
+                  <h3 className="font-medium text-sm text-foreground">Study Assistant Ready</h3>
+                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                    Ask questions about this document or use a quick action below.
+                  </p>
+                </div>
+
+                {/* Quick Actions Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-sm">
+                  <Button variant="outline" size="sm" className="h-auto py-3 flex flex-col gap-1 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all" onClick={handleGenerateQuizFromContext} disabled={isActionLoading}>
+                    <FileQuestion className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-medium">Quiz Me</span>
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-auto py-3 flex flex-col gap-1 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all" onClick={handleGenerateFlashcardsFromContext} disabled={isActionLoading}>
+                    <Layers className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-medium">Flashcards</span>
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-auto py-3 flex flex-col gap-1 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all" onClick={handleGenerateNotesFromContext} disabled={isActionLoading}>
+                    <StickyNote className="w-4 h-4 text-green-500" />
+                    <span className="text-xs font-medium">Summarize</span>
+                  </Button>
+                </div>
+
+                {/* Suggested Questions Chips */}
+                {suggestedQuestions.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 max-w-md mt-4">
+                    {suggestedQuestions.slice(0, 3).map((q, i) => (
+                      <button 
+                        key={i}
+                        onClick={() => sendMessage(q)}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-muted/50 hover:bg-primary/10 hover:text-primary transition-colors border border-transparent hover:border-primary/20 text-muted-foreground"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MESSAGES */}
+            {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex w-full',
+                    msg.role === 'user' ? 'justify-end' : 'justify-start'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'relative max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm',
+                      msg.role === 'user'
+                        ? 'bg-primary text-primary-foreground rounded-br-sm'
+                        : 'bg-muted/80 text-foreground rounded-bl-sm border'
+                    )}
+                  >
+                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                    
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-primary/10 flex flex-wrap gap-2">
+                         {msg.sources.map((src) => (
+                           <TooltipProvider key={src.citation}>
+                             <Tooltip delayDuration={0}>
+                               <TooltipTrigger asChild>
+                                 <Link
+                                   href={getSourceHref(src)}
+                                   className="inline-flex items-center gap-1 text-[10px] bg-background/50 hover:bg-background px-2 py-1 rounded-full transition-colors ring-1 ring-inset ring-black/5"
+                                 >
+                                   <span className="font-bold text-xs">{src.citation}</span>
+                                   <span className="truncate max-w-[80px]">{src.content_title}</span>
+                                 </Link>
+                               </TooltipTrigger>
+                               <TooltipContent className="max-w-xs text-xs p-3">
+                                 {src.content_chunk}
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                         ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+            ))}
+            
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-muted/50 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Thinking...</span>
                 </div>
               </div>
             )}
           </div>
         </ScrollArea>
-        <form
-          onSubmit={handleFormSubmit}
-          className="flex w-full gap-2 items-start pt-4 border-t"
-        >
-          <Textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your question..."
-            disabled={
-              isLoading ||
-              isHistoryLoading ||
-              isActionLoading ||
-              isSuggestionsLoading
-            }
-            className="min-h-0 h-10 max-h-36 resize-none"
-          />
-          <Button
-            type="submit"
-            disabled={
-              isLoading ||
-              isHistoryLoading ||
-              isActionLoading ||
-isSuggestionsLoading ||
-              !input.trim()
-            }
+
+        {/* INPUT AREA */}
+        <div className="p-4 border-t bg-background">
+          <form
+            onSubmit={(e) => { e.preventDefault(); sendMessage(input); }}
+            className="relative flex items-end gap-2 bg-muted/30 p-1.5 rounded-xl border focus-within:ring-1 focus-within:ring-ring transition-all"
           >
-            <Send className="w-4 h-4" />
-          </Button>
-        </form>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
+              placeholder="Type a message..."
+              className="min-h-[44px] max-h-32 w-full resize-none border-0 bg-transparent focus-visible:ring-0 py-3 px-3 shadow-none text-sm"
+              rows={1}
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!input.trim() || isLoading}
+              className="h-9 w-9 shrink-0 rounded-lg mb-0.5 mr-0.5"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </form>
+        </div>
       </div>
     );
-  },
+  }
 );
 
 ChatInterface.displayName = 'ChatInterface';
