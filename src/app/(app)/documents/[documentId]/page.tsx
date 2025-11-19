@@ -96,7 +96,7 @@ function SelectionMenu({
         top: `${menu.y + 10}px`,
         left: `${menu.x}px`,
       }}
-      className="fixed z-50 p-1 flex gap-1 shadow-lg"
+      className="fixed z-50 p-1 flex gap-1 shadow-lg bg-background border"
       onMouseDown={(e) => e.stopPropagation()}
     >
       <Button
@@ -161,38 +161,18 @@ export default function DocumentViewPage() {
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
 
-  // --- FIX START: Split SWR options ---
-  
-  // 1. Critical Options: Redirect on error (Used for Content)
-  const criticalSwrOptions = {
+  const swrOptions = {
     revalidateOnFocus: false,
     onError: (error: any) => {
-      console.error("Critical data fetch error:", error);
       toast({
         title: 'Error Loading Document',
-        description: error.message || 'Failed to fetch document content.',
+        description: error.message || 'Failed to fetch data.',
         variant: 'destructive',
       });
-      router.push('/documents');
+      // router.push('/documents'); // Optional: Uncomment if you want strict redirection
     },
   };
 
-  // 2. Secondary Options: No redirect, just Toast (Used for Insights/History)
-  const secondarySwrOptions = {
-    revalidateOnFocus: false,
-    onError: (error: any) => {
-      console.warn("Secondary data fetch error:", error);
-      // Optional: You can silence this toast if you prefer failures to be invisible
-      toast({
-        title: 'Warning',
-        description: 'Some features (Insights or History) failed to load.',
-        variant: 'default', // Less aggressive than 'destructive'
-      });
-    },
-  };
-  // --- FIX END ---
-
-  // 1. Fetch Document Content (CRITICAL - uses criticalSwrOptions)
   const { data: contentResult, error: contentError } = useSWR<
     ApiResponse<{
       extracted_text: string | null;
@@ -201,30 +181,25 @@ export default function DocumentViewPage() {
   >(
     session ? `/api/documents/${documentId}/content` : null,
     (url) => fetcher(url, session!.access_token),
-    criticalSwrOptions, 
+    swrOptions,
   );
 
-  // 2. Fetch Chat History (SECONDARY - uses secondarySwrOptions)
   const { data: historyResult, error: historyError } = useSWR<
     ApiResponse<Message[]>
   >(
     session ? `/api/chat/history?context_id=${documentId}` : null,
     (url) => fetcher(url, session!.access_token),
-    secondarySwrOptions,
+    swrOptions,
   );
 
-  // 3. Fetch AI Insights (SECONDARY - uses secondarySwrOptions)
   const { data: insightsResult, error: insightsError } = useSWR<
     ApiResponse<AIDocumentInsights | null>
   >(
     session ? `/api/documents/${documentId}/insights` : null,
     (url) => fetcher(url, session!.access_token),
-    secondarySwrOptions,
+    swrOptions,
   );
 
-  // 4. Conditionally Fetch PDF URL (CRITICAL-ish, but lets use critical to be safe, or secondary if you want to allow partial load)
-  // If the file is a PDF but the URL fails signing, we probably can't view it. Let's keep it critical or fallback gracefully.
-  // Let's stick to critical for now as viewing the PDF is the main purpose if it is one.
   const isPdf =
     contentResult?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
 
@@ -233,7 +208,7 @@ export default function DocumentViewPage() {
   >(
     session && isPdf ? `/api/documents/${documentId}/url` : null,
     (url) => fetcher(url, session!.access_token),
-    criticalSwrOptions,
+    swrOptions,
   );
 
   const isLoadingContent = !contentResult && !contentError;
@@ -326,7 +301,7 @@ export default function DocumentViewPage() {
 
   if (authLoading || isLoadingContent) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -340,32 +315,38 @@ export default function DocumentViewPage() {
         onAction={handleMenuAction}
       />
 
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" onClick={() => router.push('/documents')}>
+      {/* LAYOUT FIX: 
+        1. h-[calc(100vh-4rem)] ensures it takes exactly the viewport height minus header (approx).
+        2. overflow-hidden prevents the entire page from scrolling.
+      */}
+      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b shrink-0 bg-background z-10">
+          <Button variant="ghost" onClick={() => router.push('/documents')} className="shrink-0">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Documents
+            Back
           </Button>
           <h1
-            className="text-xl font-semibold truncate text-center"
+            className="text-lg font-semibold truncate text-center px-4"
             title={viewingContent.title}
           >
             {viewingContent.title}
           </h1>
-          <div className="w-32"></div>
+          {/* Empty div for header balance */}
+          <div className="w-20"></div>
         </div>
+
         <ResizablePanelGroup
           direction="horizontal"
-          className="flex-1 rounded-lg border overflow-hidden"
+          className="flex-1 overflow-hidden"
         >
-          <ResizablePanel defaultSize={50} minSize={30}>
-            <Card className="flex flex-col h-full overflow-hidden border-0 rounded-none">
+          <ResizablePanel defaultSize={60} minSize={30}>
+            <Card className="flex flex-col h-full border-0 rounded-none shadow-none">
               <Tabs
                 defaultValue="document"
                 className="flex-1 flex flex-col h-full overflow-hidden"
               >
-                <CardHeader className="pb-0 pt-4 px-4">
-                  <TabsList className="grid w-full grid-cols-2">
+                <div className="px-4 pt-2 shrink-0">
+                  <TabsList className="grid w-full grid-cols-2 mb-2">
                     <TabsTrigger value="document">
                       <FileText className="w-4 h-4 mr-2" />
                       Document
@@ -375,149 +356,140 @@ export default function DocumentViewPage() {
                       AI Insights
                     </TabsTrigger>
                   </TabsList>
-                </CardHeader>
+                </div>
 
                 <TabsContent
                   value="document"
-                  className="flex-1 overflow-auto mt-0"
+                  className="flex-1 overflow-hidden mt-0 h-full"
                 >
-                  <CardContent className="h-full p-0">
-                    {isLoadingContent ? (
-                      <div className="flex justify-center items-center h-full min-h-[60vh]">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                      </div>
-                    ) : viewingContent.pdfUrl ? (
-                      <PdfViewer
-                        url={viewingContent.pdfUrl}
-                        onTextSelect={handleMouseUpCapture}
-                        className="h-full max-h-[65vh]"
-                      />
-                    ) : (
-                      <ScrollArea className="h-full max-h-[65vh] pr-0">
-                        <MarkdownViewer
-                          content={
-                            viewingContent.text ||
-                            'No text extracted or file is empty.'
-                          }
-                          className="p-4"
-                          onMouseUpCapture={handleMouseUpCapture}
+                  {/* ZOOM FIX: 
+                     The `max-w-5xl mx-auto` constraint prevents content from becoming too wide 
+                     on large monitors, which gives the "zoomed in" feeling.
+                  */}
+                  <div className="h-full overflow-auto bg-muted/10">
+                    <div className="h-full max-w-5xl mx-auto bg-background shadow-sm min-h-full border-x">
+                      {isLoadingContent ? (
+                        <div className="flex justify-center items-center h-full">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : viewingContent.pdfUrl ? (
+                        <PdfViewer
+                          url={viewingContent.pdfUrl}
+                          onTextSelect={handleMouseUpCapture}
+                          className="h-full"
                         />
-                      </ScrollArea>
-                    )}
-                  </CardContent>
+                      ) : (
+                        <div className="p-8 h-full">
+                          <MarkdownViewer
+                            content={
+                              viewingContent.text ||
+                              'No text extracted or file is empty.'
+                            }
+                            className="prose dark:prose-invert max-w-none"
+                            onMouseUpCapture={handleMouseUpCapture}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </TabsContent>
+
                 <TabsContent
                   value="insights"
-                  className="flex-1 overflow-auto mt-0"
+                  className="flex-1 overflow-auto mt-0 p-4 bg-muted/5"
                 >
-                  <CardContent className="p-4">
+                  <div className="max-w-3xl mx-auto">
                     {isLoadingInsights ? (
-                      <div className="space-y-4 p-4">
-                        <Skeleton className="h-6 w-1/3" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-6 w-1/3 mt-4" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
+                      <div className="space-y-4">
+                        <Skeleton className="h-8 w-1/3" />
+                        <Skeleton className="h-24 w-full" />
+                        <Skeleton className="h-8 w-1/3 mt-8" />
+                        <Skeleton className="h-24 w-full" />
                       </div>
                     ) : !insights ? (
-                      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-muted-foreground text-center">
-                        <Brain className="w-12 h-12 mb-4" />
-                        <p className="font-medium">
-                          No AI Insights Generated
-                        </p>
+                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                        <Brain className="w-16 h-16 mb-4 opacity-20" />
+                        <p>No AI Insights Generated</p>
                       </div>
                     ) : (
-                      <div className="space-y-6 p-1">
+                      <div className="space-y-8">
                         <InsightSection
-                          icon={
-                            <HelpCircle className="w-4 h-4 text-blue-500" />
-                          }
-                          title="Potential Exam Questions"
+                          icon={<HelpCircle className="w-5 h-5 text-blue-500" />}
+                          title="Exam Prep Questions"
                         >
                           {insights.examQuestions.length > 0 ? (
-                            <>
-                              <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                            <div className="space-y-4">
+                               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
                                 {insights.examQuestions.map((q, i) => (
                                   <li key={i}>{q}</li>
                                 ))}
                               </ul>
                               <Button
-                                size="sm"
-                                className="mt-4"
                                 onClick={handleStartPopQuiz}
                                 disabled={isPopQuizLoading}
+                                className="w-full sm:w-auto"
                               >
                                 {isPopQuizLoading ? (
                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 ) : (
                                   <Zap className="w-4 h-4 mr-2" />
                                 )}
-                                Start Pop Quiz
+                                Generate Practice Quiz
                               </Button>
-                            </>
+                            </div>
                           ) : (
-                            <p className="text-sm text-muted-foreground italic">
-                              No specific exam questions were generated.
-                            </p>
+                            <p className="italic text-muted-foreground">No exam questions generated.</p>
                           )}
                         </InsightSection>
+
                         <InsightSection
-                          icon={
-                            <Target className="w-4 h-4 text-primary" />
-                          }
-                          title="Main Arguments"
+                          icon={<Target className="w-5 h-5 text-primary" />}
+                          title="Key Arguments"
                         >
-                          {insights.mainArguments.length > 0 ? (
-                            <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
-                              {insights.mainArguments.map((arg, i) => (
-                                <li key={i}>{arg}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">
-                              No main arguments extracted.
-                            </p>
-                          )}
+                          <ul className="space-y-2">
+                            {insights.mainArguments.map((arg, i) => (
+                              <li key={i} className="flex gap-3 text-muted-foreground bg-card p-3 rounded-lg border">
+                                <span className="font-bold text-primary/50">{(i + 1).toString().padStart(2, '0')}</span>
+                                <span>{arg}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </InsightSection>
+
                         <InsightSection
-                          icon={
-                            <Sparkles className="w-4 h-4 text-yellow-500" />
-                          }
-                          title="Key Concepts"
+                          icon={<Sparkles className="w-5 h-5 text-yellow-500" />}
+                          title="Core Concepts"
                         >
-                          {insights.keyConcepts.length > 0 ? (
-                            <ul className="list-disc pl-0 space-y-1 text-sm text-muted-foreground">
+                           <div className="flex flex-wrap gap-2">
                               {insights.keyConcepts.map((concept, i) => (
-                                <li key={i}>{concept}</li>
+                                <span key={i} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium border border-primary/20">
+                                  {concept}
+                                </span>
                               ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">
-                              No key concepts extracted.
-                            </p>
-                          )}
+                           </div>
                         </InsightSection>
                       </div>
                     )}
-                  </CardContent>
+                  </div>
                 </TabsContent>
               </Tabs>
             </Card>
           </ResizablePanel>
+          
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={50} minSize={30}>
+          
+          <ResizablePanel defaultSize={40} minSize={30}>
             <Card
-              className="flex flex-col h-full overflow-hidden border-0 rounded-none"
+              className="flex flex-col h-full border-0 rounded-none border-l"
               data-chat-panel="true"
             >
-              <CardHeader className="pt-4 pb-2">
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  AI Tutor
+              <CardHeader className="py-3 border-b shrink-0 bg-muted/30">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  AI Study Tutor
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 overflow-hidden h-full p-0">
+              <CardContent className="flex-1 overflow-hidden p-0 bg-background">
                 <ChatInterface
                   ref={chatRef}
                   context={pageContext}
@@ -551,11 +523,13 @@ const InsightSection = ({
   icon: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <div className="space-y-2">
-    <h3 className="flex items-center gap-2 font-semibold">
+  <Card className="border shadow-sm overflow-hidden">
+    <div className="bg-muted/30 px-4 py-3 border-b flex items-center gap-2 font-semibold">
       {icon}
-      <span>{title}</span>
-    </h3>
-    <div className="pl-6">{children}</div>
-  </div>
+      {title}
+    </div>
+    <div className="p-4">
+      {children}
+    </div>
+  </Card>
 );
