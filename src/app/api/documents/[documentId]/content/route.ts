@@ -1,4 +1,3 @@
-// src/app/api/documents/[documentId]/content/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -21,6 +20,8 @@ export async function GET(
         }
 
         // FIX: Use findFirst instead of findUnique.
+        // findUnique requires a unique constraint on *all* fields in the 'where' clause.
+        // Since 'user_id' is not unique on its own, we use findFirst to filter by both ID and ownership.
         const document = await prisma.documents.findFirst({
             where: {
                 id: documentId,
@@ -36,6 +37,7 @@ export async function GET(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 });
         }
 
+        // Return just the text content (and maybe filename for reference)
         return NextResponse.json<ApiResponse<{ extracted_text: string | null; file_name: string }>>({
             success: true,
             data: {
@@ -47,6 +49,7 @@ export async function GET(
     } catch (error: any) {
         if (error instanceof Response) return error; // Handle requireAuth errors
         console.error(`Error fetching content for document ${params.documentId}:`, error);
+        // Handle Prisma specific error for invalid UUID format
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2023') {
              return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Document ID format.' }, { status: 400 });
         }
