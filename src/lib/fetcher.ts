@@ -3,14 +3,31 @@ import { ApiResponse } from '@/types/database';
 
 /**
  * A generic fetcher function for useSWR.
- * It expects our standard ApiResponse format and returns the `data` field.
- * @throws {Error} If the fetch fails or API returns success: false.
+ * It wraps the native fetch to handle:
+ * 1. Bearer token injection (if second arg is a string)
+ * 2. Standard RequestInit options (if second arg is an object)
+ * 3. API Response parsing and error throwing
  */
 export const fetcher = async <T = any>(
-  input: RequestInfo,
-  init?: RequestInit,
-): Promise<T> => {
-  const res = await fetch(input, init);
+  url: string,
+  arg?: string | RequestInit
+): Promise<ApiResponse<T>> => {
+  let options: RequestInit = {};
+
+  if (typeof arg === 'string') {
+    // CASE 1: Argument is a token string (from SWR calls)
+    options = {
+      headers: {
+        Authorization: `Bearer ${arg}`,
+        'Content-Type': 'application/json',
+      },
+    };
+  } else if (arg) {
+    // CASE 2: Argument is a standard RequestInit object
+    options = arg;
+  }
+
+  const res = await fetch(url, options);
 
   if (!res.ok) {
     const error = new Error('An error occurred while fetching the data.');
@@ -29,7 +46,7 @@ export const fetcher = async <T = any>(
 
   const result: ApiResponse<T> = await res.json();
 
-  if (result.success === false || result.data === undefined) {
+  if (result.success === false) {
     // This is an error from our API wrapper (e.g., success: false)
     const error = new Error(
       result.error || 'API returned success=false but no error message.',
@@ -39,5 +56,6 @@ export const fetcher = async <T = any>(
     throw error;
   }
 
-  return result.data; // Success: return only the 'data' property
+  // Return the full result so components can access .data, .success, etc.
+  return result; 
 };
