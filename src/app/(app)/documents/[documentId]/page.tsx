@@ -37,10 +37,8 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
 import { PdfViewer } from '@/components/PdfViewer';
-// --- FIX: Import SWR and our fetcher ---
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
-// --- END FIX ---
 
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
@@ -53,7 +51,6 @@ const PopQuizModal = dynamic(
   },
 );
 
-// (Interfaces and SelectionMenu component are unchanged)
 interface ViewingContentState {
   title: string;
   text: string | null;
@@ -87,9 +84,7 @@ function SelectionMenu({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      // --- THIS IS THE FIX ---
       document.removeEventListener('mousedown', handleClickOutside);
-      // --- END FIX ---
     };
   }, [onClose]);
 
@@ -136,8 +131,6 @@ function SelectionMenu({
 }
 
 export default function DocumentViewPage() {
-  // --- REFACTORED STATE ---
-  // We no longer need useState for data or loading. SWR handles it.
   const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
   const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
   const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
@@ -147,7 +140,6 @@ export default function DocumentViewPage() {
     y: 0,
     text: '',
   });
-  // --- END REFACTORED STATE ---
 
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -169,20 +161,38 @@ export default function DocumentViewPage() {
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
 
-  // --- FIX: Data fetching refactored to useSWR ---
-  const swrOptions = {
-    revalidateOnFocus: false, // <-- THIS IS THE CORE FIX
+  // --- FIX START: Split SWR options ---
+  
+  // 1. Critical Options: Redirect on error (Used for Content)
+  const criticalSwrOptions = {
+    revalidateOnFocus: false,
     onError: (error: any) => {
+      console.error("Critical data fetch error:", error);
       toast({
         title: 'Error Loading Document',
-        description: error.message || 'Failed to fetch data.',
+        description: error.message || 'Failed to fetch document content.',
         variant: 'destructive',
       });
       router.push('/documents');
     },
   };
 
-  // 1. Fetch Document Content
+  // 2. Secondary Options: No redirect, just Toast (Used for Insights/History)
+  const secondarySwrOptions = {
+    revalidateOnFocus: false,
+    onError: (error: any) => {
+      console.warn("Secondary data fetch error:", error);
+      // Optional: You can silence this toast if you prefer failures to be invisible
+      toast({
+        title: 'Warning',
+        description: 'Some features (Insights or History) failed to load.',
+        variant: 'default', // Less aggressive than 'destructive'
+      });
+    },
+  };
+  // --- FIX END ---
+
+  // 1. Fetch Document Content (CRITICAL - uses criticalSwrOptions)
   const { data: contentResult, error: contentError } = useSWR<
     ApiResponse<{
       extracted_text: string | null;
@@ -191,28 +201,30 @@ export default function DocumentViewPage() {
   >(
     session ? `/api/documents/${documentId}/content` : null,
     (url) => fetcher(url, session!.access_token),
-    swrOptions,
+    criticalSwrOptions, 
   );
 
-  // 2. Fetch Chat History
+  // 2. Fetch Chat History (SECONDARY - uses secondarySwrOptions)
   const { data: historyResult, error: historyError } = useSWR<
     ApiResponse<Message[]>
   >(
     session ? `/api/chat/history?context_id=${documentId}` : null,
     (url) => fetcher(url, session!.access_token),
-    swrOptions,
+    secondarySwrOptions,
   );
 
-  // 3. Fetch AI Insights
+  // 3. Fetch AI Insights (SECONDARY - uses secondarySwrOptions)
   const { data: insightsResult, error: insightsError } = useSWR<
     ApiResponse<AIDocumentInsights | null>
   >(
     session ? `/api/documents/${documentId}/insights` : null,
     (url) => fetcher(url, session!.access_token),
-    swrOptions,
+    secondarySwrOptions,
   );
 
-  // 4. Conditionally Fetch PDF URL
+  // 4. Conditionally Fetch PDF URL (CRITICAL-ish, but lets use critical to be safe, or secondary if you want to allow partial load)
+  // If the file is a PDF but the URL fails signing, we probably can't view it. Let's keep it critical or fallback gracefully.
+  // Let's stick to critical for now as viewing the PDF is the main purpose if it is one.
   const isPdf =
     contentResult?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
 
@@ -221,11 +233,9 @@ export default function DocumentViewPage() {
   >(
     session && isPdf ? `/api/documents/${documentId}/url` : null,
     (url) => fetcher(url, session!.access_token),
-    swrOptions,
+    criticalSwrOptions,
   );
-  // --- END FIX ---
 
-  // --- DERIVED STATE (from SWR) ---
   const isLoadingContent = !contentResult && !contentError;
   const isHistoryLoading = !historyResult && !historyError;
   const isLoadingInsights = !insightsResult && !insightsError;
@@ -240,16 +250,13 @@ export default function DocumentViewPage() {
 
   const chatHistory = historyResult?.data || [];
   const insights = insightsResult?.data || null;
-  // --- END DERIVED STATE ---
 
-  // Redirect if auth fails (no change)
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
     }
   }, [authLoading, user, router]);
 
-  // Pop Quiz handler (no change, this is a POST mutation)
   const handleStartPopQuiz = async () => {
     if (!session || isPopQuizLoading) return;
     setIsPopQuizLoading(true);
@@ -284,7 +291,6 @@ export default function DocumentViewPage() {
     }
   };
 
-  // Selection handlers (no change)
   const handleMouseUpCapture = (e: React.MouseEvent) => {
     const chatPanel = (e.target as HTMLElement).closest(
       'div[data-chat-panel="true"]',
@@ -318,7 +324,6 @@ export default function DocumentViewPage() {
     setMenu({ visible: false, x: 0, y: 0, text: '' });
   };
 
-  // --- FIX: Updated loading state ---
   if (authLoading || isLoadingContent) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -326,7 +331,6 @@ export default function DocumentViewPage() {
       </div>
     );
   }
-  // --- END FIX ---
 
   return (
     <>
@@ -378,7 +382,6 @@ export default function DocumentViewPage() {
                   className="flex-1 overflow-auto mt-0"
                 >
                   <CardContent className="h-full p-0">
-                    {/* --- FIX: Loading state simplified --- */}
                     {isLoadingContent ? (
                       <div className="flex justify-center items-center h-full min-h-[60vh]">
                         <Loader2 className="h-6 w-6 animate-spin" />
@@ -401,7 +404,6 @@ export default function DocumentViewPage() {
                         />
                       </ScrollArea>
                     )}
-                    {/* --- END FIX --- */}
                   </CardContent>
                 </TabsContent>
                 <TabsContent
@@ -409,7 +411,6 @@ export default function DocumentViewPage() {
                   className="flex-1 overflow-auto mt-0"
                 >
                   <CardContent className="p-4">
-                    {/* --- FIX: Loading state simplified --- */}
                     {isLoadingInsights ? (
                       <div className="space-y-4 p-4">
                         <Skeleton className="h-6 w-1/3" />
@@ -499,7 +500,6 @@ export default function DocumentViewPage() {
                         </InsightSection>
                       </div>
                     )}
-                    {/* --- END FIX --- */}
                   </CardContent>
                 </TabsContent>
               </Tabs>
