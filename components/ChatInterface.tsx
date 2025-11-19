@@ -16,19 +16,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  Bot,
   Loader2,
   Send,
-  User as UserIcon,
   Sparkles,
   FileQuestion,
   StickyNote,
   Layers,
-  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PageContextType } from '@/contexts/PageContext';
-import { ApiResponse, GeneratedDeckInfo, RelatedItem } from '@/types/database';
+import { ApiResponse, RelatedItem } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -50,7 +47,7 @@ interface Message {
 }
 interface ChatInterfaceProps {
   context: PageContextType;
-  initialMessages?: Message[];
+  initialMessages?: Message[]; // Can be undefined
   isLoadingHistory?: boolean;
   className?: string;
 }
@@ -69,13 +66,13 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
   (
     {
       context,
-      initialMessages = [],
+      initialMessages, // FIX: Removed default value " = []" to prevent infinite loop
       isLoadingHistory = false,
       className,
     },
     ref,
   ) => {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<Message[]>(initialMessages || []);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
@@ -87,7 +84,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
     const router = useRouter();
     const { toast } = useToast();
 
-    // --- 1. RESTORED ACTION HANDLERS ---
+    // --- ACTION HANDLERS ---
     const handleGenerateQuizFromContext = () => {
       if (!context.id) return;
       setIsActionLoading(true);
@@ -102,22 +99,18 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
       toast({ title: 'Summarizing Notes...', description: 'This may take a moment.' });
       
       try {
-        // 1. Get content first
         const cRes = await fetch(`/api/documents/${context.id}/content`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
         const cResult = await cRes.json();
-        
         if (!cResult.success || !cResult.data?.extracted_text) throw new Error("Could not read document.");
 
-        // 2. Generate
         const gRes = await fetch(`/api/generate-notes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
           body: JSON.stringify({ text: cResult.data.extracted_text }),
         });
         const gResult = await gRes.json();
-
         if (!gResult.success) throw new Error(gResult.error);
 
         toast({ title: 'Notes Created!' });
@@ -151,7 +144,15 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
       }
     };
 
-    // --- 2. RESTORED SUGGESTIONS FETCHING ---
+    // --- EFFECTS ---
+
+    // FIX: Only update messages if initialMessages is actually defined and different
+    useEffect(() => {
+      if (initialMessages) {
+        setMessages(initialMessages);
+      }
+    }, [initialMessages]);
+
     useEffect(() => {
       if (context?.type === 'document' && context.id && session && messages.length === 0) {
          fetch(`/api/documents/${context.id}/suggest-questions`, {
@@ -161,13 +162,9 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
             .then((data) => {
               if (data.success && data.data) setSuggestedQuestions(data.data);
             })
-            .catch(() => {}); // Silent fail is fine for suggestions
+            .catch(() => {}); 
       }
     }, [context, session, messages.length]);
-
-    useEffect(() => {
-      setMessages(initialMessages);
-    }, [initialMessages]);
 
     useEffect(() => {
       if (scrollAreaRef.current) {
@@ -234,7 +231,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
         <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
           <div className="space-y-6">
             
-            {/* LOADING STATE */}
+            {/* Loading State */}
             {isLoadingHistory && messages.length === 0 && (
               <div className="space-y-4">
                  <Skeleton className="h-10 w-2/3 rounded-xl bg-muted/50" />
@@ -242,7 +239,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
               </div>
             )}
 
-            {/* EMPTY STATE WITH ACTIONS (Restored & Redesigned) */}
+            {/* Empty State */}
             {!isLoadingHistory && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-6 opacity-90">
                 <div className="bg-primary/5 p-4 rounded-full ring-1 ring-primary/10">
@@ -255,7 +252,6 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </p>
                 </div>
 
-                {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-sm">
                   <Button variant="outline" size="sm" className="h-auto py-3 flex flex-col gap-1 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all" onClick={handleGenerateQuizFromContext} disabled={isActionLoading}>
                     <FileQuestion className="w-4 h-4 text-blue-500" />
@@ -271,7 +267,6 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </Button>
                 </div>
 
-                {/* Suggested Questions Chips */}
                 {suggestedQuestions.length > 0 && (
                   <div className="flex flex-wrap justify-center gap-2 max-w-md mt-4">
                     {suggestedQuestions.slice(0, 3).map((q, i) => (
@@ -288,7 +283,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
               </div>
             )}
 
-            {/* MESSAGES */}
+            {/* Messages */}
             {messages.map((msg, i) => (
                 <div
                   key={i}
@@ -343,8 +338,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
             )}
           </div>
         </ScrollArea>
-
-        {/* INPUT AREA */}
+        
         <div className="p-4 border-t bg-background">
           <form
             onSubmit={(e) => { e.preventDefault(); sendMessage(input); }}
