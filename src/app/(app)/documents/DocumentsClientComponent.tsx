@@ -3,16 +3,16 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import useSWR from 'swr'; // <-- 1. IMPORT useSWR
-import { fetcher } from '@/lib/fetcher'; // <-- 2. IMPORT fetcher
-import { useAuth } from '@/contexts/AuthContext'; // <-- THIS IS THE FIX
+import useSWR from 'swr'; 
+import { fetcher } from '@/lib/fetcher'; 
+import { useAuth } from '@/contexts/AuthContext';
 import { ApiResponse, DocumentMetadata } from '@/types/database'; 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Upload, FileText, Trash2, Eye, Sparkles, FileQuestion, StickyNote, Layers, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, Upload, FileText, Trash2, Eye, FileQuestion, StickyNote, Layers, AlertCircle, CheckCircle } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
 import { motion } from 'framer-motion';
@@ -29,8 +29,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; // <-- 8. IMPORT SKELETON
-import { Skeleton } from '@/components/ui/skeleton'; // <-- 8. IMPORT SKELETON
+import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; 
+import { Skeleton } from '@/components/ui/skeleton'; 
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];
@@ -40,16 +40,9 @@ interface PaginatedDocumentsData {
   currentPage: number;
 }
 
-// --- 3. REMOVE initialData PROP ---
-// interface DocumentsClientComponentProps {
-//   initialData: PaginatedDocumentsData;
-// }
-
 type GenerationType = 'quiz' | 'note' | 'flashcard';
 
-// export function DocumentsClientComponent({ initialData }: DocumentsClientComponentProps) {
 export function DocumentsClientComponent() {
-  // --- 4. MANAGE STATE, STARTING EMPTY ---
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number | undefined; limit: number | typeof Infinity | undefined }>({ count: 0, limit: Infinity });
@@ -71,37 +64,31 @@ export function DocumentsClientComponent() {
 
   const documentsPerPage = 9;
 
-  // --- 5. USE SWR FOR INITIAL DATA FETCHING ---
+  // --- FIX 1: Update SWR Generic to ApiResponse ---
   const { 
     data: swrData, 
     error: swrError, 
     isLoading: isSWRLoading, 
-    mutate: refreshFirstPage // alias mutate to refreshFirstPage
-  } = useSWR<PaginatedDocumentsData>(
-    // Only fetch if session is available
+    mutate: refreshFirstPage 
+  } = useSWR<ApiResponse<PaginatedDocumentsData>>(
     session ? `/api/documents?page=1&limit=${documentsPerPage}` : null,
-    // Pass the fetcher and authorization token
     (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     {
-      // --- THIS IS THE FIX ---
-      revalidateOnFocus: false, // Prevents re-fetching when window/tab regains focus
-      // --- END FIX ---
-      dedupingInterval: 5000, // Don't refetch more than once every 5s
-      revalidateOnReconnect: true, // Refetch on network recovery
+      revalidateOnFocus: false, 
+      dedupingInterval: 5000, 
+      revalidateOnReconnect: true, 
     }
   );
 
-  // --- 6. SYNC SWR DATA WITH STATE ---
+  // --- FIX 2: Access data inside ApiResponse ---
   useEffect(() => {
-    // When SWR finishes loading, update our local state.
-    // This will happen on initial load AND on re-focus re-fetches.
-    if (swrData) {
-      setDocuments(swrData.documents);
-      setUsage({ count: swrData.count, limit: swrData.limit });
-      setCurrentPage(swrData.currentPage);
-      setTotalPages(swrData.totalPages);
+    if (swrData && swrData.success && swrData.data) {
+      setDocuments(swrData.data.documents);
+      setUsage({ count: swrData.data.count, limit: swrData.data.limit });
+      setCurrentPage(swrData.data.currentPage);
+      setTotalPages(swrData.data.totalPages);
     }
-  }, [swrData]); // This effect runs whenever SWR's `data` changes
+  }, [swrData]);
 
   const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05, }, }, };
   const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } }, };
@@ -110,17 +97,17 @@ export function DocumentsClientComponent() {
     if (!session || isLoadingMore || page > totalPages) return; 
     setIsLoadingMore(true); 
     try { 
-      // This "load more" logic remains a standard fetch, as it *appends* data
-      const data = await fetcher<PaginatedDocumentsData>(
+      // --- FIX 3: Update fetcher call to handle ApiResponse ---
+      const response = await fetcher<PaginatedDocumentsData>(
         `/api/documents?page=${page}&limit=${documentsPerPage}`, 
         { headers: { Authorization: `Bearer ${session.access_token}` } }
       );
-      // Append new documents to the existing list
-      setDocuments(prev => [...prev, ...data.documents]); 
-      setCurrentPage(data.currentPage); 
-      setTotalPages(data.totalPages); 
-      // Note: SWR's data is now out of sync, but that's okay.
-      // A full refresh (mutate) will reset this.
+      
+      if (response.success && response.data) {
+        setDocuments(prev => [...prev, ...response.data!.documents]); 
+        setCurrentPage(response.data.currentPage); 
+        setTotalPages(response.data.totalPages); 
+      }
     } catch (error: any) { 
       toast({ title: 'Error Loading More', description: error.message, variant: 'destructive' }); 
     } finally { 
@@ -130,9 +117,6 @@ export function DocumentsClientComponent() {
   
   const handleLoadMore = () => { fetchMoreDocuments(currentPage + 1); };
 
-  // --- 7. REFRESH IS NOW `mutate` from useSWR ---
-  // The `refreshFirstPage` const is already defined by `useSWR`
-  
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { setUploadError(''); const maxSize = 10 * 1024 * 1024; const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some(ext => file.name.toLowerCase().endsWith(ext)); if (!isValidType) { setUploadError("PDF, TXT, DOCX, or PPTX only."); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } if (file.size > maxSize) { setUploadError(`Max 10MB (${formatFileSize(file.size)}).`); setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; return; } setSelectedFile(file); } else { setSelectedFile(null); } };
   
   const handleUpload = async () => { 
@@ -152,8 +136,6 @@ export function DocumentsClientComponent() {
       setSelectedFile(null); 
       if(fileInputRef.current) fileInputRef.current.value = ''; 
       
-      // Tell SWR to re-fetch the first page.
-      // `false` means don't use stale data, fetch immediately.
       await refreshFirstPage(); 
       
       router.push(`/documents/${result.data.id}`); 
@@ -167,7 +149,6 @@ export function DocumentsClientComponent() {
   const handleDeleteDocument = async (docId: string, docName: string) => { 
     if (!session) return; 
     
-    // Optimistic UI update: remove the document from state immediately
     setDocuments(prevDocs => prevDocs.filter(d => d.id !== docId)); 
     setUsage(prev => ({ ...prev, count: (prev.count ?? 1) - 1 })); 
     setIsDeleting(true); 
@@ -179,25 +160,17 @@ export function DocumentsClientComponent() {
         throw new Error(result.error || 'Delete failed.'); 
       } 
       toast({ title: 'Deleted', description: `"${docName}" removed.` });
-      
-      // Tell SWR to re-fetch data to confirm the state.
-      // SWR is smart and will likely de-dupe this request if one is in-flight.
       await refreshFirstPage(); 
       
     } catch (error: any) { 
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' }); 
-      
-      // Rollback: Manually trigger a refresh to get the "real" state
-      // which will add the failed-to-delete item back.
       await refreshFirstPage();
-      
     } finally { 
       setIsDeleting(false); 
     } 
   };
 
   const handleStartGenerationJob = async (docId: string, jobType: GenerationType, jobName: string) => {
-    // ... (this function remains unchanged)
     if (!session) return;
     const jobKey = `${docId}-${jobType}`;
     if (recentlyQueued.has(jobKey)) {
@@ -257,11 +230,7 @@ export function DocumentsClientComponent() {
     handleStartGenerationJob(docId, 'flashcard', 'Flashcard Deck');
   };
 
-  // --- 9. ADD INTERNAL LOADING/ERROR STATE ---
   if (isSWRLoading && documents.length === 0) {
-    // This shows the skeleton on the *very first* load.
-    // On re-focus, `isSWRLoading` will be true, but `documents` will *not* be empty,
-    // so this block is skipped, preventing the loading UI flash.
     return (
       <>
         <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground text-center mb-8 p-8 border border-dashed rounded-lg bg-card/50">
@@ -291,24 +260,21 @@ export function DocumentsClientComponent() {
   }
 
   if (swrError && documents.length === 0) {
-     // Only show a full-page error if we have no data at all
      return (
       <div className="text-center py-16 border-2 border-dashed border-destructive/50 rounded-lg">
         <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
         <h3 className="mt-4 text-lg font-semibold text-destructive">Failed to Load Documents</h3>
         <p className="mt-1 text-sm text-muted-foreground">{swrError.message}</p>
         <Button className="mt-6" variant="outline" onClick={() => refreshFirstPage(undefined, { revalidate: true })}>
-          <Loader2 className="w-4 h-4 mr-2" /> {/* Changed to RefreshCw */}
+          <Loader2 className="w-4 h-4 mr-2" /> 
           Try Again
         </Button>
       </div>
     );
   }
-  // --- END LOADING/ERROR STATE ---
 
   return (
     <>
-      {/* (Header and Upload Card) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Documents</h1>
@@ -344,7 +310,6 @@ export function DocumentsClientComponent() {
         </Card>
       </div>
 
-      {/* (Document List) */}
       {documents.length === 0 && !isSWRLoading ? (
           <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload your first PDF, TXT, DOCX, or PPTX file.</p></div>
       ) : (
@@ -421,7 +386,6 @@ export function DocumentsClientComponent() {
           </motion.div>
       )}
       
-      {/* (Load More Button) */}
       {totalPages > currentPage && (
           <div className="mt-8 text-center"><Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>{isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More Documents</Button><p className="text-xs text-muted-foreground mt-2">Showing {documents.length} of {usage.count ?? 0} documents</p></div>
       )}
