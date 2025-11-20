@@ -8,14 +8,10 @@ import {
   ArrowLeft,
   FileText,
   Sparkles,
-  Brain,
   Target,
   Zap,
-  BookOpen,
-  Pencil,
   ChevronRight,
   Lightbulb,
-  GraduationCap,
   MoreVertical,
   Download,
   Share2,
@@ -58,11 +54,29 @@ const PopQuizModal = dynamic(
   },
 );
 
+// --- CRASH FIX: Helper to prevent "Object is not valid React child" ---
+// This ensures we only ever try to render strings or numbers, never objects.
+const safeRender = (content: any): string => {
+  if (typeof content === 'string') return content;
+  if (typeof content === 'number') return String(content);
+  if (typeof content === 'object' && content !== null) {
+    // If AI returns an object like { text: "Concept" }, try to find a string property
+    return (
+      content.text ||
+      content.name ||
+      content.value ||
+      content.title ||
+      JSON.stringify(content)
+    );
+  }
+  return '';
+};
+
 // --- Interfaces ---
 interface AIDocumentInsights {
-  keyConcepts: string[];
-  examQuestions: string[];
-  mainArguments: string[];
+  keyConcepts: any[]; // typed as any[] to handle potential AI malformed responses safely
+  examQuestions: any[];
+  mainArguments: any[];
 }
 
 interface MenuState {
@@ -86,7 +100,6 @@ function SelectionMenu({
 }) {
   useEffect(() => {
     const handleClickOutside = () => onClose();
-    // We listen on the window to catch clicks anywhere
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
   }, [onClose]);
@@ -116,7 +129,8 @@ function SelectionMenu({
           onClick={() => onAction('summarize')}
           className="h-7 px-2 text-xs font-medium"
         >
-          <FileText className="w-3.5 h-3.5 mr-1.5 text-emerald-500" /> Summarize
+          <FileText className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />{' '}
+          Summarize
         </Button>
         <div className="w-px h-4 bg-border" />
         <Button
@@ -245,8 +259,6 @@ export default function DocumentViewPage() {
           text: selectedText,
         });
       }
-    } else {
-      // Let the click-outside handler deal with closing
     }
   };
 
@@ -379,7 +391,6 @@ export default function DocumentViewPage() {
                         onMouseUp={handleMouseUpCapture}
                       >
                         <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 shadow-sm border rounded-xl p-8 md:p-12 min-h-[80vh]">
-                          {/* Safe Check for Text */}
                           <MarkdownViewer
                             content={contentData?.data?.extracted_text || ''}
                           />
@@ -432,21 +443,22 @@ export default function DocumentViewPage() {
                           </CardHeader>
                           <CardContent>
                             <div className="flex flex-wrap gap-2">
-                              {/* Safe map with fallback */}
-                              {(insightsData.data.keyConcepts || []).length >
-                              0 ? (
-                                insightsData.data.keyConcepts?.map((c, i) => (
+                              {/* Safe map with safeRender */}
+                              {(insightsData.data.keyConcepts || []).map(
+                                (c, i) => (
                                   <Badge
                                     key={i}
                                     variant="secondary"
                                     className="px-2 py-1 text-xs font-normal"
                                   >
-                                    {c}
+                                    {safeRender(c)}
                                   </Badge>
-                                ))
-                              ) : (
+                                ),
+                              )}
+                              {(!insightsData.data.keyConcepts ||
+                                insightsData.data.keyConcepts.length === 0) && (
                                 <p className="text-xs text-muted-foreground italic">
-                                  No concepts identified yet.
+                                  No concepts found.
                                 </p>
                               )}
                             </div>
@@ -455,14 +467,13 @@ export default function DocumentViewPage() {
 
                         {/* Questions Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {(insightsData.data.examQuestions || []).length >
-                          0 ? (
-                            insightsData.data.examQuestions?.map((q, i) => (
+                          {(insightsData.data.examQuestions || []).map(
+                            (q, i) => (
                               <div
                                 key={i}
                                 onClick={() =>
                                   chatRef.current?.sendMessage(
-                                    `Quiz me on: ${q}`,
+                                    `Quiz me on: ${safeRender(q)}`,
                                   )
                                 }
                                 className="p-4 rounded-lg border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all flex items-start gap-3 group bg-card"
@@ -471,12 +482,14 @@ export default function DocumentViewPage() {
                                   {i + 1}
                                 </span>
                                 <p className="text-sm font-medium leading-snug pt-0.5">
-                                  {q}
+                                  {safeRender(q)}
                                 </p>
                                 <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                               </div>
-                            ))
-                          ) : (
+                            ),
+                          )}
+                          {(!insightsData.data.examQuestions ||
+                            insightsData.data.examQuestions.length === 0) && (
                             <div className="col-span-2 p-4 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
                               No practice questions available.
                             </div>
@@ -492,17 +505,18 @@ export default function DocumentViewPage() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-3">
-                            {(insightsData.data.mainArguments || []).length >
-                            0 ? (
-                              insightsData.data.mainArguments?.map((arg, i) => (
+                            {(insightsData.data.mainArguments || []).map(
+                              (arg, i) => (
                                 <div key={i} className="flex gap-3">
                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
                                   <p className="text-sm text-muted-foreground leading-relaxed">
-                                    {arg}
+                                    {safeRender(arg)}
                                   </p>
                                 </div>
-                              ))
-                            ) : (
+                              ),
+                            )}
+                            {(!insightsData.data.mainArguments ||
+                              insightsData.data.mainArguments.length === 0) && (
                               <p className="text-xs text-muted-foreground italic">
                                 No summary available.
                               </p>

@@ -30,7 +30,7 @@ function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
   React.useEffect(() => {
-    doc.getPage(pageNum).then(setPage);
+    doc.getPage(pageNum).then(setPage).catch(console.error);
   }, [doc, pageNum]);
 
   React.useEffect(() => {
@@ -44,48 +44,51 @@ function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
-    // Render visual page
-    const renderTask = page.render({ canvasContext: context, viewport });
-    
-    // Render text layer
-    page.getTextContent().then((textContent) => {
-      if (!textLayerRef.current) return;
-      
-      textLayerRef.current.style.height = `${viewport.height}px`;
-      textLayerRef.current.style.width = `${viewport.width}px`;
-      textLayerRef.current.innerHTML = ''; // Clear previous
+    let renderTask: any = null;
 
-      pdfjs.renderTextLayer({
-        textContentSource: textContent,
-        container: textLayerRef.current,
-        viewport: viewport,
-        textDivs: [],
-      });
-    });
+    const render = async () => {
+      try {
+        // Render visual page
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+        
+        // Render text layer
+        const textContent = await page.getTextContent();
+        if (textLayerRef.current) {
+           textLayerRef.current.style.height = `${viewport.height}px`;
+           textLayerRef.current.style.width = `${viewport.width}px`;
+           textLayerRef.current.innerHTML = ''; 
+
+           pdfjs.renderTextLayer({
+            textContentSource: textContent,
+            container: textLayerRef.current,
+            viewport: viewport,
+            textDivs: [],
+           });
+        }
+      } catch (err) {
+        console.error("Error rendering PDF page:", err);
+      }
+    };
+
+    render();
 
     return () => {
-      renderTask.cancel();
+      if (renderTask) renderTask.cancel();
     };
   }, [page, scale]);
 
-  if (!page) return <div className="w-[600px] h-[800px] bg-white/50 animate-pulse rounded-md mb-4" />;
+  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
   const viewport = page.getViewport({ scale });
   
   return (
     <div
       className="relative shadow-lg mb-8 transition-transform origin-top"
-      style={{
-        width: viewport.width,
-        height: viewport.height,
-      }}
+      style={{ width: viewport.width, height: viewport.height }}
     >
       <canvas ref={canvasRef} className="rounded-sm bg-white" />
-      <div
-        ref={textLayerRef}
-        className="textLayer absolute inset-0"
-        onMouseUpCapture={onTextSelect}
-      />
+      <div ref={textLayerRef} className="textLayer absolute inset-0" onMouseUpCapture={onTextSelect} />
     </div>
   );
 }
@@ -94,8 +97,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  
-  // Fixed scale for clarity (could be made dynamic later)
   const scale = 1.2; 
 
   React.useEffect(() => {
@@ -114,15 +115,8 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     if (url) loadPdf();
   }, [url]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (error) return <div className="p-4 text-destructive">Error: {error}</div>;
+  if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (error) return <div className="p-4 text-destructive">Error loading PDF: {error}</div>;
 
   const numPages = pdfDoc ? pdfDoc.numPages : 0;
   const pages = Array.from({ length: numPages }, (_, i) => i + 1);
@@ -131,13 +125,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     <ScrollArea className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50", className)}>
       <div className="flex flex-col items-center py-8 px-4">
         {pages.map((pageNum) => (
-          <PdfPage
-            key={pageNum}
-            doc={pdfDoc!}
-            pageNum={pageNum}
-            scale={scale}
-            onTextSelect={onTextSelect}
-          />
+          <PdfPage key={pageNum} doc={pdfDoc!} pageNum={pageNum} scale={scale} onTextSelect={onTextSelect} />
         ))}
       </div>
     </ScrollArea>
