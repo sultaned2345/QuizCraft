@@ -15,11 +15,14 @@ import {
   MoreVertical,
   Download,
   Share2,
+  BrainCircuit,
+  BookOpen,
+  ListChecks
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
 import { usePageContext, PageContextType } from '@/contexts/PageContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -43,24 +46,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// --- Dynamic Imports ---
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
   {
-    loading: () => (
-      <div className="p-6">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    ),
-  },
+    ssr: false,
+    loading: () => <div className="hidden" />,
+  }
 );
 
-// --- CRASH FIX: Helper to prevent "Object is not valid React child" ---
-// This ensures we only ever try to render strings or numbers, never objects.
+// --- Helpers ---
 const safeRender = (content: any): string => {
   if (typeof content === 'string') return content;
   if (typeof content === 'number') return String(content);
   if (typeof content === 'object' && content !== null) {
-    // If AI returns an object like { text: "Concept" }, try to find a string property
     return (
       content.text ||
       content.name ||
@@ -74,7 +73,7 @@ const safeRender = (content: any): string => {
 
 // --- Interfaces ---
 interface AIDocumentInsights {
-  keyConcepts: any[]; // typed as any[] to handle potential AI malformed responses safely
+  keyConcepts: any[];
   examQuestions: any[];
   mainArguments: any[];
 }
@@ -290,9 +289,9 @@ export default function DocumentViewPage() {
         onAction={handleMenuAction}
       />
 
-      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-background">
+      <div className="flex flex-col h-screen overflow-hidden bg-background">
         {/* Toolbar Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10">
+        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-background/95 backdrop-blur z-10">
           <div className="flex items-center gap-3 min-w-0">
             <Button
               variant="ghost"
@@ -320,8 +319,12 @@ export default function DocumentViewPage() {
               disabled={isPopQuizLoading}
               className="h-8 hidden sm:flex gap-2 bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900"
             >
-              <Zap className="w-3.5 h-3.5" />
-              <span>Quiz Me</span>
+              {isPopQuizLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              <span>Pop Quiz</span>
             </Button>
 
             <DropdownMenu>
@@ -332,17 +335,18 @@ export default function DocumentViewPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem>
-                  <Download className="w-4 h-4 mr-2" /> Export
+                  <Download className="w-4 h-4 mr-2" /> Export PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  <Share2 className="w-4 h-4 mr-2" /> Share
+                  <Share2 className="w-4 h-4 mr-2" /> Share Document
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
+        {/* Resizable Content Area */}
+        <ResizablePanelGroup direction="horizontal" className="flex-1 h-full">
           {/* Left Panel: Content */}
           <ResizablePanel
             defaultSize={60}
@@ -351,21 +355,21 @@ export default function DocumentViewPage() {
           >
             <Tabs
               defaultValue="document"
-              className="flex-1 flex flex-col h-full"
+              className="flex-1 flex flex-col h-full overflow-hidden"
             >
-              <div className="px-4 border-b bg-background flex justify-center">
+              <div className="px-4 border-b bg-background flex justify-center shrink-0">
                 <TabsList className="h-9 bg-transparent w-full max-w-md justify-center">
                   <TabsTrigger
                     value="document"
-                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs"
+                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
                   >
-                    Document
+                    <BookOpen className="w-3.5 h-3.5" /> Document
                   </TabsTrigger>
                   <TabsTrigger
-                    value="guide"
-                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs"
+                    value="analysis"
+                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
                   >
-                    AI Study Guide
+                    <BrainCircuit className="w-3.5 h-3.5" /> Smart Analysis
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -376,8 +380,9 @@ export default function DocumentViewPage() {
                   className="h-full m-0 border-0 data-[state=inactive]:hidden"
                 >
                   {urlData?.data?.signedUrl ? (
-                    <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950 p-0 sm:p-4">
-                      <div className="h-full w-full shadow-sm rounded-lg overflow-hidden border bg-white dark:bg-zinc-900">
+                    // PDF Viewer
+                    <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
+                      <div className="h-full w-full overflow-hidden">
                         <PdfViewer
                           url={urlData.data.signedUrl}
                           onTextSelect={handleMouseUpCapture}
@@ -385,6 +390,7 @@ export default function DocumentViewPage() {
                       </div>
                     </div>
                   ) : (
+                    // Markdown Viewer
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
                       <div
                         className="min-h-full py-8 px-4 flex justify-center"
@@ -401,128 +407,102 @@ export default function DocumentViewPage() {
                 </TabsContent>
 
                 <TabsContent
-                  value="guide"
+                  value="analysis"
                   className="h-full m-0 overflow-y-auto data-[state=inactive]:hidden bg-zinc-50 dark:bg-zinc-950"
                 >
-                  <div className="max-w-4xl mx-auto p-6 space-y-6">
-                    <div className="p-6 rounded-xl bg-gradient-to-r from-primary/5 to-transparent border">
-                      <h2 className="text-lg font-bold flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-primary" /> AI
-                        Insights
+                  <div className="max-w-4xl mx-auto p-6 space-y-8">
+                    {/* Header Section */}
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-2xl font-bold flex items-center gap-2 text-foreground">
+                        <Sparkles className="w-6 h-6 text-primary" /> 
+                        Document Intelligence
                       </h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Generated automatically from your document content.
+                      <p className="text-muted-foreground">
+                        AI-generated insights, key takeaways, and study materials based on this file.
                       </p>
                     </div>
 
-                    {/* SAFEGUARD: Check if data exists, then check if specific arrays are present */}
                     {!insightsData?.data ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="h-40 rounded-xl border border-dashed flex flex-col items-center justify-center text-muted-foreground bg-muted/50">
-                          <Loader2 className="w-6 h-6 animate-spin mb-2" />
-                          <span className="text-xs">
-                            Extracting key concepts...
-                          </span>
-                        </div>
-                        <div className="h-40 rounded-xl border border-dashed flex flex-col items-center justify-center text-muted-foreground bg-muted/50">
-                          <Loader2 className="w-6 h-6 animate-spin mb-2" />
-                          <span className="text-xs">
-                            Generating questions...
-                          </span>
-                        </div>
+                      /* Loading Skeleton */
+                      <div className="grid gap-4">
+                         <div className="h-32 w-full bg-muted/50 rounded-xl animate-pulse" />
+                         <div className="grid grid-cols-2 gap-4">
+                            <div className="h-24 w-full bg-muted/50 rounded-xl animate-pulse" />
+                            <div className="h-24 w-full bg-muted/50 rounded-xl animate-pulse" />
+                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {/* Key Concepts */}
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                              <Lightbulb className="w-4 h-4 text-yellow-500" />{' '}
-                              Core Concepts
+                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        
+                        {/* 1. Executive Summary */}
+                        <Card className="border-none shadow-md bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-zinc-900">
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                              <Target className="w-5 h-5" /> Executive Summary
                             </CardTitle>
                           </CardHeader>
                           <CardContent>
-                            <div className="flex flex-wrap gap-2">
-                              {/* Safe map with safeRender */}
-                              {(insightsData.data.keyConcepts || []).map(
-                                (c, i) => (
-                                  <Badge
-                                    key={i}
-                                    variant="secondary"
-                                    className="px-2 py-1 text-xs font-normal"
-                                  >
-                                    {safeRender(c)}
-                                  </Badge>
-                                ),
-                              )}
-                              {(!insightsData.data.keyConcepts ||
-                                insightsData.data.keyConcepts.length === 0) && (
-                                <p className="text-xs text-muted-foreground italic">
-                                  No concepts found.
-                                </p>
-                              )}
-                            </div>
+                            <ul className="space-y-3">
+                              {(insightsData.data.mainArguments || []).map((arg, i) => (
+                                <li key={i} className="flex gap-3 text-sm text-foreground/80">
+                                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="leading-relaxed">{safeRender(arg)}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </CardContent>
                         </Card>
 
-                        {/* Questions Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {(insightsData.data.examQuestions || []).map(
-                            (q, i) => (
-                              <div
+                        {/* 2. Key Concepts Cloud */}
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <Lightbulb className="w-5 h-5 text-yellow-500" /> Key Concepts
+                          </h3>
+                          <div className="flex flex-wrap gap-2 p-6 bg-white dark:bg-zinc-900 border rounded-xl shadow-sm">
+                            {(insightsData.data.keyConcepts || []).map((c, i) => (
+                              <Badge
                                 key={i}
-                                onClick={() =>
-                                  chatRef.current?.sendMessage(
-                                    `Quiz me on: ${safeRender(q)}`,
-                                  )
-                                }
-                                className="p-4 rounded-lg border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all flex items-start gap-3 group bg-card"
+                                variant="outline"
+                                className="px-3 py-1.5 text-sm font-normal cursor-pointer hover:bg-primary hover:text-primary-foreground transition-all border-primary/20"
+                                onClick={() => chatRef.current?.sendMessage(`Tell me more about "${safeRender(c)}" in the context of this document.`)}
                               >
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium text-muted-foreground group-hover:border-primary group-hover:text-primary">
-                                  {i + 1}
-                                </span>
-                                <p className="text-sm font-medium leading-snug pt-0.5">
-                                  {safeRender(q)}
-                                </p>
-                                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            ),
-                          )}
-                          {(!insightsData.data.examQuestions ||
-                            insightsData.data.examQuestions.length === 0) && (
-                            <div className="col-span-2 p-4 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
-                              No practice questions available.
-                            </div>
-                          )}
+                                {safeRender(c)}
+                              </Badge>
+                            ))}
+                            {(!insightsData.data.keyConcepts || insightsData.data.keyConcepts.length === 0) && (
+                               <span className="text-muted-foreground text-sm">No concepts extracted.</span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Summary Section */}
-                        <Card className="border-l-4 border-l-emerald-500">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                              <Target className="w-4 h-4 text-emerald-500" />{' '}
-                              Key Takeaways
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            {(insightsData.data.mainArguments || []).map(
-                              (arg, i) => (
-                                <div key={i} className="flex gap-3">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
-                                  <p className="text-sm text-muted-foreground leading-relaxed">
-                                    {safeRender(arg)}
-                                  </p>
+                        {/* 3. Interactive Practice Questions */}
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <ListChecks className="w-5 h-5 text-blue-500" /> Practice Questions
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(insightsData.data.examQuestions || []).map((q, i) => (
+                              <div
+                                key={i}
+                                onClick={() => chatRef.current?.sendMessage(`I want to answer this question: "${safeRender(q)}". Please grade my answer.`)}
+                                className="group relative p-5 rounded-xl border bg-card hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                      Question {i + 1}
+                                    </span>
+                                    <p className="text-sm font-medium leading-snug line-clamp-3 text-foreground/90">
+                                      {safeRender(q)}
+                                    </p>
+                                  </div>
+                                  <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
                                 </div>
-                              ),
-                            )}
-                            {(!insightsData.data.mainArguments ||
-                              insightsData.data.mainArguments.length === 0) && (
-                              <p className="text-xs text-muted-foreground italic">
-                                No summary available.
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                       </div>
                     )}
                   </div>
@@ -551,6 +531,7 @@ export default function DocumentViewPage() {
           </ResizablePanel>
         </ResizablePanelGroup>
 
+        {/* Pop Quiz Modal */}
         {isPopQuizOpen && (
           <PopQuizModal
             isOpen={isPopQuizOpen}

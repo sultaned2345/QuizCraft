@@ -4,8 +4,13 @@ import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-const AI_MODEL_NAME = "gemini-2.5-flash-lite";
-const MAX_INPUT_LENGTH = 10000; 
+
+// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
+const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
+
+// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
+// The Flash model can handle up to 1M tokens, so this is safe.
+const MAX_INPUT_LENGTH = 100000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -13,7 +18,6 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// --- NEW HELPER ---
 /**
  * Strips HTML tags and checks if the remaining text is meaningful.
  */
@@ -24,10 +28,10 @@ function isContentMeaningful(content: string): boolean {
     // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
-// --- END NEW HELPER ---
 
-
-// --- Helper for Quiz Generation (unchanged) ---
+// ---------------------------------------------------------------------------
+// 1. QUIZ GENERATION
+// ---------------------------------------------------------------------------
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
@@ -59,27 +63,27 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": string, // a concise quiz title based on the content
+  "title": "string", // a concise quiz title based on the content
   "questions": [
     {
-      "question_text": string,
+      "question_text": "string",
       "question_type": "MULTIPLE_CHOICE",
-      "options": [string, string, string, string],
-      "correct_answer": string,
-      "explanation": string
+      "options": ["string", "string", "string", "string"],
+      "correct_answer": "string",
+      "explanation": "string"
     },
     {
-      "question_text": string,
+      "question_text": "string",
       "question_type": "TRUE_FALSE",
       "correct_answer": "True" | "False",
-      "explanation": string
+      "explanation": "string"
     },
     {
-      "question_text": string, // use "____" for the blank(s)
+      "question_text": "string", // use "____" for the blank(s)
       "question_type": "FILL_IN_THE_BLANK",
-      "options": [string], // An array of one or more acceptable answers
+      "options": ["string"], // An array of one or more acceptable answers
       "correct_answer": "N/A", // Not used, options array is used
-      "explanation": string
+      "explanation": "string"
     },
     {
       "question_text": "Match the following items:",
@@ -110,6 +114,7 @@ export async function callAIToGenerateQuiz(
     },
   });
 
+  // Safety truncate
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
 
@@ -149,11 +154,11 @@ export async function callAIToGenerateQuiz(
   return { title: parsed.title, questions: sanitizedQuestions };
 }
 
-
-// --- Helper for Note Generation ---
+// ---------------------------------------------------------------------------
+// 2. NOTE GENERATION
+// ---------------------------------------------------------------------------
 
 function buildNotePrompt({ text }: { text: string }): string {
-  // --- FIX: UPDATED PROMPT to request clean HTML ---
   return `You are an expert note-taker. Based on the following content, generate structured summary notes.
 
 You MUST format the notes as clean, semantic HTML.
@@ -181,7 +186,6 @@ Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid 
     }
   ]
 }`;
-  // --- END FIX ---
 }
 
 export async function callAIToGenerateNote(text: string): Promise<{ title: string; content: string; }> {
@@ -216,7 +220,7 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // --- FIX: FINAL, STRICT VALIDATION ---
+  // Validations
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
@@ -235,11 +239,11 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   }
   
   return parsed.notes[0];
-  // --- END FIX ---
 }
 
-
-// --- Helper for Flashcard Generation (unchanged) ---
+// ---------------------------------------------------------------------------
+// 3. FLASHCARD GENERATION
+// ---------------------------------------------------------------------------
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.

@@ -8,13 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Question } from '@/types/database';
-import { Loader2, Check, X, RotateCw, Trophy } from 'lucide-react';
+import { Loader2, Check, X, RotateCw, Trophy, AlertCircle, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface PopQuizModalProps {
   isOpen: boolean;
@@ -25,12 +25,11 @@ interface PopQuizModalProps {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
-// Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // Swap
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
   return newArray;
 }
@@ -47,36 +46,28 @@ export function PopQuizModal({
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
-  // --- FIX: Add the missing state for the card flip ---
-  const [isFlipped, setIsFlipped] = useState(false);
-  // --- END FIX ---
 
-  // Shuffle questions and answers when modal opens
+  // Initialize and Shuffle
   useEffect(() => {
     if (isOpen && questions.length > 0) {
-      const shuffledQuestions = shuffleArray(questions);
-
-      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+      const shuffledQuestions = shuffleArray(questions).map((q) => {
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
-          // The API returns options as simple strings for Pop Quiz
-          return {
-            ...q,
-            options: shuffleArray(q.options as string[]),
-          };
+          return { ...q, options: shuffleArray(q.options as string[]) };
         }
         return q;
       });
-
-      setQuizQuestions(questionsWithShuffledOptions);
-      // Reset all states
-      setCurrentQuestionIndex(0);
-      setSelectedAnswer(null);
-      setAnswerStatus('unanswered');
-      setCorrectAnswers(0);
-      setIsFinished(false);
-      setIsFlipped(false); // Also reset flip state
+      setQuizQuestions(shuffledQuestions);
+      resetState();
     }
-  }, [isOpen, questions]); // Reruns when modal is opened or questions change
+  }, [isOpen, questions]);
+
+  const resetState = () => {
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setAnswerStatus('unanswered');
+    setCorrectAnswers(0);
+    setIsFinished(false);
+  };
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const progress =
@@ -85,19 +76,10 @@ export function PopQuizModal({
       : 0;
 
   const handleAnswerSelect = (answer: string) => {
-    if (answerStatus !== 'unanswered') return; // Already answered
+    if (answerStatus !== 'unanswered') return;
 
     setSelectedAnswer(answer);
-
-    let isCorrect = false;
-    // --- FIX: PopQuiz data is simple, just check correct_answer ---
-    if (
-      currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
-      currentQuestion.question_type === 'TRUE_FALSE'
-    ) {
-      isCorrect = currentQuestion.correct_answer === answer;
-    }
-    // --- END FIX ---
+    const isCorrect = currentQuestion.correct_answer === answer;
 
     if (isCorrect) {
       setAnswerStatus('correct');
@@ -108,299 +90,169 @@ export function PopQuizModal({
   };
 
   const handleNext = () => {
-    // --- FIX: Reset flip state when moving to next question ---
-    // The key={currentQuestionIndex} on motion.div handles this
-    // by re-mounting, which re-initializes `isFlipped` state.
-    // But we'll add it to handleRestart for safety.
-    // --- END FIX ---
-
     if (currentQuestionIndex < quizQuestions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
-      setIsFlipped(false); // Explicitly reset flip
     } else {
-      // Finish quiz
       setIsFinished(true);
     }
   };
 
-  const handleRestart = () => {
-    // Just trigger the useEffect
-    if (questions.length > 0) {
-      const shuffledQuestions = shuffleArray(questions);
-      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
-          return {
-            ...q,
-            options: shuffleArray(q.options as string[]),
-          };
-        }
-        return q;
-      });
-      setQuizQuestions(questionsWithShuffledOptions);
-    }
-    setCurrentQuestionIndex(0);
-    setSelectedAnswer(null);
-    setAnswerStatus('unanswered');
-    setCorrectAnswers(0);
-    setIsFinished(false);
-    // --- FIX: Reset flip state on restart ---
-    setIsFlipped(false);
-    // --- END FIX ---
-  };
-
-  // --- FIX: Define the missing event handler ---
-  const handleCardFlip = () => {
-    setIsFlipped((prev) => !prev);
-  };
-  // --- END FIX ---
-
   const getOptionClass = (optionText: string) => {
     if (answerStatus === 'unanswered') {
-      return 'border-border hover:bg-muted/50';
+      return 'border-border hover:bg-accent hover:text-accent-foreground';
     }
-
-    // --- FIX: PopQuiz data is simple ---
     const isCorrect = currentQuestion.correct_answer === optionText;
-    // --- END FIX ---
-
-    if (isCorrect) {
-      // Is the correct answer
-      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
-    }
-    if (selectedAnswer === optionText && !isCorrect) {
-      // Is the selected, incorrect answer
-      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
-    }
-
-    // Is neither selected nor correct (an incorrect option)
-    return 'border-border opacity-60';
+    
+    if (isCorrect) return 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400';
+    if (selectedAnswer === optionText && !isCorrect) return 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400';
+    
+    return 'border-border opacity-50';
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-2xl p-0"
-        onInteractOutside={(e) => e.preventDefault()}
-      >
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]">
         <AnimatePresence mode="wait">
           {!currentQuestion ? (
             <div className="flex h-64 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : isFinished ? (
-            // --- Summary Screen ---
+            // --- Results Screen ---
             <motion.div
-              key="summary"
-              initial={{ opacity: 0, scale: 0.9 }}
+              key="results"
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center p-8 text-center"
             >
-              <DialogHeader className="p-6 pb-4">
-                <DialogTitle className="text-2xl text-center">
-                  Quiz Complete!
-                </DialogTitle>
-              </DialogHeader>
-              <div className="flex flex-col items-center p-6 pt-0">
-                <Trophy className="w-16 h-16 text-yellow-500" />
-                <h3 className="text-4xl font-bold mt-4">
-                  {correctAnswers} / {quizQuestions.length}
-                </h3>
-                <p className="text-lg text-muted-foreground">
-                  Your score:{' '}
-                  {Math.round((correctAnswers / quizQuestions.length) * 100)}%
-                </p>
-                <div className="flex w-full gap-4 mt-8">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleRestart}
-                  >
-                    <RotateCw className="mr-2 h-4 w-4" />
-                    Try Again
-                  </Button>
-                  <Button
-                    className="w-full"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
+              <div className="w-20 h-20 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center mb-6">
+                <Trophy className="w-10 h-10 text-yellow-600 dark:text-yellow-500" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Quiz Complete!</h2>
+              <p className="text-muted-foreground mb-6">
+                You scored {correctAnswers} out of {quizQuestions.length}
+              </p>
+              <div className="text-5xl font-black text-primary mb-8">
+                {Math.round((correctAnswers / quizQuestions.length) * 100)}%
+              </div>
+              <div className="flex w-full gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => {
+                   const reshuffled = shuffleArray(quizQuestions);
+                   setQuizQuestions(reshuffled);
+                   resetState();
+                }}>
+                  <RotateCw className="mr-2 h-4 w-4" /> Retry
+                </Button>
+                <Button className="flex-1" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
               </div>
             </motion.div>
           ) : (
             // --- Question Screen ---
             <motion.div
               key={currentQuestionIndex}
-              initial={{ opacity: 0, x: 50 }}
+              initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.3 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex flex-col h-full"
             >
-              <DialogHeader className="p-6 pb-2">
-                <DialogTitle className="text-xl">{title}</DialogTitle>
-                <div className="flex items-center gap-4 pt-2">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Question {currentQuestionIndex + 1} of{' '}
-                    {quizQuestions.length}
+              {/* Header */}
+              <DialogHeader className="p-6 pb-4 border-b">
+                <div className="flex justify-between items-center mb-2">
+                  <DialogTitle>{title}</DialogTitle>
+                  <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-1 rounded">
+                    {currentQuestionIndex + 1} / {quizQuestions.length}
                   </span>
-                  <Progress value={progress} className="flex-1 h-2" />
                 </div>
+                <Progress value={progress} className="h-2" />
               </DialogHeader>
 
-              <div className="p-6">
-                <Card className="border-none shadow-none">
-                  <CardContent className="p-0">
-                    <p className="text-lg font-semibold mb-4 min-h-[60px]">
-                      {currentQuestion.question_text}
-                    </p>
-                    {/* Flippable Card Container */}
-                    <div
-                      className="w-full h-64 [perspective:1000px] cursor-pointer"
-                      onClick={handleCardFlip} // <-- Now this works
-                    >
-                      {/* --- FIX: Use standard Tailwind classes --- */}
-                      <motion.div
-                        className="relative w-full h-full transform-style-preserve-3d"
-                        animate={{ rotateY: isFlipped ? 180 : 0 }} // <-- Now this works
-                        transition={{ duration: 0.5 }}
-                      >
-                        {/* Front of Card (Shows Options) */}
-                        <div className="absolute backface-hidden w-full h-full">
-                          {/* --- END FIX --- */}
-                          <Card className="flex h-full items-center justify-center p-6 shadow-lg">
-                            <div className="space-y-3 w-full">
-                              {/* --- FIX: PopQuiz data is simple --- */}
-                              {/* Multiple Choice */}
-                              {currentQuestion.question_type ===
-                                'MULTIPLE_CHOICE' &&
-                                (currentQuestion.options as string[]).map(
-                                  (option) => (
-                                    <Button
-                                      key={option}
-                                      variant="outline"
-                                      className={cn(
-                                        'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
-                                        answerStatus !== 'unanswered' &&
-                                          'pointer-events-none',
-                                        getOptionClass(option)
-                                      )}
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // Don't flip card
-                                        handleAnswerSelect(option);
-                                      }}
-                                    >
-                                      <span className="flex-1">{option}</span>
-                                      {answerStatus !== 'unanswered' &&
-                                        getOptionClass(option).includes(
-                                          'green'
-                                        ) && (
-                                          <Check className="w-5 h-5 ml-2 text-green-600" />
-                                        )}
-                                      {answerStatus !== 'unanswered' &&
-                                        getOptionClass(option).includes(
-                                          'destructive'
-                                        ) && (
-                                          <X className="w-5 h-5 ml-2 text-destructive" />
-                                        )}
-                                    </Button>
-                                  )
-                                )}
+              {/* Scrollable Content */}
+              <ScrollArea className="flex-1 p-6">
+                <div className="space-y-6">
+                  <p className="text-lg font-medium leading-relaxed">
+                    {currentQuestion.question_text}
+                  </p>
 
-                              {/* True/False */}
-                              {currentQuestion.question_type ===
-                                'TRUE_FALSE' &&
-                                ['True', 'False'].map((option) => (
-                                  <Button
-                                    key={option}
-                                    variant="outline"
-                                    className={cn(
-                                      'h-12 w-full text-left p-4',
-                                      answerStatus !== 'unanswered' &&
-                                        'pointer-events-none',
-                                      getOptionClass(option)
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation(); // Don't flip card
-                                      handleAnswerSelect(option);
-                                    }}
-                                  >
-                                    <span className="flex-1">{option}</span>
-                                    {answerStatus !== 'unanswered' &&
-                                      getOptionClass(option).includes(
-                                        'green'
-                                      ) && (
-                                        <Check className="w-5 h-5 ml-2 text-green-600" />
-                                      )}
-                                    {answerStatus !== 'unanswered' &&
-                                      getOptionClass(option).includes(
-                                        'destructive'
-                                      ) && (
-                                        <X className="w-5 h-5 ml-2 text-destructive" />
-                                      )}
-                                  </Button>
-                                ))}
-                              {/* --- END FIX --- */}
+                  <div className="grid gap-3">
+                    {/* Options Loop */}
+                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
+                      (currentQuestion.options as string[]).map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left h-auto p-4 whitespace-normal transition-all",
+                            getOptionClass(option)
+                          )}
+                          disabled={answerStatus !== 'unanswered'}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                          <div className="flex items-center w-full gap-3">
+                            <div className={cn(
+                                "w-6 h-6 rounded-full border flex items-center justify-center shrink-0",
+                                selectedAnswer === option ? "border-primary" : "border-muted-foreground/30"
+                            )}>
+                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-3.5 h-3.5 text-green-600" />}
+                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-3.5 h-3.5 text-red-600" />}
                             </div>
-                          </Card>
-                        </div>
-                        {/* Back of Card (Shows Explanation) */}
-                        {/* --- FIX: Use standard Tailwind classes --- */}
-                        <div className="absolute backface-hidden w-full h-full [transform:rotateY(180deg)]">
-                          {/* --- END FIX --- */}
-                          <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary">
-                            {/* --- FIX: Use correct property --- */}
-                            <p className="text-xl text-center">
-                              {currentQuestion.explanation ||
-                                'No explanation provided.'}
-                            </p>
-                            {/* --- END FIX --- */}
-                          </Card>
-                        </div>
-                      </motion.div>
-                    </div>
-
-                    {/* Feedback Message */}
-                    <AnimatePresence>
-                      {answerStatus === 'correct' && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-4 flex items-center font-medium text-green-600"
-                        >
-                          <Check className="w-5 h-5 mr-2" />
-                          That's correct! (Click card for explanation)
-                        </motion.div>
-                      )}
-                      {answerStatus === 'incorrect' && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-4 flex flex-col font-medium text-destructive"
-                        >
-                          <div className="flex items-center">
-                            <X className="w-5 h-5 mr-2" />
-                            That's not right. (Click card for explanation)
+                            <span className="flex-1">{option}</span>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </CardContent>
-                </Card>
-              </div>
+                        </Button>
+                      ))}
+                      
+                      {/* True/False Loop */}
+                      {currentQuestion.question_type === 'TRUE_FALSE' &&
+                      ['True', 'False'].map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left h-auto p-4",
+                            getOptionClass(option)
+                          )}
+                          disabled={answerStatus !== 'unanswered'}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                           <span className="flex-1">{option}</span>
+                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-4 h-4 ml-auto text-green-600" />}
+                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-4 h-4 ml-auto text-red-600" />}
+                        </Button>
+                      ))}
+                  </div>
 
-              <div className="p-6 pt-0 flex justify-between items-center">
-                <Button variant="ghost" onClick={handleCardFlip}>
-                  {isFlipped ? 'Show Question' : 'Show Explanation'}
-                </Button>
-                <Button
-                  className="w-full sm:w-auto"
+                  {/* Explanation Feedback */}
+                  {answerStatus !== 'unanswered' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-lg bg-muted/50 border p-4 text-sm"
+                    >
+                      <div className="flex items-center gap-2 font-semibold mb-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Explanation
+                      </div>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {currentQuestion.explanation || "No explanation provided."}
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+              </ScrollArea>
+
+              {/* Footer */}
+              <div className="p-6 pt-4 border-t bg-muted/5 flex justify-end">
+                <Button 
+                  onClick={handleNext} 
                   disabled={answerStatus === 'unanswered'}
-                  onClick={handleNext}
+                  className="w-full sm:w-auto gap-2"
+                  size="lg"
                 >
-                  {currentQuestionIndex === quizQuestions.length - 1
-                    ? 'Finish Quiz'
-                    : 'Next Question'}
+                  {currentQuestionIndex === quizQuestions.length - 1 ? "View Results" : "Next Question"}
+                  <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
             </motion.div>

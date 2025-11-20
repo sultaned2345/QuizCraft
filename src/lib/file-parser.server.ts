@@ -3,12 +3,20 @@ import pdfParse from 'pdf-parse-fork';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
-import { cleanExtractedText } from '@/lib/file-parser'; // Assuming this is server-safe
 
 export const runtime = 'nodejs';
 
-// --- Text Extraction Helpers (Moved from api/documents/route.ts) ---
+// --- Helper: Clean Text to prevent UI Freezes ---
+function cleanText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Remove binary control characters
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
+    .trim();
+}
 
+// --- PPTX Extraction Logic ---
 function getTextFromPPTXNodes(
   node: Node,
   tagName: string,
@@ -32,7 +40,8 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
     let fullText = '';
     let slideIndex = 1;
 
-    while (true) {
+    // Safety limit: Max 50 slides to prevent server timeout
+    while (slideIndex <= 50) {
       const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
       if (!slideFile) break;
 
@@ -52,44 +61,65 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
 
 /**
  * Extracts text from various file types using server-side libraries.
+ * Includes a timeout race to prevent server hanging.
  */
 export async function extractTextFromServerFile(
   file: File,
   buffer: Buffer
 ): Promise<string> {
-  let rawText = '';
   const fileType = file.type || '';
   const fileNameLower = file.name.toLowerCase();
+
+  // 1. Define the parsing task
+  const parseTask = async (): Promise<string> => {
+    try {
+      if (fileType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
+        const data = await pdfParse(buffer);
+        return data.text || '';
+      } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {
+        return buffer.toString('utf8');
+      } else if (
+        fileType ===
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileNameLower.endsWith('.docx')
+      ) {
+        const result = await mammoth.extractRawText({ buffer });
+        return result.value || '';
+      } else if (
+        fileType ===
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+        fileNameLower.endsWith('.pptx')
+      ) {
+        return await extractTextFromPPTX(buffer);
+      } else {
+        throw new Error(
+          `Unsupported type: ${fileType || 'unknown'} for file ${file.name}`
+        );
+      }
+    } catch (error: any) {
+      throw new Error(`Parsing failed: ${error.message}`);
+    }
+  };
+
+  // 2. Define the timeout (10 seconds)
+  const timeoutTask = new Promise<string>((_, reject) => {
+    setTimeout(() => reject(new Error("File parsing timed out (10s limit)")), 10000);
+  });
+
   try {
-    if (fileType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
-      rawText = (await pdfParse(buffer)).text || '';
-    } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {
-      rawText = buffer.toString('utf8');
-    } else if (
-      fileType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      fileNameLower.endsWith('.docx')
-    ) {
-      const result = await mammoth.extractRawText({ buffer });
-      rawText = result.value || '';
-    } else if (
-      fileType ===
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-      fileNameLower.endsWith('.pptx')
-    ) {
-      rawText = await extractTextFromPPTX(buffer);
-    } else {
-      throw new Error(
-        `Unsupported type: ${fileType || 'unknown'} for file ${file.name}`
-      );
+    // 3. Race them
+    const rawText = await Promise.race([parseTask(), timeoutTask]);
+
+    if (!rawText || rawText.trim().length === 0) {
+      throw new Error('No text found in file.');
     }
 
-    if (!rawText || rawText.trim().length === 0)
-      throw new Error('No text found in file.');
-      
-    // Use the client-safe cleanExtractedText function
-    return cleanExtractedText(rawText);
+    // 4. Clean and limit text size (max ~50k chars to prevent crash)
+    const cleaned = cleanText(rawText);
+    return cleaned.slice(0, 50000); 
+
   } catch (error: any) {
+    console.error("File processing error:", error);
     throw new Error(`Text extraction failed: ${error.message}`);
   }
 }
