@@ -1,13 +1,12 @@
 // components/PdfViewer.tsx
 'use client';
 
-import * as React from 'react'; // <-- THIS IS THE FIX (was 'import *d React...')
+import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils'; // <-- This path is now correct
+import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-// --- CONFIGURE THE WORKER ---
 if (typeof window !== 'undefined') {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
@@ -19,182 +18,123 @@ interface PdfViewerProps {
 }
 
 interface PdfPageProps {
-  doc: pdfjs.PDFDocumentProxy; // Pass the document
-  pageNum: number; // Pass the page number
+  doc: pdfjs.PDFDocumentProxy;
+  pageNum: number;
   scale: number;
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
-/**
- * Renders a single page of the PDF.
- * This component now fetches its own page object asynchronously.
- */
 function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
-  // Effect 1: Fetch the specific page object from the doc
   React.useEffect(() => {
     doc.getPage(pageNum).then(setPage);
-    // When the page is set, the effect below will trigger
   }, [doc, pageNum]);
 
-  // Effect 2: Render the page (canvas + text layer)
   React.useEffect(() => {
-    const canvas = canvasRef.current;
-    const textLayer = textLayerRef.current;
+    if (!page || !canvasRef.current || !textLayerRef.current) return;
 
-    // --- GUARD CLAUSE ---
-    // Wait until the page is fetched and refs are available
-    if (!page || !canvas || !textLayer) return;
-
-    // --- SAFE TO CALL ---
-    // 'page' is now guaranteed to be a PDFPageProxy object
     const viewport = page.getViewport({ scale });
+    const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     if (!context) return;
 
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
-    let renderTask: pdfjs.RenderTask | null = null;
-    let textRenderTask: ReturnType<typeof pdfjs.renderTextLayer> | null = null;
+    // Render visual page
+    const renderTask = page.render({ canvasContext: context, viewport });
+    
+    // Render text layer
+    page.getTextContent().then((textContent) => {
+      if (!textLayerRef.current) return;
+      
+      textLayerRef.current.style.height = `${viewport.height}px`;
+      textLayerRef.current.style.width = `${viewport.width}px`;
+      textLayerRef.current.innerHTML = ''; // Clear previous
 
-    const render = async () => {
-      // 1. Render the visual page to the canvas
-      renderTask = page.render({ canvasContext: context, viewport });
-      await renderTask.promise;
-
-      // 2. Get text content and render the invisible text layer
-      const textContent = await page.getTextContent();
-
-      textLayer.style.height = `${viewport.height}px`;
-      textLayer.style.width = `${viewport.width}px`;
-
-      textRenderTask = pdfjs.renderTextLayer({
+      pdfjs.renderTextLayer({
         textContentSource: textContent,
-        container: textLayer,
+        container: textLayerRef.current,
         viewport: viewport,
         textDivs: [],
       });
-    };
-
-    render();
+    });
 
     return () => {
-      // Cleanup on unmount
-      renderTask?.cancel();
-      textRenderTask?.cancel();
+      renderTask.cancel();
     };
-    // This effect now correctly depends on the 'page' state
   }, [page, scale]);
 
-  // --- GUARD CLAUSE ---
-  // Don't render the div structure until the page is fetched.
-  // This prevents layout errors.
-  if (!page) {
-    return null;
-  }
+  if (!page) return <div className="w-[600px] h-[800px] bg-white/50 animate-pulse rounded-md mb-4" />;
 
-  // Get viewport for the container div
   const viewport = page.getViewport({ scale });
+  
   return (
     <div
-      className="relative shadow-md"
+      className="relative shadow-lg mb-8 transition-transform"
       style={{
         width: viewport.width,
         height: viewport.height,
       }}
     >
-      <canvas ref={canvasRef} />
-      {/* --- This is the key: The text layer where selection happens --- */}
+      <canvas ref={canvasRef} className="rounded-sm" />
       <div
         ref={textLayerRef}
-        className="textLayer" // pdf.js uses this class
-        onMouseUpCapture={onTextSelect} // Attach our selection handler
+        className="textLayer absolute inset-0"
+        onMouseUpCapture={onTextSelect}
       />
     </div>
   );
 }
 
-/**
- * Main PDF Viewer component that loads the document
- * and renders a list of <PdfPage> components.
- */
 export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
-  const [pdfDoc, setPdfDoc] =
-    React.useState<pdfjs.PDFDocumentProxy | null>(null);
-  const [numPages, setNumPages] = React.useState(0);
+  const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const scale = 1.5; // You can make this dynamic later
+  
+  // Responsive scaling could go here, simpler for now
+  const scale = 1.2; 
 
   React.useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true);
-      setError(null);
-      setPdfDoc(null);
-      setNumPages(0);
-
       try {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
-        setNumPages(doc.numPages);
       } catch (e: any) {
-        setError(`Failed to load PDF: ${e.message}`);
+        setError(e.message);
       } finally {
         setIsLoading(false);
       }
     };
-
-    if (url) {
-      loadPdf();
-    }
+    if (url) loadPdf();
   }, [url]);
-
-  const pages = React.useMemo(() => {
-    if (!pdfDoc) return [];
-    // Create an array [1, 2, 3, ..., numPages]
-    return Array.from({ length: numPages }, (_, i) => i + 1);
-  }, [pdfDoc, numPages]);
 
   if (isLoading) {
     return (
-      <div
-        className={cn(
-          'flex h-full w-full items-center justify-center',
-          className,
-        )}
-      >
-        <Loader2 className="h-6 w-6 animate-spin" />
-        <p className="ml-2">Loading PDF...</p>
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div
-        className={cn(
-          'flex h-full w-full items-center justify-center text-destructive',
-          className,
-        )}
-      >
-        <p>{error}</p>
-      </div>
-    );
-  }
+  if (error) return <div className="p-4 text-destructive">Error: {error}</div>;
+
+  const numPages = pdfDoc ? pdfDoc.numPages : 0;
+  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
   return (
-    <ScrollArea className={cn('h-full bg-muted/50', className)}>
-      <div className="flex flex-col items-center p-4 gap-4">
+    <ScrollArea className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50", className)}>
+      <div className="flex flex-col items-center py-12 px-4">
         {pages.map((pageNum) => (
           <PdfPage
             key={pageNum}
-            doc={pdfDoc!} // Pass the whole doc
-            pageNum={pageNum} // Pass the page number
+            doc={pdfDoc!}
+            pageNum={pageNum}
             scale={scale}
             onTextSelect={onTextSelect}
           />

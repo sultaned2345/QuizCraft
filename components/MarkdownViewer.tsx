@@ -1,7 +1,7 @@
 // components/MarkdownViewer.tsx
 'use client';
 
-import { cn } from '@/lib/utils'; // <-- FIX: Added slash
+import { cn } from '@/lib/utils';
 
 interface MarkdownViewerProps {
   content: string;
@@ -10,9 +10,7 @@ interface MarkdownViewerProps {
 }
 
 /**
- * A component that renders Markdown/HTML content with consistent styling.
- * It uses a 'prose' class for typography.
- * * UPDATE: It now also correctly handles plain text by preserving whitespace.
+ * A component that renders Markdown/HTML content with "Premium Article" typography.
  */
 export function MarkdownViewer({
   content,
@@ -23,19 +21,18 @@ export function MarkdownViewer({
   const isHtml = /[<>]/g.test(content);
 
   if (isHtml) {
-    // If it's HTML (from a rich-text note, for example), render it as prose
     return (
       <div
         className={cn(
-          'prose prose-sm dark:prose-invert max-w-none break-words',
-          'prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base',
-          'prose-p:text-sm prose-p:leading-relaxed',
-          'prose-a:text-primary hover:prose-a:text-primary/80',
-          'prose-ul:list-disc prose-ol:list-decimal prose-li:my-0',
-          'prose-blockquote:border-l-primary prose-blockquote:pl-4 prose-blockquote:italic',
-          'prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:font-mono prose-code:text-sm',
-          'prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-md',
-          className,
+          'prose prose-slate dark:prose-invert max-w-none',
+          // Typography Overrides for "Turbo" feel
+          'prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-zinc-900 dark:prose-headings:text-zinc-100',
+          'prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl',
+          'prose-p:leading-8 prose-p:text-zinc-700 dark:prose-p:text-zinc-300', // Relaxed reading
+          'prose-li:marker:text-zinc-400',
+          'prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:bg-muted/30 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:not-italic prose-blockquote:rounded-r-lg',
+          'prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:bg-zinc-100 dark:prose-code:bg-zinc-800 prose-code:text-zinc-900 dark:prose-code:text-zinc-100 prose-code:before:content-none prose-code:after:content-none',
+          className
         )}
         dangerouslySetInnerHTML={{ __html: content }}
         onMouseUpCapture={onMouseUpCapture}
@@ -43,16 +40,16 @@ export function MarkdownViewer({
     );
   }
 
-  // If it's plain text (from a PDF/TXT extraction), render with preserved whitespace
+  // Plain Text (with nice formatting)
   return (
-    <pre
+    <div
       className={cn(
-        'text-sm whitespace-pre-wrap break-words font-sans text-foreground',
+        'font-sans text-base leading-8 text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap',
         className,
       )}
       onMouseUpCapture={onMouseUpCapture}
     >
       {content}
-    </pre>
+    </div>
   );
 }
