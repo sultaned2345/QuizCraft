@@ -236,7 +236,7 @@ export default function TakeQuizPage() {
   const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]); // <-- USE QuizQuestion type
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]); 
   const [showHint, setShowHint] = useState(false);
 
   const router = useRouter();
@@ -244,7 +244,8 @@ export default function TakeQuizPage() {
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
-  const { data, error, isLoading } = useSWR<QuizData>(
+  // FIX: Updated generic to match fetcher's ApiResponse wrapper
+  const { data: apiResponse, error, isLoading } = useSWR<ApiResponse<QuizData>>(
     session ? `/api/quiz/${quizId}` : null,
     (url: string) =>
       fetcher(url, {
@@ -253,9 +254,13 @@ export default function TakeQuizPage() {
     { revalidateOnFocus: false }
   );
 
+  // FIX: Extract the actual data object safely
+  const quizData = apiResponse?.data;
+
   useEffect(() => {
-    if (data?.questions && data.questions.length > 0) {
-      const shuffledQuestions = shuffleArray(data.questions);
+    // FIX: Use quizData instead of raw data variable
+    if (quizData?.questions && quizData.questions.length > 0) {
+      const shuffledQuestions = shuffleArray(quizData.questions);
 
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
@@ -264,20 +269,16 @@ export default function TakeQuizPage() {
             options: shuffleArray(q.options as string[]),
           };
         }
-        // --- THIS IS THE FIX ---
         if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
-          // q.options contains the *correct answers* in order of q.prompts
-          // We create shuffledOptions for the user to select from.
           return {
             ...q,
             shuffledOptions: shuffleArray(q.options as string[]),
           };
         }
-        // --- END FIX ---
         return q;
       });
 
-      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]); // <-- Cast to QuizQuestion
+      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
       setCurrentQuestionIndex(0);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
@@ -285,7 +286,7 @@ export default function TakeQuizPage() {
       setIsFinished(false);
       setShowHint(false);
     }
-  }, [data]);
+  }, [quizData]);
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const progress =
@@ -306,14 +307,12 @@ export default function TakeQuizPage() {
     ) {
       isCorrect = currentQuestion.correct_answer === answerTrimmed;
     } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
-      // Use 'options' as the array of correct answers
       const correctAnswers = (currentQuestion.options as string[]) || [];
       if (correctAnswers.length > 0) {
         isCorrect = correctAnswers.some(
           (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
         );
       } else {
-        // Fallback to correct_answer if options is empty
         isCorrect = currentQuestion.correct_answer.toLowerCase() === answerTrimmed.toLowerCase();
       }
     }
@@ -326,9 +325,8 @@ export default function TakeQuizPage() {
     }
   };
 
-  // --- NEW HANDLER for Matching ---
   const handleMatchingComplete = (isCorrect: boolean) => {
-    if (answerStatus !== 'unanswered') return; // Already answered
+    if (answerStatus !== 'unanswered') return; 
 
     if (isCorrect) {
       setAnswerStatus('correct');
@@ -337,7 +335,6 @@ export default function TakeQuizPage() {
       setAnswerStatus('incorrect');
     }
   };
-  // --- END NEW HANDLER ---
 
   const handleNext = () => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
@@ -347,7 +344,6 @@ export default function TakeQuizPage() {
       setShowHint(false);
     } else {
       setIsFinished(true);
-      // --- Save Attempt ---
       if (session) {
         fetch('/api/quiz/attempt', {
           method: 'POST',
@@ -362,13 +358,13 @@ export default function TakeQuizPage() {
           })
         }).catch(err => console.error("Failed to save quiz attempt:", err));
       }
-      // ---
     }
   };
 
   const handleRestart = () => {
-    if (data?.questions && data.questions.length > 0) {
-      const shuffledQuestions = shuffleArray(data.questions);
+    // FIX: Use quizData here as well
+    if (quizData?.questions && quizData.questions.length > 0) {
+      const shuffledQuestions = shuffleArray(quizData.questions);
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
@@ -376,14 +372,12 @@ export default function TakeQuizPage() {
             options: shuffleArray(q.options as string[]),
           };
         }
-        // --- ADD FIX HERE TOO ---
         if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
           return {
             ...q,
             shuffledOptions: shuffleArray(q.options as string[]),
           };
         }
-        // --- END FIX ---
         return q;
       });
       setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
@@ -432,11 +426,13 @@ export default function TakeQuizPage() {
     );
   }
 
-  if (!data || quizQuestions.length === 0) {
+  // FIX: Use quizData to check for existence
+  if (!quizData || quizQuestions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">{data?.quiz.title || 'Quiz'}</h2>
+        {/* FIX: Use optional chaining on quizData.quiz */}
+        <h2 className="text-2xl font-semibold">{quizData?.quiz?.title || 'Quiz'}</h2>
         <p className="text-center">This quiz has no questions in it.</p>
         <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
@@ -459,9 +455,10 @@ export default function TakeQuizPage() {
           </Button>
           <h1
             className="text-xl font-semibold truncate text-center"
-            title={data.quiz.title}
+            // FIX: Use quizData.quiz.title
+            title={quizData.quiz.title}
           >
-            {data.quiz.title}
+            {quizData.quiz.title}
           </h1>
           <div className="w-24"></div>
         </div>
@@ -613,7 +610,6 @@ export default function TakeQuizPage() {
                       </div>
                     )}
 
-                    {/* --- REPLACE PLACEHOLDER --- */}
                     {currentQuestion.question_type === 'MATCHING' && (
                       <MatchingQuestionUI
                         question={currentQuestion}
@@ -621,7 +617,6 @@ export default function TakeQuizPage() {
                         onQuestionComplete={handleMatchingComplete}
                       />
                     )}
-                    {/* --- END REPLACEMENT --- */}
 
                   </div>
 

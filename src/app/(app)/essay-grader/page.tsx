@@ -27,13 +27,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
-// --- 1. IMPORT RESIZABLE PANELS ---
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-// ---
 
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
 
@@ -56,7 +54,6 @@ const countWords = (text: string): number => {
   return text.trim().split(/\s+/).length;
 };
 
-// (ScoreBadge component remains unchanged)
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -100,7 +97,6 @@ export default function EssayGraderPage() {
   const router = useRouter();
   const { openModal } = useUpgradeModal();
 
-  // (useSWR hooks remain unchanged)
   const { 
     data: aiUsage, 
     error: usageError, 
@@ -113,17 +109,21 @@ export default function EssayGraderPage() {
   );
 
   const { 
-    data: history, 
+    data: historyData, // Renamed to indicate it might be raw data
     error: historyError, 
     isLoading: isHistoryLoading,
     mutate: mutateHistory
-  } = useSWR<GradedEssayListItem[]>(
+  } = useSWR<GradedEssayListItem[] | { data: GradedEssayListItem[] }>(
     session ? '/api/graded-essays' : null,
     (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: true }
   );
+
+  // FIX: Safely extract the array from the API response
+  const history: GradedEssayListItem[] = Array.isArray(historyData) 
+      ? historyData 
+      : (historyData as any)?.data || [];
   
-  // (useEffect for pageContext remains unchanged)
   useEffect(() => {
     if (gradedEssay?.id) {
       setPageContext({ type: 'essay', id: gradedEssay.id });
@@ -133,12 +133,10 @@ export default function EssayGraderPage() {
     return () => setPageContext(null);
   }, [gradedEssay, setPageContext]);
 
-  // --- 2. UPDATE handleFileChange ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
        setError(null);
-       // --- REVERT LIMIT TO 3MB ---
        const maxSize = 3 * 1024 * 1024; // 3MB
        const isValidMime = ['application/pdf', 'text/plain'].includes(file.type);
        const isValidExt = ['.pdf', '.txt'].some(ext => file.name.toLowerCase().endsWith(ext));
@@ -149,13 +147,11 @@ export default function EssayGraderPage() {
          return;
        }
        if (file.size > maxSize) {
-         // --- UPDATE ERROR MESSAGE ---
          setError(`File exceeds 3MB (${formatFileSize(file.size)}). For larger files, use the Documents page.`);
          setSelectedFile(null);
          if (e.target) e.target.value = '';
          return;
        }
-       // ---
        setSelectedFile(file);
        setEssayText('');
        setWordCount(0); 
@@ -165,9 +161,7 @@ export default function EssayGraderPage() {
        setSelectedFile(null);
      }
    };
-   // --- END UPDATE ---
    
-  // (handleTextChange, handleViewHistoryItem, handleSubmit, renderHighlightedEssay, renderFeedback remain unchanged)
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
      const newText = e.target.value;
      const newWordCount = countWords(newText);
@@ -198,10 +192,14 @@ export default function EssayGraderPage() {
     setOutputTab('feedback');
     
     try {
-        const resultData = await fetcher<GradedEssay>(
+        // FIX: Handle API response structure here as well
+        const result = await fetcher<any>(
             `/api/graded-essays/${essayId}`, 
             { headers: { 'Authorization': `Bearer ${session.access_token}` } }
         );
+        
+        // Unwrap if it's wrapped in 'data'
+        const resultData: GradedEssay = result.data || result;
         
         const responseData: GradeEssayResponseData = {
             id: resultData.id,
@@ -307,7 +305,7 @@ export default function EssayGraderPage() {
     };
     categories.forEach(cat => {
         const categoryData = feedback[cat];
-        if (typeof categoryData === 'object' && categoryData.highlights) {
+        if (typeof categoryData === 'object' && categoryData?.highlights) { // Added optional chaining
             categoryData.highlights.forEach((highlight, index) => {
                 let newParts: (string | React.ReactNode)[] = [];
                 parts.forEach(part => {
@@ -383,7 +381,8 @@ export default function EssayGraderPage() {
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3">
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
-                    {data.highlights && data.highlights.length > 0 && (
+                    {/* FIX: Ensure highlights is an array before mapping */}
+                    {Array.isArray(data.highlights) && data.highlights.length > 0 && (
                       <Accordion 
                         type="single" 
                         collapsible 
@@ -434,7 +433,6 @@ export default function EssayGraderPage() {
   const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
   return (
-    // --- 3. APPLY FULL-HEIGHT WRAPPER ---
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h1 className="text-3xl font-bold">Essay Grader</h1>
@@ -455,19 +453,16 @@ export default function EssayGraderPage() {
           </div>
       </div>
       
-      {/* --- 4. APPLY RESIZABLE PANEL GROUP --- */}
       <ResizablePanelGroup
         direction="horizontal"
         className="flex-1 rounded-lg border overflow-hidden"
       >
-        {/* --- Input Panel --- */}
         <ResizablePanel defaultSize={50} minSize={30}>
           <ScrollArea className="h-full">
-            <div className="lg:col-span-1 space-y-6 p-4"> {/* Added padding */}
+            <div className="lg:col-span-1 space-y-6 p-4">
               <Card>
                   <CardHeader>
                       <CardTitle>Your Essay</CardTitle>
-                      {/* --- UPDATE HELP TEXT --- */}
                       <CardDescription>Paste text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -569,7 +564,6 @@ export default function EssayGraderPage() {
         
         <ResizableHandle withHandle />
 
-        {/* --- Output Panel --- */}
         <ResizablePanel defaultSize={50} minSize={30}>
           <Card className="min-h-full flex flex-col border-0 rounded-none"> 
                 <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col h-full overflow-hidden">
@@ -633,6 +627,7 @@ export default function EssayGraderPage() {
                                         <RefreshCw className={cn("w-4 h-4 mr-2", isHistoryLoading && "animate-spin")} />
                                         Refresh History
                                     </Button>
+                                    {/* FIX: Use the sanitized 'history' array here */}
                                     <div className="space-y-2">
                                         {history.map(item => (
                                             <div

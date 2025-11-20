@@ -2,89 +2,187 @@
 'use client';
 
 import * as React from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
+import * as pdfjs from 'pdfjs-dist';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-// Ensure worker is loaded from public folder or CDN
+// Force usage of the local worker to stop external CDN requests and CORS errors
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
 interface PdfViewerProps {
   url: string;
-  onTextSelect?: (e: React.MouseEvent) => void;
+  onTextSelect: (e: React.MouseEvent) => void;
   className?: string;
 }
 
-export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
-  const [numPages, setNumPages] = React.useState<number>(0);
-  const [containerWidth, setContainerWidth] = React.useState<number>(0);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+interface PdfPageProps {
+  doc: pdfjs.PDFDocumentProxy;
+  pageNum: number;
+  scale: number;
+  onTextSelect: (e: React.MouseEvent) => void;
+}
 
-  // 1. Dynamic Resize Logic
+function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const textLayerRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  // 1. Load page dimensions/metadata immediately
+  React.useEffect(() => {
+    let isActive = true;
+    doc.getPage(pageNum).then((p) => {
+      if (isActive) setPage(p);
+    }).catch(console.error);
+    return () => { isActive = false; };
+  }, [doc, pageNum]);
+
+  // 2. Lazy Load: Only trigger render when the element is in the viewport
   React.useEffect(() => {
     if (!containerRef.current) return;
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Once rendered, stay rendered
+        }
+      },
+      { rootMargin: '200px' } // Start rendering 200px before it comes into view
+    );
 
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-    setNumPages(numPages);
+  // 3. Render Content (Canvas + Text) only if visible
+  React.useEffect(() => {
+    if (!page || !isVisible || !canvasRef.current || !textLayerRef.current) return;
+
+    const viewport = page.getViewport({ scale });
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    // High DPI support
+    const pixelRatio = window.devicePixelRatio || 1;
+    canvas.height = viewport.height * pixelRatio;
+    canvas.width = viewport.width * pixelRatio;
+    canvas.style.height = `${viewport.height}px`;
+    canvas.style.width = `${viewport.width}px`;
+    context.scale(pixelRatio, pixelRatio);
+
+    let renderTask: any = null;
+
+    const render = async () => {
+      try {
+        // Render visual page
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+        
+        // Render text layer
+        const textContent = await page.getTextContent();
+        if (textLayerRef.current) {
+           textLayerRef.current.style.height = `${viewport.height}px`;
+           textLayerRef.current.style.width = `${viewport.width}px`;
+           textLayerRef.current.innerHTML = ''; 
+
+           pdfjs.renderTextLayer({
+            textContentSource: textContent,
+            container: textLayerRef.current,
+            viewport: viewport,
+            textDivs: [],
+           });
+        }
+      } catch (err: any) {
+        // Ignore rendering cancelled errors
+        if (err.name !== 'RenderingCancelledException') {
+           console.error("Error rendering PDF page:", err);
+        }
+      }
+    };
+
+    render();
+
+    return () => {
+      if (renderTask) renderTask.cancel();
+    };
+  }, [page, scale, isVisible]);
+
+  // SKELETON: If page metadata isn't loaded yet
+  if (!page) {
+    return (
+        <div ref={containerRef} className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-8" />
+    );
   }
 
+  const viewport = page.getViewport({ scale });
+  
   return (
-    <div className={cn("h-full w-full bg-gray-100 dark:bg-gray-900 flex flex-col", className)}>
-      <div 
-        ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 md:p-8"
-      >
-        <Document
-          file={url}
-          onLoadSuccess={onDocumentLoadSuccess}
-          loading={
-            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p>Loading PDF...</p>
-            </div>
-          }
-          error={
-            <div className="flex items-center justify-center h-64 text-destructive">
-              Failed to load PDF. Please check the file.
-            </div>
-          }
-          className="flex flex-col items-center gap-6"
-        >
-          {Array.from(new Array(numPages), (_, index) => (
-            <div 
-              key={`page_${index + 1}`} 
-              className="shadow-md border rounded-sm overflow-hidden bg-white"
-              onMouseUp={onTextSelect}
-            >
-              <Page 
-                pageNumber={index + 1} 
-                // 2. Fit width minus padding (48px total padding approx)
-                width={containerWidth ? Math.min(containerWidth - 48, 1000) : undefined}
-                renderAnnotationLayer={true}
-                renderTextLayer={true}
-                className="bg-white"
-                loading={
-                    <div className="w-full aspect-[1/1.4] bg-white animate-pulse" />
-                }
-              />
-            </div>
-          ))}
-        </Document>
-      </div>
+    <div
+      ref={containerRef}
+      className="relative shadow-lg mb-8 transition-transform origin-top bg-white"
+      style={{ width: viewport.width, height: viewport.height }}
+    >
+      {isVisible ? (
+        <>
+          <canvas ref={canvasRef} className="rounded-sm block" />
+          <div ref={textLayerRef} className="textLayer absolute inset-0" onMouseUpCapture={onTextSelect} />
+        </>
+      ) : (
+        // Placeholder while waiting to scroll into view
+        <div className="w-full h-full bg-zinc-100 animate-pulse" />
+      )}
     </div>
+  );
+}
+
+export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
+  const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const scale = 1.2; 
+
+  React.useEffect(() => {
+    const loadPdf = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Ensure worker is set before loading
+        if (typeof window !== 'undefined') {
+            pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+        }
+        
+        const loadingTask = pdfjs.getDocument(url);
+        const doc = await loadingTask.promise;
+        setPdfDoc(doc);
+      } catch (e: any) {
+        console.error("PDF Load Error:", e);
+        setError(e.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (url) loadPdf();
+  }, [url]);
+
+  if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (error) return <div className="p-4 text-destructive">Error loading PDF: {error}</div>;
+
+  const numPages = pdfDoc ? pdfDoc.numPages : 0;
+  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+
+  return (
+    <ScrollArea className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50", className)}>
+      <div className="flex flex-col items-center py-8 px-4">
+        {pages.map((pageNum) => (
+          <PdfPage key={pageNum} doc={pdfDoc!} pageNum={pageNum} scale={scale} onTextSelect={onTextSelect} />
+        ))}
+      </div>
+    </ScrollArea>
   );
 }
