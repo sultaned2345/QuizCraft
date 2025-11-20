@@ -74,13 +74,13 @@ function PdfPage({ doc, pageNum, scale, onTextSelect }: PdfPageProps) {
   
   return (
     <div
-      className="relative shadow-lg mb-8 transition-transform"
+      className="relative shadow-lg mb-8 transition-transform origin-top"
       style={{
         width: viewport.width,
         height: viewport.height,
       }}
     >
-      <canvas ref={canvasRef} className="rounded-sm" />
+      <canvas ref={canvasRef} className="rounded-sm bg-white" />
       <div
         ref={textLayerRef}
         className="textLayer absolute inset-0"
@@ -95,7 +95,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Responsive scaling could go here, simpler for now
+  // Fixed scale for clarity (could be made dynamic later)
   const scale = 1.2; 
 
   React.useEffect(() => {
@@ -129,7 +129,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <ScrollArea className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50", className)}>
-      <div className="flex flex-col items-center py-12 px-4">
+      <div className="flex flex-col items-center py-8 px-4">
         {pages.map((pageNum) => (
           <PdfPage
             key={pageNum}

@@ -28,9 +28,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PageContextType } from '@/contexts/PageContext';
-import { ApiResponse, RelatedItem } from '@/types/database';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Tooltip,
   TooltipContent,
@@ -38,16 +38,21 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-type Source = Pick<
-  RelatedItem,
-  'content_id' | 'content_type' | 'content_title' | 'citation' | 'content_chunk'
->;
+// --- Interfaces ---
+interface Source {
+  content_id: string;
+  content_type: 'note' | 'document' | 'project';
+  content_title: string;
+  citation: number;
+  content_chunk: string;
+}
 
 interface Message {
   role: 'user' | 'model';
   text: string;
   sources?: Source[];
 }
+
 interface ChatInterfaceProps {
   context: PageContextType;
   initialMessages?: Message[];
@@ -275,7 +280,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
     return (
       <div
         className={cn(
-          'flex flex-col h-full bg-gradient-to-b from-background to-muted/20 relative',
+          'flex flex-col h-full bg-background relative font-sans',
           className,
         )}
       >
@@ -286,16 +291,16 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
             {isLoadingHistory && messages.length === 0 && (
               <div className="space-y-6 px-2">
                 <div className="flex gap-3">
-                  <Skeleton className="w-8 h-8 rounded-full" />
+                   <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
                   <div className="space-y-2 flex-1">
-                    <Skeleton className="h-4 w-1/3" />
-                    <Skeleton className="h-12 w-3/4 rounded-xl" />
+                    <div className="h-4 w-1/3 bg-muted animate-pulse rounded" />
+                    <div className="h-12 w-3/4 bg-muted animate-pulse rounded-xl" />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Modern Empty State */}
+            {/* Empty State */}
             {!isLoadingHistory && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[400px] text-center space-y-8 animate-in zoom-in-95 duration-300">
                 <div className="relative">
@@ -315,7 +320,6 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </p>
                 </div>
 
-                {/* Sleek Action Grid */}
                 <div className="grid grid-cols-3 gap-3 w-full max-w-sm px-4">
                   <Button
                     variant="outline"
@@ -346,7 +350,6 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </Button>
                 </div>
 
-                {/* Suggested Chips */}
                 {suggestedQuestions.length > 0 && (
                   <div className="flex flex-col gap-2 w-full max-w-xs px-4">
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
@@ -383,33 +386,39 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
 
                 <div
                   className={cn(
-                    'relative max-w-[80%] px-5 py-3.5 text-sm leading-relaxed shadow-sm',
+                    'relative max-w-[85%] px-5 py-3.5 text-sm shadow-sm',
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
-                      : 'bg-card text-card-foreground rounded-2xl rounded-tl-sm border',
+                      : 'bg-muted/50 border text-foreground rounded-2xl rounded-tl-sm',
                   )}
                 >
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  {/* MARKDOWN RENDERING */}
+                  <div className={cn(
+                    "prose prose-sm max-w-none dark:prose-invert leading-relaxed break-words",
+                    msg.role === 'user' 
+                      ? "prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground" 
+                      : "prose-p:text-foreground"
+                  )}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
 
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-border/50 flex flex-wrap gap-2">
+                    <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2">
                       {msg.sources.map((src) => (
                         <TooltipProvider key={src.citation}>
                           <Tooltip delayDuration={0}>
                             <TooltipTrigger asChild>
                               <Link
                                 href={getSourceHref(src)}
-                                className="inline-flex items-center gap-1.5 text-[10px] bg-background/50 hover:bg-background px-2.5 py-1 rounded-full transition-all ring-1 ring-inset ring-border hover:ring-primary/30"
+                                className="inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-md bg-background/50 border text-[10px] text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
                               >
-                                <span className="font-bold text-primary">
-                                  {src.citation}
-                                </span>
-                                <span className="truncate max-w-[100px] opacity-70">
-                                  {src.content_title}
-                                </span>
+                                <span className="font-mono font-bold text-primary">[{src.citation}]</span>
+                                <span className="truncate max-w-[80px]">{src.content_title}</span>
                               </Link>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-xs p-3 shadow-xl bg-popover text-popover-foreground">
+                            <TooltipContent className="max-w-xs text-xs p-3 bg-popover text-popover-foreground shadow-xl">
                               {src.content_chunk}
                             </TooltipContent>
                           </Tooltip>
@@ -433,7 +442,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
                   <Zap className="w-4 h-4 text-primary fill-primary" />
                 </div>
-                <div className="bg-card px-4 py-3 rounded-2xl rounded-tl-sm border flex items-center gap-2 shadow-sm">
+                <div className="bg-muted/50 px-4 py-3 rounded-2xl rounded-tl-sm border flex items-center gap-2 shadow-sm">
                   <Loader2 className="w-3 h-3 animate-spin text-primary" />
                   <span className="text-xs text-muted-foreground font-medium">
                     Thinking...
@@ -444,7 +453,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
           </div>
         </ScrollArea>
 
-        {/* Floating Input Area */}
+        {/* Input Area */}
         <div className="p-4 pt-2 bg-transparent z-20">
           <div className="relative shadow-lg rounded-2xl bg-background border ring-4 ring-muted/20 transition-all focus-within:ring-primary/20 focus-within:border-primary/50">
             <form
@@ -464,7 +473,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                     sendMessage(input);
                   }
                 }}
-                placeholder="Ask anything..."
+                placeholder="Ask a follow-up question..."
                 className="min-h-[20px] max-h-32 w-full resize-none border-0 bg-transparent focus-visible:ring-0 py-2.5 px-3 shadow-none text-sm placeholder:text-muted-foreground/50"
                 rows={1}
               />

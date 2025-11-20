@@ -16,14 +16,14 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { 
   callAIToGenerateQuiz,
-  callAIToGenerateNote,
   callAIToGenerateFlashcards 
 } from '@/lib/aiGeneration';
 import { incrementAIGenerationUsage, checkAIGenerationUsageLimit } from '@/lib/usage-limits';
 
 export const runtime = "nodejs";
 
-const MODEL_NAME = "gemini-2.5-flash-lite";
+// Updated to the latest efficient model
+const MODEL_NAME = "gemini-2.0-flash-lite-preview-02-05";
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 
 // --- Interfaces ---
@@ -40,10 +40,11 @@ interface PageContext {
   name?: string;
 }
 
+// Updated configuration for Socratic tutoring
 const generationConfig = {
-  temperature: 0.5,
-  topK: 1,
-  topP: 1,
+  temperature: 0.4, 
+  topK: 40,
+  topP: 0.95,
   maxOutputTokens: 8192,
 };
 
@@ -463,7 +464,6 @@ export async function POST(request: NextRequest) {
 - Context: Quiz JSON provided below.
 - Be clear and concise.`;
       
-      // History: 30 messages
       const recentHistory = await prisma.chat_history.findMany({
         where: { user_id: userId, context_id: context.id },
         orderBy: { created_at: 'desc' },
@@ -478,7 +478,7 @@ export async function POST(request: NextRequest) {
         { role: "user", parts: [{ text: `Quiz JSON:\n${JSON.stringify(quiz)}\n\nRequest: ${message}` }] }
       ];
 
-    // --- Context B: Document-Specific RAG (CLEAN & DIRECT) ---
+    // --- Context B: Document-Specific RAG (SMART SOCRATIC TUTOR) ---
     } else if (context?.type === 'document' && context.id) {
       await saveChatHistory(userId, 'user', message, context); 
       
@@ -487,8 +487,8 @@ export async function POST(request: NextRequest) {
       
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
-          match_threshold: 0.65, 
-          match_count: 8,
+          match_threshold: 0.60, 
+          match_count: 6,
           p_user_id: user.id,
           p_content_id: context.id 
       });
@@ -510,14 +510,17 @@ export async function POST(request: NextRequest) {
               });
           });
           
-          // --- NO FORCED EXAMPLES IN PROMPT ---
-          systemPrompt = `You are a helpful AI tutor.
-Answer the user's question using ONLY the provided excerpts.
-- Cite sources as [1], [2].
-- If the answer isn't in the excerpts, say so (and offer general knowledge if applicable).
-- Be direct and concise.
+          // --- NEW SOCRATIC PROMPT ---
+          systemPrompt = `You are a smart, Socratic study companion.
+Your goal is to help the user learn from their document, not just give answers.
 
-CONTEXT:
+RULES:
+1. **Ask Before Answering:** If the user's question is broad (e.g., "Explain this document", "What is this about?"), DO NOT summarize immediately. Instead, ask 1-2 short clarifying questions to understand their goal (e.g., "Are you looking for a high-level summary, or specific details on [Topic X]?").
+2. **Be Direct:** If the question is specific (e.g., "What is the definition of X?"), answer directly using the excerpts.
+3. **Cite Sources:** Use [1], [2] when referencing specific text.
+4. **Formatting:** Use Markdown (bold, lists) to make text readable.
+
+CONTEXT FROM DOCUMENT:
 ${contextString}`;
           
       } else {
@@ -534,23 +537,22 @@ ${contextString}`;
           systemPrompt = `You are a helpful AI tutor.
 Answer based on the full document text below.
 - Be direct.
-- No citations needed.
+- No citations needed if you can't find exact matches.
 
 CONTEXT:
 ${contextString}`;
       }
 
-      // History: 30 messages
       const recentHistory = await prisma.chat_history.findMany({
         where: { user_id: userId, context_id: context.id },
         orderBy: { created_at: 'desc' },
-        take: 30,
+        take: 10,
       });
       const formattedHistory = recentHistory.map(h => ({ role: h.role, parts: [{ text: h.content }] })).reverse() as Content[];
 
       chatHistory = [
         { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "I'm ready to help with this document." }] },
+        { role: "model", parts: [{ text: "I'm ready to help you study this document." }] },
         ...formattedHistory,
       ];
 
@@ -585,9 +587,8 @@ ${JSON.stringify(gradedEssay.feedback)}`;
         ...formattedHistory,
       ];
 
-    // --- Context D/E: Default/Project ---
+    // --- Context D: Default/Project ---
     } else {
-       // Default logic (omitted strictly generic parts for brevity in thought, but included in file below)
        model = genAI.getGenerativeModel({ 
           model: MODEL_NAME, 
           generationConfig, 
