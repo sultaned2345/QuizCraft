@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate file type
+    // 1. RESTORED: Strict File Type Validation
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       return NextResponse.json({ 
         success: false,
@@ -31,16 +31,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate file size (3MB limit)
-    const maxSize = 3 * 1024 * 1024; // 3MB
+    // 2. IMPROVED: Increased Size Limit (10MB)
+    // Increased from 3MB to 10MB to handle textbooks/slides without crashing
+    const maxSize = 10 * 1024 * 1024; 
     if (file.size > maxSize) {
       return NextResponse.json({ 
         success: false,
-        error: `File exceeds 3MB limit. Current size: ${(file.size / 1024 / 1024).toFixed(2)}MB` 
+        error: `File exceeds 10MB limit. Current size: ${(file.size / 1024 / 1024).toFixed(2)}MB` 
       }, { status: 400 });
     }
 
-    // Convert file to buffer using stream-based approach for better compatibility
+    // Convert file to buffer
     let buffer: Buffer;
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -52,27 +53,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Parse PDF using pdf-parse-fork
+    // 3. RESTORED & IMPROVED: Parsing with Scanned Doc Detection
     let extractedText: string;
     try {
       const result = await pdfParse(buffer, {
         max: 0, // No page limit
-        version: 'v1.10.100', // Use specific version for stability
+        version: 'v1.10.100', // Restored: Use specific version for stability
       });
       
       extractedText = result.text || "";
       
-      if (!extractedText || extractedText.trim().length === 0) {
+      // New Check: Scanned Document Detection
+      // If text is empty or extremely short, it's likely an image-only PDF
+      if (!extractedText || extractedText.trim().length < 50) {
         return NextResponse.json({ 
           success: false,
-          error: "This PDF might be locked or unreadable. Try another file." 
-        }, { status: 400 });
+          error: "No text detected. This document appears to be a scanned image. Please use a text-based PDF or OCR tool." 
+        }, { status: 422 });
       }
+
     } catch (error) {
       console.error("PDF parsing error:", error);
       return NextResponse.json({ 
         success: false,
-        error: "This PDF might be locked or unreadable. Try another file." 
+        error: "This PDF might be locked, corrupted, or unreadable. Try another file." 
       }, { status: 400 });
     }
 
