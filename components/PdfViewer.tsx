@@ -10,7 +10,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
-  // Use a specific version matching package.json to avoid version mismatch errors
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
@@ -23,27 +22,57 @@ interface PdfViewerProps {
 interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy;
   pageNum: number;
-  width: number; // Changed from scale to width
+  width: number;
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
 function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
+  const [isInView, setIsInView] = React.useState(false);
+  const [aspectRatio, setAspectRatio] = React.useState<number>(1.4); // Default aspect ratio
 
+  // 1. Lazy Load: Only fetch/render when the element is near the viewport
   React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsInView(true);
+          observer.disconnect(); // Once loaded, stay loaded
+        }
+      },
+      { rootMargin: '200px' } // Load 200px before it comes into view
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 2. Fetch Page Data (only if in view)
+  React.useEffect(() => {
+    if (!isInView) return;
+
     let isMounted = true;
     doc.getPage(pageNum).then((p) => {
-      if (isMounted) setPage(p);
+      if (isMounted) {
+        setPage(p);
+        // Calculate aspect ratio immediately to set correct height
+        const view = p.view;
+        setAspectRatio(view[3] / view[2]);
+      }
     }).catch(console.error);
     return () => { isMounted = false; };
-  }, [doc, pageNum]);
+  }, [doc, pageNum, isInView]);
 
+  // 3. Render Canvas & Text (only if page data exists and width is set)
   React.useEffect(() => {
     if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
 
-    // Calculate scale based on desired width vs original viewport width
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = width / unscaledViewport.width;
     const viewport = page.getViewport({ scale });
@@ -52,14 +81,26 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+    // Set dimensions to avoid blurry canvas on high-DPI screens
+    const outputScale = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = Math.floor(viewport.width) + "px";
+    canvas.style.height = Math.floor(viewport.height) + "px";
+
+    const transform = outputScale !== 1 
+      ? [outputScale, 0, 0, outputScale, 0, 0] 
+      : null;
 
     let renderTask: any = null;
 
     const render = async () => {
       try {
-        renderTask = page.render({ canvasContext: context, viewport });
+        renderTask = page.render({ 
+            canvasContext: context, 
+            viewport,
+            transform: transform as any
+        });
         await renderTask.promise;
         
         // Render text layer
@@ -68,7 +109,6 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
            textLayerRef.current.style.height = `${viewport.height}px`;
            textLayerRef.current.style.width = `${viewport.width}px`;
            textLayerRef.current.innerHTML = '';
-           // CSS custom property for text selection color if needed
            textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
            pdfjs.renderTextLayer({
@@ -94,13 +134,24 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     };
   }, [page, width]);
 
-  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
-
-  // Use calculated height for placeholder to prevent layout shift
-  const aspectRatio = page.view[3] / page.view[2];
+  // Placeholder while out of view or loading
+  if (!isInView || !page) {
+    return (
+      <div 
+        ref={containerRef}
+        className="w-full bg-muted/20 animate-pulse rounded-md mb-4 shadow-sm"
+        style={{ height: width * aspectRatio || 500 }} // Approximate height to preserve scrollbar
+      >
+        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+            Page {pageNum}
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div
+      ref={containerRef}
       className="relative shadow-md mb-4 bg-white"
       style={{ width: width, minHeight: width * aspectRatio }}
     >
@@ -115,7 +166,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Responsive width state
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
@@ -125,14 +175,11 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
     const updateWidth = () => {
       if (containerRef.current) {
-        // Subtract padding (e.g., 32px for py-8 px-4)
-        setContainerWidth(containerRef.current.clientWidth - 48);
+        setContainerWidth(containerRef.current.clientWidth - 48); // Padding adjustment
       }
     };
 
-    // Initial measure
     updateWidth();
-
     const observer = new ResizeObserver(updateWidth);
     observer.observe(containerRef.current);
 
@@ -174,7 +221,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>
-                    Unable to load this document. It might be corrupted or password protected.
+                    Unable to load this document.
                     <br/>
                     <span className="text-xs opacity-70 mt-2 block">{error}</span>
                 </AlertDescription>
@@ -188,7 +235,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        {/* We use a ref on this div to measure available width */}
         <ScrollArea className="flex-1 w-full" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
                 {containerWidth > 0 && pages.map((pageNum) => (
