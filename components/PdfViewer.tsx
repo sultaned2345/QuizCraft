@@ -13,6 +13,31 @@ if (typeof window !== 'undefined') {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
+// --- Lazy Load Hook ---
+function useInView({ rootMargin = '0px' }: { rootMargin?: string } = {}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!ref.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect(); // Stop observing once visible (load once)
+        }
+      },
+      { rootMargin }
+    );
+
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [rootMargin]);
+
+  return { ref, isInView };
+}
+
 interface PdfViewerProps {
   url: string;
   onTextSelect: (e: React.MouseEvent) => void;
@@ -29,47 +54,23 @@ interface PdfPageProps {
 function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
-  const [isInView, setIsInView] = React.useState(false);
-  const [aspectRatio, setAspectRatio] = React.useState<number>(1.4); // Default aspect ratio
+  
+  // Render pages 100% of viewport height ahead of time
+  const { ref: wrapperRef, isInView } = useInView({ rootMargin: '100% 0px' });
 
-  // 1. Lazy Load: Only fetch/render when the element is near the viewport
+  // 1. Fetch Page Data ONLY when in view
   React.useEffect(() => {
-    if (!containerRef.current) return;
+    if (isInView && !page) {
+      let isMounted = true;
+      doc.getPage(pageNum).then((p) => {
+        if (isMounted) setPage(p);
+      }).catch(console.error);
+      return () => { isMounted = false; };
+    }
+  }, [doc, pageNum, isInView, page]);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setIsInView(true);
-          observer.disconnect(); // Once loaded, stay loaded
-        }
-      },
-      { rootMargin: '200px' } // Load 200px before it comes into view
-    );
-
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  // 2. Fetch Page Data (only if in view)
-  React.useEffect(() => {
-    if (!isInView) return;
-
-    let isMounted = true;
-    doc.getPage(pageNum).then((p) => {
-      if (isMounted) {
-        setPage(p);
-        // Calculate aspect ratio immediately to set correct height
-        const view = p.view;
-        setAspectRatio(view[3] / view[2]);
-      }
-    }).catch(console.error);
-    return () => { isMounted = false; };
-  }, [doc, pageNum, isInView]);
-
-  // 3. Render Canvas & Text (only if page data exists and width is set)
+  // 2. Render Page to Canvas
   React.useEffect(() => {
     if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
 
@@ -81,29 +82,16 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    // Set dimensions to avoid blurry canvas on high-DPI screens
-    const outputScale = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(viewport.width * outputScale);
-    canvas.height = Math.floor(viewport.height * outputScale);
-    canvas.style.width = Math.floor(viewport.width) + "px";
-    canvas.style.height = Math.floor(viewport.height) + "px";
-
-    const transform = outputScale !== 1 
-      ? [outputScale, 0, 0, outputScale, 0, 0] 
-      : null;
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
 
     let renderTask: any = null;
 
     const render = async () => {
       try {
-        renderTask = page.render({ 
-            canvasContext: context, 
-            viewport,
-            transform: transform as any
-        });
+        renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         
-        // Render text layer
         const textContent = await page.getTextContent();
         if (textLayerRef.current) {
            textLayerRef.current.style.height = `${viewport.height}px`;
@@ -134,24 +122,26 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     };
   }, [page, width]);
 
-  // Placeholder while out of view or loading
-  if (!isInView || !page) {
+  // Show placeholder while waiting for visibility or loading
+  if (!page) {
     return (
       <div 
-        ref={containerRef}
-        className="w-full bg-muted/20 animate-pulse rounded-md mb-4 shadow-sm"
-        style={{ height: width * aspectRatio || 500 }} // Approximate height to preserve scrollbar
+        ref={wrapperRef}
+        className="relative mb-4 bg-muted/10 rounded-md shadow-sm animate-pulse"
+        style={{ width: width, height: width * 1.414 }} // Approximate A4 aspect ratio (1 : 1.414)
       >
-        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-            Page {pageNum}
+        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/20">
+            <span className="text-4xl font-bold">{pageNum}</span>
         </div>
       </div>
     );
   }
+
+  const aspectRatio = page.view[3] / page.view[2];
   
   return (
     <div
-      ref={containerRef}
+      ref={wrapperRef}
       className="relative shadow-md mb-4 bg-white"
       style={{ width: width, minHeight: width * aspectRatio }}
     >
@@ -175,7 +165,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
     const updateWidth = () => {
       if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth - 48); // Padding adjustment
+        setContainerWidth(containerRef.current.clientWidth - 48); // 48px padding
       }
     };
 
@@ -221,8 +211,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>
-                    Unable to load this document.
-                    <br/>
+                    Unable to load this document.<br/>
                     <span className="text-xs opacity-70 mt-2 block">{error}</span>
                 </AlertDescription>
             </Alert>
@@ -231,6 +220,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   }
 
   const numPages = pdfDoc ? pdfDoc.numPages : 0;
+  // Create simple array of page numbers
   const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
   return (

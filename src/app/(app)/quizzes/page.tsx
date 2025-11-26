@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
-// --- MODIFICATION: Renamed component import ---
 import { QuizzesClientComponent } from './QuizzesClientComponent';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/getServerSession';
@@ -10,10 +9,18 @@ import { Quiz, QuizAttempt } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
+// --- NEW INTERFACE: Extends the base type to include the joined Quiz Title ---
+interface ExtendedQuizAttempt extends QuizAttempt {
+  quiz?: {
+    title: string;
+  };
+}
+
 // Type for dashboard quiz list item
 interface DashboardQuiz extends Omit<Quiz, 'questions' | 'user_id' | 'immediate_feedback'> {
   questionsCount: number;
 }
+
 // Type for all dashboard data
 interface DashboardData {
   quizzes: DashboardQuiz[];
@@ -21,8 +28,7 @@ interface DashboardData {
   quizzesTotalPages: number;
   quizzesCurrentPage: number;
   dueCardCount: number;
-  recentAttempts: QuizAttempt[];
-  // We can add recentActivity here in the future
+  recentAttempts: ExtendedQuizAttempt[]; // <--- UPDATED THIS TYPE
 }
 
 // --- Server-Side Data Fetching Function ---
@@ -64,11 +70,16 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
           deck: { user_id: userId },
         },
       }),
-      // 4. Get Recent Quiz Attempts (last 5)
+      // 4. Get Recent Quiz Attempts (last 10)
       prisma.quiz_attempts.findMany({
         where: { user_id: userId },
         orderBy: { created_at: 'desc' },
-        take: 5,
+        take: 10, // <--- CHANGED FROM 5 TO 10
+        include: { // <--- ADDED THIS RELATION
+           quiz: {
+             select: { title: true }
+           }
+        }
       }),
     ]);
 
@@ -86,6 +97,7 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
     const formattedAttempts = recentAttempts.map(att => ({
       ...att,
       created_at: att.created_at?.toISOString() || '',
+      // The 'quiz' object is automatically included here via the spread ...att
     }));
 
     const totalPages = Math.ceil(totalQuizCount / limit);
@@ -101,7 +113,6 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
 
   } catch (error: any) {
     console.error(`Error fetching dashboard data for user ${userId}:`, error);
-    // Return default/empty state on error
     return {
       quizzes: [],
       totalQuizCount: 0,
@@ -114,11 +125,11 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
 }
 
 // --- The Page Component (Server Component) ---
-export default async function QuizzesPage() { // --- MODIFICATION: Renamed component ---
+export default async function QuizzesPage() {
   const session = await getServerSession();
 
   if (!session?.user) {
-    return <div>Please log in.</div>; // Placeholder
+    return <div>Please log in.</div>;
   }
 
   console.log("--- Quizzes Page Got Session User ID:", session.user.id);
@@ -133,7 +144,6 @@ export default async function QuizzesPage() { // --- MODIFICATION: Renamed compo
         </div>
       }
     >
-      {/* --- MODIFICATION: Renamed component --- */}
       <QuizzesClientComponent initialData={initialDashboardData} />
     </Suspense>
   );
