@@ -10,8 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-// --- 1. IMPORT NEW ICONS ---
-import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Layers, History, Play, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Layers, History, Play, RefreshCw, Calendar, CheckCircle2 } from 'lucide-react';
 import { Quiz, QuizAttempt, ApiResponse } from '@/types/database';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -41,8 +40,6 @@ import { QuizPerformanceChart } from '@/components/dashboard/QuizPerformanceChar
 import { motion } from 'framer-motion';
 import { PersonalizedStudyPlan } from '@/components/dashboard/PersonalizedStudyPlan';
 
-
-// ... (Interface definitions remain the same) ...
 interface DashboardQuiz extends Omit<Quiz, 'questions' | 'user_id' | 'immediate_feedback'> {
   questionsCount: number;
 }
@@ -94,10 +91,8 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
       transition: { type: 'spring', stiffness: 100 }
     },
   };
-  // ---
 
   const refreshDashboard = () => {
-    // ... (function remains the same)
     router.refresh();
     setSelectedQuizIds([]);
     setNewCombineTitle("");
@@ -107,18 +102,15 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   };
 
   const fetchMoreQuizzes = useCallback(async (page: number) => {
-    // ... (function remains the same)
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
   }, [user, session, toast, quizzesPerPage, isLoadingMore, totalPages]);
 
   const handleLoadMore = () => {
-    // ... (function remains the same)
     console.log("Load More clicked. Requires /api/quizzes endpoint.");
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
   };
 
   const handleCopyShareLink = (shareLink: string | null) => {
-    // ... (function remains the same)
     if (!shareLink) { toast({ title: "No share link", description: "This quiz is not public.", variant: "destructive" }); return; };
     const shareUrl = `${window.location.origin}/quiz/${shareLink}`;
     navigator.clipboard.writeText(shareUrl);
@@ -152,20 +144,18 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         }
     } catch (error: any) {
       toast({ title: "Delete Failed", description: error.message || "Failed to delete quiz.", variant: "destructive" });
-      setQuizzes(originalQuizzes); // Rollback
-      setTotalQuizzes(prev => prev + 1); // Rollback
+      setQuizzes(originalQuizzes); 
+      setTotalQuizzes(prev => prev + 1);
     } finally {
       setIsDeleting(false); 
     }
   };
 
   const formatDate = (dateString: string) => {
-    // ... (function remains the same)
     return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
   const handleToggleSelectQuiz = (quizId: string) => {
-    // ... (function remains the same)
     setSelectedQuizIds((prev) =>
       prev.includes(quizId)
         ? prev.filter((id) => id !== quizId)
@@ -174,7 +164,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   };
 
   const handleCombineQuizzes = async (e: React.FormEvent) => {
-    // ... (function remains the same)
     e.preventDefault();
     if (!session || selectedQuizIds.length < 2 || !newCombineTitle.trim()) return;
     setIsCombining(true);
@@ -217,8 +206,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         </div>
       </div>
 
-
-      {/* (Quizzes Section Header) */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">My Quizzes ({totalQuizzes})</h1>
         <div className="flex gap-2">
@@ -237,7 +224,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         </div>
       </div>
 
-      {/* (Grid or Empty State) */}
       {quizzes.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <FileQuestion className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -260,113 +246,129 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
           animate="visible"
         >
           {quizzes.map((quiz) => {
-            // --- 2. ADD LOGIC FOR SMART BUTTON ---
             const hasAttempted = recentAttempts.some(a => a.quiz_id === quiz.id);
 
             return (
               <motion.div key={quiz.id} variants={itemVariants}>
                 <Card
                   className={cn(
-                    'flex flex-col transition-all h-full', // Added h-full
-                    selectedQuizIds.includes(quiz.id) ? 'ring-2 ring-primary' : ''
+                    'flex flex-col h-full transition-all duration-200 hover:shadow-lg hover:border-primary/50 group bg-card',
+                    selectedQuizIds.includes(quiz.id) ? 'ring-2 ring-primary border-primary' : ''
                   )}
                 >
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3 pr-2">
+                  <CardHeader className="relative pb-2">
+                    {/* Background decoration */}
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <FileQuestion className="w-16 h-16 text-primary rotate-12" />
+                    </div>
+
+                    <div className="flex justify-between items-start z-10">
+                      <div className="flex items-start gap-3 pr-2 w-full">
                         <Checkbox
                           id={`select-${quiz.id}`}
                           checked={selectedQuizIds.includes(quiz.id)}
                           onCheckedChange={() => handleToggleSelectQuiz(quiz.id)}
+                          className="mt-1"
                           aria-label={`Select quiz ${quiz.title}`}
                         />
-                        <label htmlFor={`select-${quiz.id}`} className="cursor-pointer">
-                          <CardTitle className="text-lg">{quiz.title}</CardTitle>
-                        </label>
+                        <div className="space-y-1.5 w-full">
+                           <div className="flex items-center justify-between w-full">
+                             <Badge variant={quiz.is_public ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5 font-normal">
+                                {quiz.is_public ? 'Public' : 'Draft'}
+                             </Badge>
+                             <AlertDialog>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 -mr-2 text-muted-foreground hover:text-foreground">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </DropdownMenuTrigger>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
+                                      <Edit className="w-4 h-4 mr-2" />
+                                      Edit Quiz
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
+                                      <Copy className="w-4 h-4 mr-2" />
+                                      Copy Link
+                                    </DropdownMenuItem>
+                                    <AlertDialogTrigger asChild>
+                                      <DropdownMenuItem
+                                        className="text-destructive"
+                                        onSelect={(e) => e.preventDefault()}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will permanently delete the quiz titled:
+                                      <br />
+                                      <strong className="py-2 inline-block">{quiz.title}</strong>
+                                      <br />
+                                      This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className={cn(buttonVariants({ variant: 'destructive' }))}
+                                      disabled={isDeleting}
+                                      onClick={() => handleDeleteQuiz(quiz.id)}
+                                    >
+                                      {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                           </div>
+                           <label htmlFor={`select-${quiz.id}`} className="cursor-pointer block">
+                              <CardTitle className="text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                                {quiz.title}
+                              </CardTitle>
+                           </label>
+                        </div>
                       </div>
-
-                      <AlertDialog>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {/* --- 3. REMOVE "View Quiz" --- */}
-                            {/* <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}`)}>
-                              <FileQuestion className="w-4 h-4 mr-2" />
-                              View Quiz
-                            </DropdownMenuItem> */}
-                            <DropdownMenuItem onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit Quiz
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
-                              <Copy className="w-4 h-4 mr-2" />
-                              Copy Link
-                            </DropdownMenuItem>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onSelect={(e) => e.preventDefault()}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete the quiz titled:
-                              <br />
-                              <strong className="py-2 inline-block">{quiz.title}</strong>
-                              <br />
-                              This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              className={cn(buttonVariants({ variant: 'destructive' }))}
-                              disabled={isDeleting}
-                              onClick={() => handleDeleteQuiz(quiz.id)}
-                            >
-                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-grow">
-                    <div className="flex items-center text-sm text-muted-foreground gap-2">
-                      <FileQuestion className="w-4 h-4" />
-                      <span>{quiz.questionsCount} Questions</span>
-                    </div>
+                  
+                  <CardContent className="flex-grow z-10 pt-2 pb-4">
+                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
+                          <FileQuestion className="w-3.5 h-3.5" />
+                          <span className="font-medium">{quiz.questionsCount}</span>
+                          <span className="text-xs opacity-70">Questions</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs opacity-80">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>{formatDate(quiz.created_at)}</span>
+                        </div>
+                     </div>
                   </CardContent>
-                  {/* --- 4. MODIFY CardFooter --- */}
-                  <CardFooter className="flex justify-between items-center text-sm">
-                    <Badge variant={quiz.is_public ? 'default' : 'secondary'}>
-                      {quiz.is_public ? 'Public' : 'Draft'}
-                    </Badge>
-                    
-                    <Button asChild size="sm">
+
+                  <CardFooter className="pt-0 z-10">
+                    <Button asChild size="default" className={cn("w-full transition-all", hasAttempted ? "bg-secondary text-secondary-foreground hover:bg-secondary/80" : "")}>
                       <Link href={`/quiz/${quiz.id}`}>
                         {hasAttempted ? (
-                          <RefreshCw className="w-4 h-4 mr-2" />
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Retake Quiz
+                          </>
                         ) : (
-                          <Play className="w-4 h-4 mr-2" />
+                          <>
+                            <Play className="w-4 h-4 mr-2" />
+                            Start Quiz
+                          </>
                         )}
-                        {hasAttempted ? "Try Again" : "Start Quiz"}
                       </Link>
                     </Button>
                   </CardFooter>
-                  {/* --- END MODIFICATION --- */}
                 </Card>
               </motion.div>
             )
@@ -374,7 +376,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         </motion.div>
       )}
 
-      {/* (Load More Button and Combine Dialog remain the same) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -385,6 +386,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
           </p>
         </div>
       )}
+      
       <Dialog open={isCombineDialogOpen} onOpenChange={setIsCombineDialogOpen}>
         <DialogContent>
           <DialogHeader>

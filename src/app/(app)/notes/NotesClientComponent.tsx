@@ -5,17 +5,15 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note, ApiResponse } from '@/types/database';
-import { Button, buttonVariants } from '@/components/ui/button'; // <-- Import buttonVariants
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X } from 'lucide-react';
-// import { GenerateNotesDialog } from '@/components/GenerateNotesDialog'; // <-- REMOVED
+import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X, Calendar, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
-// --- 1. IMPORT ALERT DIALOG ---
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +25,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-// ---
 
 const GenerateNotesDialog = dynamic(
   () => import('@/components/GenerateNotesDialog').then((mod) => mod.GenerateNotesDialog),
@@ -71,7 +68,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const notesPerPage = 9;
   const [allTags, setAllTags] = useState<Set<string>>(new Set());
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  // --- 2. ADD IS_DELETING STATE ---
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { session } = useAuth();
@@ -147,17 +143,15 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         }
     }, [session, toast, notesPerPage]);
 
-  // --- 3. MODIFY handleDeleteNote ---
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
-     if (!session) return; // Removed confirm()
+     if (!session) return;
 
      const originalNotes = [...notes];
      setNotes(prevNotes => prevNotes.filter(n => n.id !== noteId));
      setUsage(prev => ({ ...prev, count: prev.count - 1 }));
-     setIsDeleting(true); // <-- Set loading state
+     setIsDeleting(true); 
 
      try {
-       // Use new noteId route
        const response = await fetch(`/api/notes/${noteId}`, { 
          method: 'DELETE', 
          headers: { 'Authorization': `Bearer ${session.access_token}` } 
@@ -169,19 +163,16 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
        }
        
        toast({ title: "Note Deleted" });
-       // No need to refresh full page on success, optimistic update is fine
-       // But we'll refresh to ensure pagination and tags are correct
        refreshFirstPage(); 
        
      } catch (error: any) {
        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
-       setNotes(originalNotes); // Rollback
-       setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
+       setNotes(originalNotes);
+       setUsage(prev => ({ ...prev, count: prev.count + 1 }));
      } finally {
-       setIsDeleting(false); // <-- Unset loading state
+       setIsDeleting(false);
      }
   };
-  // ---
 
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
@@ -191,10 +182,13 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
     });
   }, [notes, searchTerm, selectedTag]);
 
+  const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
 
   return (
     <>
-      {/* (Header Section) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
          <div>
           <h1 className="text-3xl font-bold">My Notes</h1>
@@ -214,7 +208,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       </div>
 
-      {/* (Search Bar, Tag Filter, Empty State all remain the same) */}
       <div className="mb-6 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -271,64 +264,88 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         >
           {filteredNotes.map((note) => (
             <motion.div key={note.id} variants={itemVariants}>
-              <Card className="flex flex-col h-full">
-                <CardHeader>
-                  <CardTitle className="text-lg truncate">{note.title}</CardTitle>
+              <Card className="flex flex-col h-full group hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary/60 bg-card">
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start gap-2">
+                     <CardTitle className="text-lg font-semibold leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+                        {note.title}
+                     </CardTitle>
+                     <FileText className="w-5 h-5 text-muted-foreground opacity-20 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+                      <Calendar className="w-3 h-3" />
+                      <span>{formatDate(note.updated_at || note.created_at)}</span>
+                  </div>
                 </CardHeader>
                 <CardContent className="flex-grow">
-                   {note.tags && note.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {note.tags.slice(0, 3).map(tag => (
-                        <Badge key={tag} variant="secondary" className="font-normal">{tag}</Badge>
+                   {note.tags && note.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {note.tags.slice(0, 4).map(tag => (
+                        <Badge key={tag} variant="secondary" className="font-normal text-xs bg-muted/60 hover:bg-muted text-muted-foreground">
+                          #{tag}
+                        </Badge>
                       ))}
-                      {note.tags.length > 3 && (
-                        <Badge variant="secondary" className="font-normal">+{note.tags.length - 3}</Badge>
+                      {note.tags.length > 4 && (
+                        <span className="text-xs text-muted-foreground self-center pl-1">+{note.tags.length - 4}</span>
                       )}
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic mt-2 opacity-50">No tags</p>
                   )}
                 </CardContent>
-                <CardFooter className="flex justify-end gap-2">
-                    <Button 
-                      variant="outline" 
+                <CardFooter className="flex justify-between items-center gap-2 pt-0 pb-4">
+                     <Button 
+                      variant="ghost" 
                       size="sm" 
                       onClick={() => router.push(`/notes/${note.id}`)} 
-                      disabled={isDeleting} // <-- Disable on delete
+                      disabled={isDeleting}
+                      className="text-muted-foreground hover:text-primary -ml-2"
                     >
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit
+                        Read Note
                     </Button>
-                    {/* --- 4. REPLACE DELETE BUTTON --- */}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" disabled={isDeleting}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                    
+                    <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => router.push(`/notes/${note.id}`)} 
+                          disabled={isDeleting}
+                        >
+                            <Edit className="w-4 h-4" />
+                            <span className="sr-only">Edit</span>
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete the note:
-                            <br />
-                            <strong className="py-2 inline-block">{note.title}</strong>
-                            <br />
-                            All associated data (like embeddings) will also be deleted.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            className={cn(buttonVariants({ variant: 'destructive' }))}
-                            disabled={isDeleting}
-                            onClick={() => handleDeleteNote(note.id, note.title)}
-                          >
-                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Delete Note
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    {/* --- END REPLACEMENT --- */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors" disabled={isDeleting}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete the note:
+                                <br />
+                                <strong className="py-2 inline-block">{note.title}</strong>
+                                <br />
+                                All associated data will also be deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className={cn(buttonVariants({ variant: 'destructive' }))}
+                                disabled={isDeleting}
+                                onClick={() => handleDeleteNote(note.id, note.title)}
+                              >
+                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Delete Note
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
                 </CardFooter>
               </Card>
             </motion.div>
@@ -336,7 +353,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </motion.div>
       )}
 
-      {/* (Load More Button) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -348,7 +364,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
-      {/* (Generate Dialog) */}
       {isGeneratorOpen && (
         <GenerateNotesDialog
           isOpen={isGeneratorOpen}

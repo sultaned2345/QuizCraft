@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { FlashcardDeck, ApiResponse } from '@/types/database';
-import { Button, buttonVariants } from '@/components/ui/button'; // <-- Import buttonVariants
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -33,7 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-// --- 1. IMPORT ALERT DIALOG ---
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,15 +44,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-// ---
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play, ChevronDown, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play, ChevronDown, CheckCircle, Clock, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { cn } from '@/lib/utils'; // <-- Import cn
+import { cn } from '@/lib/utils';
 
-// (Interfaces and StudyQueueCard remain the same)
 interface DeckWithStats extends FlashcardDeck {
   cardCount: number;
   dueCount: number;
@@ -93,19 +90,18 @@ function StudyQueueCard({
     }
   };
   return (
-    <Card className="mb-8 bg-primary/10 border-primary/40">
+    <Card className="mb-8 bg-gradient-to-r from-primary/10 to-transparent border-primary/20 shadow-sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-primary">
+          <Layers className="w-5 h-5" />
           <span>Study Queue</span>
         </CardTitle>
-        <CardDescription>
-          You have <strong>{dueCount} flashcard{dueCount > 1 ? 's' : ''}</strong> due for
-          review.
+        <CardDescription className="text-foreground/80">
+          You have <strong>{dueCount} flashcard{dueCount > 1 ? 's' : ''}</strong> waiting for review.
         </CardDescription>
       </CardHeader>
       <CardFooter>
-        <Button className="w-full" onClick={handleStudyClick}>
+        <Button className="w-full md:w-auto" onClick={handleStudyClick}>
           <Play className="w-4 h-4 mr-2" />
           Start Review Session
         </Button>
@@ -132,7 +128,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingDeck, setEditingDeck] = useState<DeckWithStats | null>(null);
   const [editDeckTitle, setEditDeckTitle] = useState('');
-  // --- 2. ADD IS_DELETING STATE ---
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { session } = useAuth();
@@ -149,7 +144,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
   };
 
-  // (fetchMoreDecks, handleLoadMore, refreshFirstPage, handleCreateDeck, handleOpenEditDialog, handleEditDeck remain the same)
   const fetchMoreDecks = useCallback(async (page: number) => {
     if (!session || isLoadingMore || page > totalPages) return;
     setIsLoadingMore(true);
@@ -267,14 +261,13 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     }
   };
 
-  // --- 3. MODIFY handleDeleteDeck ---
   const handleDeleteDeck = async (deckId: string, deckTitle: string) => {
-    if (!session) return; // Removed confirm()
+    if (!session) return;
     
     const originalDecks = [...decks];
     setDecks((prevDecks) => prevDecks.filter((d) => d.id !== deckId));
     setUsage(prev => ({ ...prev, count: prev.count - 1 }));
-    setIsDeleting(true); // <-- Set loading state
+    setIsDeleting(true);
 
     try {
       const response = await fetch(`/api/decks/${deckId}`, {
@@ -288,19 +281,17 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
       toast({ title: 'Deck Deleted', description: `"${deckTitle}" removed.` });
     } catch (error: any) {
       toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
-      setDecks(originalDecks); // Rollback
-      setUsage(prev => ({ ...prev, count: prev.count + 1 })); // Rollback
+      setDecks(originalDecks);
+      setUsage(prev => ({ ...prev, count: prev.count + 1 }));
     } finally {
-      setIsDeleting(false); // <-- Unset loading state
+      setIsDeleting(false);
     }
   };
-  // ---
 
   return (
     <>
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
       
-      {/* (Header and Create Dialog remain the same) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Flashcard Decks</h1>
@@ -350,7 +341,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
-      {/* (Empty State and Deck Grid) */}
       {decks.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -369,112 +359,108 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         >
           {decks.map((deck) => (
             <motion.div key={deck.id} variants={itemVariants}>
-              <Card className="flex flex-col h-full">
-                <CardHeader>
-                  <Link href={`/flashcards/${deck.id}?mode=due`} className="hover:underline">
-                    <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
-                  </Link>
-                  <CardDescription className="text-xs pt-1">
-                    {deck.cardCount} Card{deck.cardCount !== 1 ? 's' : ''}
-                    {deck.cardCount > 0 && (
-                      <span className="text-muted-foreground/80">
-                        {' '}&bull; {deck.dueCount} Due &bull; {deck.newCount} New
-                      </span>
-                    )}
-                  </CardDescription>
+              <Card className="flex flex-col h-full hover:shadow-md transition-all duration-200 border-t-4 border-t-primary/80">
+                <CardHeader className="pb-3">
+                   <div className="flex justify-between items-start">
+                      <Link href={`/flashcards/${deck.id}?mode=due`} className="hover:underline flex-1 pr-2">
+                        <CardTitle className="text-lg truncate">{deck.title}</CardTitle>
+                      </Link>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                           <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2" disabled={isDeleting}>
+                             <Edit className="w-4 h-4 text-muted-foreground" />
+                           </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                           <DropdownMenuItem onClick={() => handleOpenEditDialog(deck)}>
+                             Edit Title
+                           </DropdownMenuItem>
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                 Delete Deck
+                               </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Deck?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete "<strong>{deck.title}</strong>" and all {deck.cardCount} cards inside it.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} onClick={() => handleDeleteDeck(deck.id, deck.title)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                           </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                   </div>
                 </CardHeader>
-                <CardContent className="flex-grow">
-                  {deck.cardCount > 0 && (
-                    <div>
-                      <Progress 
-                        value={(deck.dueCount / deck.cardCount) * 100} 
-                        className="h-2" 
-                        title={`${deck.dueCount} cards due`}
-                      />
-                    </div>
-                  )}
-                  {deck.cardCount === 0 && (
-                     <p className="text-sm text-muted-foreground italic">Deck is empty.</p>
-                  )}
+                
+                <CardContent className="flex-grow space-y-4">
+                  <div className="flex justify-between items-center text-sm">
+                     <span className="text-muted-foreground">Progress</span>
+                     <span className="font-medium">{deck.cardCount} cards</span>
+                  </div>
+                  <Progress 
+                    value={deck.cardCount > 0 ? (deck.dueCount / deck.cardCount) * 100 : 0} 
+                    className="h-2 bg-muted"
+                    indicatorClassName={cn(deck.dueCount > 0 ? "bg-orange-500" : "bg-primary")}
+                  />
+                  
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                     <div className="flex flex-col items-center p-2 rounded-lg bg-muted/30 border">
+                        <span className={cn("text-lg font-bold", deck.dueCount > 0 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground")}>
+                          {deck.dueCount}
+                        </span>
+                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Due</span>
+                     </div>
+                     <div className="flex flex-col items-center p-2 rounded-lg bg-muted/30 border">
+                        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                          {deck.newCount}
+                        </span>
+                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">New</span>
+                     </div>
+                  </div>
                 </CardContent>
-                <CardFooter className="flex justify-end gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" disabled={deck.cardCount === 0 || isDeleting}>
-                        <BookCopy className="w-4 h-4 mr-2" /> Study
-                        <ChevronDown className="w-4 h-4 ml-1" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/flashcards/${deck.id}?mode=due`}>
-                          <Clock className="w-4 h-4 mr-2" />
-                          Review Due ({deck.dueCount})
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/flashcards/${deck.id}?mode=new`}>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Learn New ({deck.newCount})
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/flashcards/${deck.id}?mode=cram`}>
-                          <Layers className="w-4 h-4 mr-2" />
-                          Cram All ({deck.cardCount})
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleOpenEditDialog(deck)}
-                    disabled={isDeleting} // <-- Disable on delete
-                  >
-                    <Edit className="w-4 h-4" />
-                    <span className="sr-only">Edit</span>
-                  </Button>
-                  {/* --- 4. REPLACE DELETE BUTTON --- */}
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                       <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled={isDeleting} // <-- Disable on delete
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span className="sr-only">Delete</span>
+                <CardFooter className="pt-0">
+                   {deck.cardCount > 0 ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button className="w-full" disabled={isDeleting}>
+                             <Play className="w-4 h-4 mr-2" />
+                             Study
+                             <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/flashcards/${deck.id}?mode=due`} className="justify-between">
+                              Review Due <Badge variant="secondary" className="ml-2 text-[10px]">{deck.dueCount}</Badge>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/flashcards/${deck.id}?mode=new`} className="justify-between">
+                              Learn New <Badge variant="secondary" className="ml-2 text-[10px]">{deck.newCount}</Badge>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/flashcards/${deck.id}?mode=cram`}>
+                              Cram All
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                   ) : (
+                      <Button variant="secondary" className="w-full" disabled>
+                        Empty Deck
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will permanently delete the deck:
-                          <br />
-                          <strong className="py-2 inline-block">{deck.title}</strong>
-                          <br />
-                          All {deck.cardCount} flashcards inside it will also be deleted.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          className={cn(buttonVariants({ variant: 'destructive' }))}
-                          disabled={isDeleting}
-                          onClick={() => handleDeleteDeck(deck.id, deck.title)}
-                        >
-                          {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Delete Deck
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                  {/* --- END REPLACEMENT --- */}
+                   )}
                 </CardFooter>
               </Card>
             </motion.div>
@@ -482,7 +468,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </motion.div>
       )}
 
-      {/* (Load More and Edit Dialog remain the same) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
