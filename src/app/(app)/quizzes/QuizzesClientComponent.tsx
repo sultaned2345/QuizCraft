@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Layers, History, Play, RefreshCw, Calendar, CheckCircle2 } from 'lucide-react';
+import { MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, Combine, Play, RefreshCw, Calendar } from 'lucide-react';
 import { Quiz, QuizAttempt, ApiResponse } from '@/types/database';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -103,7 +103,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
 
   const fetchMoreQuizzes = useCallback(async (page: number) => {
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
-  }, [user, session, toast, quizzesPerPage, isLoadingMore, totalPages]);
+  }, [toast]);
 
   const handleLoadMore = () => {
     console.log("Load More clicked. Requires /api/quizzes endpoint.");
@@ -111,7 +111,10 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   };
 
   const handleCopyShareLink = (shareLink: string | null) => {
-    if (!shareLink) { toast({ title: "No share link", description: "This quiz is not public.", variant: "destructive" }); return; };
+    if (!shareLink) { 
+      toast({ title: "No share link", description: "This quiz is not public.", variant: "destructive" }); 
+      return; 
+    }
     const shareUrl = `${window.location.origin}/quiz/${shareLink}`;
     navigator.clipboard.writeText(shareUrl);
     toast({ title: "Link copied!", description: "Share link copied." });
@@ -188,8 +191,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         description: `Successfully created "${result.data.title}".`,
       });
       refreshDashboard();
-    } catch (error: any)
-{
+    } catch (error: any) {
       toast({ title: "Combine Failed", description: error.message, variant: "destructive" });
       setIsCombining(false);
     }
@@ -257,8 +259,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
                   )}
                 >
                   <CardHeader className="relative pb-2">
-                    {/* Background decoration */}
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
                       <FileQuestion className="w-16 h-16 text-primary rotate-12" />
                     </div>
 
