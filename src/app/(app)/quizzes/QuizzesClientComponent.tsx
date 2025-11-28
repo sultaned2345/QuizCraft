@@ -61,7 +61,8 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const [totalQuizzes, setTotalQuizzes] = useState(initialData.totalQuizCount);
   const [currentPage, setCurrentPage] = useState(initialData.quizzesCurrentPage);
   const [totalPages, setTotalPages] = useState(initialData.quizzesTotalPages);
-  const quizzesPerPage = 9;
+  // quizzesPerPage is used for logic but not strictly needed for rendering; keeping for reference if needed
+  // const quizzesPerPage = 9; 
   const [recentAttempts, setRecentAttempts] = useState(initialData.recentAttempts);
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([]);
   const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
@@ -69,7 +70,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const [isCombining, setIsCombining] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { session } = useAuth();
+  const { user, session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -101,11 +102,8 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
     setIsDeleting(false);
   };
 
-  const fetchMoreQuizzes = useCallback(async (page: number) => {
-    toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
-  }, [toast]);
-
   const handleLoadMore = () => {
+    // Placeholder for load more logic
     console.log("Load More clicked. Requires /api/quizzes endpoint.");
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
   };
@@ -182,6 +180,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
           title: newCombineTitle.trim(),
         }),
       });
+      // We assume ApiResponse can be generic, if not, remove <Quiz>
       const result: ApiResponse<Quiz> = await response.json();
       if (!response.ok || !result.success || !result.data) {
         throw new Error(result.error || 'Failed to combine quizzes.');
