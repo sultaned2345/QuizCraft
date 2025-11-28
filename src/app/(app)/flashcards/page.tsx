@@ -1,43 +1,38 @@
 // src/app/(app)/flashcards/page.tsx
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
-import { FlashcardsClientComponent } from './FlashcardsClientComponent'; // Import client component
+import { FlashcardsClientComponent } from './FlashcardsClientComponent';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/getServerSession'; // Ensure this helper exists and works
+import { getServerSession } from '@/lib/getServerSession';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
-import { FlashcardDeck } from '@/types/database'; // Import type
+import { FlashcardDeck } from '@/types/database';
 
-// --- 1. DEFINE THE DeckWithStats type here ---
+// 1. Define strict types for the dashboard data
 interface DeckWithStats extends FlashcardDeck {
   cardCount: number;
   dueCount: number;
   newCount: number;
 }
 
-// Define expected response structure for pagination
 interface PaginatedDecksData {
-  decks: DeckWithStats[]; // Use the new type
+  decks: DeckWithStats[];
   count: number;
-  limit: number | typeof Infinity;
+  limit: number; // Changed from 'number | typeof Infinity' to just 'number'
   totalPages: number;
   currentPage: number;
 }
-// --- END 1 ---
 
-// --- NEW ---
-// Define the study queue data structure
 interface StudyQueueData {
   dueCount: number;
   firstDueDeckId: string | null;
 }
 
-// Combine all initial data into one prop
 interface FlashcardsPageData extends PaginatedDecksData, StudyQueueData {}
 
-// --- 2. UPDATE getInitialDecks FUNCTION ---
+// 2. Data fetching with safe serialization
 async function getInitialDecks(userId: string, page: number = 1, limit: number = 9): Promise<PaginatedDecksData> {
   const skip = (page - 1) * limit;
-  const now = new Date(); // Use for 'due' and 'new' calculation
+  const now = new Date();
 
   try {
     const userProfile = await prisma.profiles.findUnique({
@@ -47,7 +42,7 @@ async function getInitialDecks(userId: string, page: number = 1, limit: number =
     const plan = userProfile?.subscription_plan === 'pro' ? 'pro' : 'free';
     const usageLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_FLASHCARD_DECKS;
 
-    // --- Use the more complex query from /api/decks/route.ts ---
+    // Use raw query for performance, but we must manually parse the result
     const decksData: any[] = await prisma.$queryRaw`
         SELECT
             d.id,
@@ -75,18 +70,18 @@ async function getInitialDecks(userId: string, page: number = 1, limit: number =
     const totalCount = await prisma.flashcard_decks.count({
       where: { user_id: userId },
     });
-    // --- End complex query ---
 
-    // Serialize dates and ensure types
+    // 3. Serialize Data (BigInt -> Number, Date -> String)
     const decks: DeckWithStats[] = decksData.map((deck) => ({
       id: deck.id,
       user_id: deck.user_id,
       title: deck.title,
-      created_at: deck.created_at?.toISOString() || '',
-      updated_at: deck.updated_at?.toISOString() || '',
-      cardCount: deck.cardCount || 0,
-      dueCount: deck.dueCount || 0,
-      newCount: deck.newCount || 0,
+      created_at: deck.created_at ? new Date(deck.created_at).toISOString() : '',
+      updated_at: deck.updated_at ? new Date(deck.updated_at).toISOString() : '',
+      // Explicitly convert counts to Number to avoid serialization errors
+      cardCount: Number(deck.cardCount || 0),
+      dueCount: Number(deck.dueCount || 0),
+      newCount: Number(deck.newCount || 0),
     }));
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -109,12 +104,9 @@ async function getInitialDecks(userId: string, page: number = 1, limit: number =
     };
   }
 }
-// --- END 2 ---
 
-// --- NEW: Server-Side Function to get Study Queue (Unchanged) ---
 async function getStudyQueueData(userId: string): Promise<StudyQueueData> {
   try {
-    // Find the oldest due card to get its deck ID
     const oldestDueCard = await prisma.flashcards.findFirst({
       where: {
         review_at: { lte: new Date() },
@@ -124,7 +116,6 @@ async function getStudyQueueData(userId: string): Promise<StudyQueueData> {
       select: { deck_id: true },
     });
 
-    // Get the total count of all due cards
     const dueCount = await prisma.flashcards.count({
       where: {
         review_at: { lte: new Date() },
@@ -142,22 +133,18 @@ async function getStudyQueueData(userId: string): Promise<StudyQueueData> {
   }
 }
 
-// --- The Page Component (Server Component) (Unchanged) ---
 export default async function FlashcardsPage() {
   const session = await getServerSession();
 
   if (!session?.user) {
-    // Handle redirect or show login prompt
-    return <div>Please log in.</div>; // Placeholder
+    return <div>Please log in.</div>; 
   }
 
-  // Fetch all initial data in parallel
   const [initialDecksData, studyQueueData] = await Promise.all([
-    getInitialDecks(session.user.id, 1, 9), // Page 1, 9 items
+    getInitialDecks(session.user.id, 1, 9),
     getStudyQueueData(session.user.id),
   ]);
 
-  // Combine data to pass as a single prop
   const initialData: FlashcardsPageData = {
     ...initialDecksData,
     ...studyQueueData,
@@ -171,7 +158,6 @@ export default async function FlashcardsPage() {
         </div>
       }
     >
-      {/* Render the Client Component */}
       <FlashcardsClientComponent initialData={initialData} />
     </Suspense>
   );
