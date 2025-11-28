@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  Loader2, Upload, FileText, Trash2, Eye, FileQuestion, StickyNote, Layers, 
-  AlertCircle, CheckCircle, MoreVertical, File as FileIcon // <-- FIX: Alias 'File' to avoid conflict
+  Loader2, Upload, FileText, Trash2, Eye, HelpCircle, Layers, 
+  AlertCircle, CheckCircle, MoreVertical 
+  // Removed File, FileQuestion, StickyNote to prevent Error #130
 } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
@@ -58,7 +59,7 @@ export function DocumentsClientComponent() {
   const [usage, setUsage] = useState<{ count: number | undefined; limit: number | typeof Infinity | undefined }>({ count: 0, limit: Infinity });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  // FIX: 'File' here now correctly refers to the global DOM File object, not the icon
+  // Use global File type
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState<{ type: GenerationType; docId: string } | null>(null);
   const [recentlyQueued, setRecentlyQueued] = useState<Set<string>>(new Set());
@@ -231,15 +232,15 @@ export function DocumentsClientComponent() {
   const handleGenerateFlashcards = (docId: string) => handleStartGenerationJob(docId, 'flashcard', 'Flashcard Deck');
 
   // Helper to determine file visuals
-  // FIX: Using FileText and FileIcon to guarantee imports exist
+  // Safe Fallbacks: Use FileText for unknown or older types
   const getFileVisuals = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase();
     switch(ext) {
       case 'pdf': return { color: 'text-red-500 bg-red-50 dark:bg-red-950/30', label: 'PDF', icon: FileText };
       case 'docx': return { color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30', label: 'DOCX', icon: FileText }; 
       case 'pptx': return { color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30', label: 'PPTX', icon: Layers };
-      case 'txt': return { color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30', label: 'TXT', icon: FileIcon };
-      default: return { color: 'text-gray-500 bg-gray-50 dark:bg-gray-950/30', label: ext?.toUpperCase() || 'FILE', icon: FileIcon };
+      case 'txt': return { color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30', label: 'TXT', icon: FileText };
+      default: return { color: 'text-gray-500 bg-gray-50 dark:bg-gray-950/30', label: ext?.toUpperCase() || 'FILE', icon: FileText };
     }
   };
 
@@ -419,7 +420,7 @@ export function DocumentsClientComponent() {
                                     onClick={() => handleGenerateQuiz(doc.id)} 
                                     disabled={isGenerating?.docId === doc.id || isQuizQueued}
                                 >
-                                    {isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileQuestion className="h-4 w-4 text-purple-500" />}
+                                    {isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <HelpCircle className="h-4 w-4 text-purple-500" />}
                                 </Button>
                                 <Button 
                                     variant="ghost" size="icon" className="h-8 w-8"
@@ -427,7 +428,7 @@ export function DocumentsClientComponent() {
                                     onClick={() => handleGenerateNotes(doc.id)}
                                     disabled={isGenerating?.docId === doc.id || isNoteQueued}
                                 >
-                                    {isGenerating?.type === 'note' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="h-4 w-4 text-amber-500" />}
+                                    {isGenerating?.type === 'note' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileText className="h-4 w-4 text-amber-500" />}
                                 </Button>
                                 <Button 
                                     variant="ghost" size="icon" className="h-8 w-8"

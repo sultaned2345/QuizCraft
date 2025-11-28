@@ -7,7 +7,7 @@ import {
   Loader2,
   ArrowLeft,
   FileText,
-  Sparkles,
+  Star, // <-- Replaced Sparkles
   Target,
   Zap,
   ChevronRight,
@@ -15,9 +15,8 @@ import {
   MoreVertical,
   Download,
   Share2,
-  BrainCircuit,
   BookOpen,
-  ListChecks
+  HelpCircle // <-- Replaced FileQuestion
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
@@ -119,7 +118,7 @@ function SelectionMenu({
           onClick={() => onAction('explain')}
           className="h-7 px-2 text-xs font-medium"
         >
-          <Sparkles className="w-3.5 h-3.5 mr-1.5 text-sky-500" /> Explain
+          <Star className="w-3.5 h-3.5 mr-1.5 text-sky-500" /> Explain
         </Button>
         <div className="w-px h-4 bg-border" />
         <Button
@@ -369,7 +368,7 @@ export default function DocumentViewPage() {
                     value="analysis"
                     className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
                   >
-                    <BrainCircuit className="w-3.5 h-3.5" /> Smart Analysis
+                    <Star className="w-3.5 h-3.5" /> Smart Analysis
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -414,7 +413,7 @@ export default function DocumentViewPage() {
                     {/* Header Section */}
                     <div className="flex flex-col gap-2">
                       <h2 className="text-2xl font-bold flex items-center gap-2 text-foreground">
-                        <Sparkles className="w-6 h-6 text-primary" /> 
+                        <Star className="w-6 h-6 text-primary" /> 
                         Document Intelligence
                       </h2>
                       <p className="text-muted-foreground">
@@ -478,7 +477,7 @@ export default function DocumentViewPage() {
                         {/* 3. Interactive Practice Questions */}
                         <div>
                           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <ListChecks className="w-5 h-5 text-blue-500" /> Practice Questions
+                            <HelpCircle className="w-5 h-5 text-blue-500" /> Practice Questions
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {(insightsData.data.examQuestions || []).map((q, i) => (
