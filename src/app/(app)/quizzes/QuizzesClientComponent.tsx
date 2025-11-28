@@ -11,8 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  MoreHorizontal, Copy, Edit, Trash2, Plus, FileQuestion, Loader2, 
-  Combine, Layers, History, Play, RefreshCw, Trophy, Brain 
+  MoreHorizontal, Edit, Trash2, Plus, FileQuestion, Loader2, 
+  Combine, History, Play, RefreshCw, Trophy, Brain 
 } from 'lucide-react';
 import { Quiz, QuizAttempt, ApiResponse } from '@/types/database';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -42,7 +42,6 @@ import { cn } from '@/lib/utils';
 import { QuizPerformanceChart } from '@/components/dashboard/QuizPerformanceChart';
 import { motion } from 'framer-motion';
 import { PersonalizedStudyPlan } from '@/components/dashboard/PersonalizedStudyPlan';
-
 
 // ... (Interface definitions remain the same) ...
 interface DashboardQuiz extends Omit<Quiz, 'questions' | 'user_id' | 'immediate_feedback'> {
@@ -114,13 +113,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const handleLoadMore = () => {
     console.log("Load More clicked. Requires /api/quizzes endpoint.");
     toast({ title: "Load More", description: "This requires a dedicated API endpoint." });
-  };
-
-  const handleCopyShareLink = (shareLink: string | null) => {
-    if (!shareLink) { toast({ title: "No share link", description: "This quiz is not public.", variant: "destructive" }); return; };
-    const shareUrl = `${window.location.origin}/quiz/${shareLink}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast({ title: "Link copied!", description: "Share link copied." });
   };
 
   const handleDeleteQuiz = async (quizId: string) => {
@@ -257,8 +249,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
           animate="visible"
         >
           {quizzes.map((quiz) => {
-            // Find the most recent attempt for this specific quiz
-            // (Assuming recentAttempts is sorted by date desc, or we just take the first one we find)
             const latestAttempt = recentAttempts.find(a => a.quiz_id === quiz.id);
             const hasAttempted = !!latestAttempt;
 
@@ -320,10 +310,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
                               <Edit className="w-4 h-4 mr-2" />
                               Edit Quiz
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopyShareLink(quiz.share_link)}>
-                              <Copy className="w-4 h-4 mr-2" />
-                              Copy Link
-                            </DropdownMenuItem>
+                            {/* Copy Link REMOVED here */}
                             <AlertDialogTrigger asChild>
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -363,7 +350,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
                   </CardHeader>
 
                   <CardContent className="flex-grow z-10 pt-0">
-                    {/* --- GAMIFIED STATS DISPLAY --- */}
                     <div className="mt-2">
                        {hasAttempted ? (
                         <div className={cn(
@@ -385,9 +371,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
                     </div>
                   </CardContent>
 
-                  {/* --- TICKET STUB DIVIDER --- */}
                   <div className="relative w-full h-px border-t-2 border-dashed border-muted my-0" />
-                  {/* Pseudo-elements for ticket notches could go here if using pure CSS, but dashed border works well for now */}
 
                   <CardFooter className="flex justify-between items-center text-sm pt-4 z-10 bg-muted/5">
                     <Badge variant={quiz.is_public ? 'outline' : 'secondary'} className="text-xs font-normal">
@@ -432,20 +416,18 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         </div>
       )}
       <Dialog open={isCombineDialogOpen} onOpenChange={setIsCombineDialogOpen}>
+        {/* ... (Dialog content remains the same) ... */}
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Combine Quizzes</DialogTitle>
             <DialogDescription>
               Create a new quiz from the {selectedQuizIds.length} quizzes you selected.
-              Please provide a title for the new combined quiz.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCombineQuizzes}>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="combine-title" className="text-right">
-                  New Title
-                </Label>
+                <Label htmlFor="combine-title" className="text-right">New Title</Label>
                 <Input
                   id="combine-title"
                   value={newCombineTitle}
@@ -458,9 +440,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost" disabled={isCombining}>
-                  Cancel
-                </Button>
+                <Button type="button" variant="ghost" disabled={isCombining}>Cancel</Button>
               </DialogClose>
               <Button type="submit" disabled={isCombining || !newCombineTitle.trim()}>
                 {isCombining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

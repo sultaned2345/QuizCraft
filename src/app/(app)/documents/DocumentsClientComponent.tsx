@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Loader2, Upload, FileText, Trash2, Eye, FileQuestion, StickyNote, Layers, 
-  AlertCircle, CheckCircle, MoreVertical, File, FileType 
+  AlertCircle, CheckCircle, MoreVertical, File as FileIcon // <-- FIX: Alias 'File' to avoid conflict
 } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
@@ -58,6 +58,7 @@ export function DocumentsClientComponent() {
   const [usage, setUsage] = useState<{ count: number | undefined; limit: number | typeof Infinity | undefined }>({ count: 0, limit: Infinity });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  // FIX: 'File' here now correctly refers to the global DOM File object, not the icon
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState<{ type: GenerationType; docId: string } | null>(null);
   const [recentlyQueued, setRecentlyQueued] = useState<Set<string>>(new Set());
@@ -230,14 +231,15 @@ export function DocumentsClientComponent() {
   const handleGenerateFlashcards = (docId: string) => handleStartGenerationJob(docId, 'flashcard', 'Flashcard Deck');
 
   // Helper to determine file visuals
+  // FIX: Using FileText and FileIcon to guarantee imports exist
   const getFileVisuals = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase();
     switch(ext) {
       case 'pdf': return { color: 'text-red-500 bg-red-50 dark:bg-red-950/30', label: 'PDF', icon: FileText };
-      case 'docx': return { color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30', label: 'DOCX', icon: FileType };
+      case 'docx': return { color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30', label: 'DOCX', icon: FileText }; 
       case 'pptx': return { color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30', label: 'PPTX', icon: Layers };
-      case 'txt': return { color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30', label: 'TXT', icon: File };
-      default: return { color: 'text-gray-500 bg-gray-50 dark:bg-gray-950/30', label: ext?.toUpperCase() || 'FILE', icon: File };
+      case 'txt': return { color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30', label: 'TXT', icon: FileIcon };
+      default: return { color: 'text-gray-500 bg-gray-50 dark:bg-gray-950/30', label: ext?.toUpperCase() || 'FILE', icon: FileIcon };
     }
   };
 

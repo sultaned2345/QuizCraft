@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X, 
-  StickyNote, Calendar, MoreVertical, ArrowUpRight, Book 
+  StickyNote, Calendar, MoreVertical, ArrowUpRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -190,7 +190,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
     });
   }, [notes, searchTerm, selectedTag]);
 
-  // Helper for generating consistent colors based on tags
   const getTagColor = (tag: string) => {
     const colors = [
       "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
@@ -206,7 +205,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
 
   return (
     <>
-      {/* (Header Section) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
          <div>
           <h1 className="text-3xl font-bold">My Notes</h1>
@@ -226,7 +224,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       </div>
 
-      {/* (Search Bar & Filters) */}
       <div className="mb-6 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -290,12 +287,10 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                 className={cn(
                     "flex flex-col h-full relative group transition-all duration-300",
                     "hover:-translate-y-1 hover:shadow-lg",
-                    "border-l-4 border-l-amber-400 dark:border-l-amber-600" // Notebook accent
+                    "border-l-4 border-l-amber-400 dark:border-l-amber-600"
                 )}
-                // Clicking the card body navigates (improves UX)
                 onClick={() => router.push(`/notes/${note.id}`)}
               >
-                {/* Background Decoration (Binder Holes or Watermark) */}
                 <div className="absolute top-4 left-0 w-4 flex flex-col gap-2 items-center opacity-20 pointer-events-none">
                      <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
                      <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
@@ -318,50 +313,51 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                             </CardTitle>
                         </div>
 
-                        {/* Actions Dropdown (Stop propagation to prevent navigating when clicking menu) */}
+                        {/* Actions Dropdown */}
                         <div onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-background/80">
-                                        <MoreVertical className="w-4 h-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => router.push(`/notes/${note.id}`)}>
-                                        <Edit className="w-4 h-4 mr-2" /> Edit Note
-                                    </DropdownMenuItem>
-                                    <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem 
-                                            className="text-destructive focus:text-destructive" 
-                                            onSelect={(e) => e.preventDefault()} // Prevent closing for alert dialog
-                                        >
-                                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                            {/* FIX: AlertDialog now wraps DropdownMenu to provide context for Trigger */}
+                            <AlertDialog>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-background/80">
+                                            <MoreVertical className="w-4 h-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => router.push(`/notes/${note.id}`)}>
+                                            <Edit className="w-4 h-4 mr-2" /> Edit Note
                                         </DropdownMenuItem>
-                                    </AlertDialogTrigger>
-                                </DropdownMenuContent>
-                                {/* Nested Alert Dialog for Delete */}
-                                <AlertDialog>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This will permanently delete the note <strong>"{note.title}"</strong>.
-                                        </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction
-                                            className={cn(buttonVariants({ variant: 'destructive' }))}
-                                            disabled={isDeleting}
-                                            onClick={() => handleDeleteNote(note.id, note.title)}
-                                        >
-                                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                            Delete Note
-                                        </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            </DropdownMenu>
+                                        <AlertDialogTrigger asChild>
+                                            <DropdownMenuItem 
+                                                className="text-destructive focus:text-destructive" 
+                                                onSelect={(e) => e.preventDefault()} 
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                            </DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will permanently delete the note <strong>"{note.title}"</strong>.
+                                    </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        className={cn(buttonVariants({ variant: 'destructive' }))}
+                                        disabled={isDeleting}
+                                        onClick={() => handleDeleteNote(note.id, note.title)}
+                                    >
+                                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Delete Note
+                                    </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </div>
                    </div>
                 </CardHeader>
@@ -406,7 +402,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </motion.div>
       )}
 
-      {/* (Load More Button) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -418,7 +413,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
-      {/* (Generate Dialog) */}
       {isGeneratorOpen && (
         <GenerateNotesDialog
           isOpen={isGeneratorOpen}

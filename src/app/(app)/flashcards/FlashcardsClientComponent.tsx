@@ -32,6 +32,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -46,7 +48,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  Loader2, Plus, Layers, Edit, Trash2, BookCopy, Play, 
+  Loader2, Plus, Layers, Edit, Trash2, Play, 
   ChevronDown, CheckCircle, Clock, MoreVertical, GraduationCap 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -302,7 +304,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
     <>
       <StudyQueueCard dueCount={dueCount} firstDueDeckId={firstDueDeckId} />
       
-      {/* (Header) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">My Flashcard Decks</h1>
@@ -352,7 +353,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </Dialog>
       </div>
 
-      {/* (Empty State) */}
       {decks.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <Layers className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -364,7 +364,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </div>
       ) : (
         <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" // Increased gap for stack effect
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -376,12 +376,10 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
              return (
             <motion.div key={deck.id} variants={itemVariants} className="group relative">
               
-              {/* --- STACK EFFECT BACKGROUND --- */}
               <div className="absolute top-2 left-2 w-full h-full bg-slate-200 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 -z-10 transition-transform duration-300 group-hover:rotate-3 group-hover:translate-x-1 group-hover:translate-y-1" />
               
               <Card className="flex flex-col h-full overflow-visible transition-all duration-300 hover:-translate-y-1 bg-card border-blue-100 dark:border-blue-900 shadow-sm hover:shadow-md">
                 
-                {/* --- NOTIFICATION BADGE --- */}
                 {deck.dueCount > 0 && (
                   <div className="absolute -top-2 -right-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-background animate-pulse">
                     {deck.dueCount}
@@ -389,7 +387,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                 )}
 
                 <CardHeader className="pb-2 relative">
-                   {/* Watermark Icon */}
                    <div className="absolute right-4 top-4 opacity-[0.05] pointer-events-none">
                      <GraduationCap className="w-24 h-24" />
                    </div>
@@ -413,7 +410,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
 
                 <CardContent className="flex-grow pt-4">
                   <div className="space-y-3">
-                     {/* Progress Stat */}
                      <div className="flex justify-between items-end text-sm">
                          <span className="text-muted-foreground text-xs">Mastery</span>
                          <span className="font-bold text-blue-600 dark:text-blue-400">{Math.round(progress)}%</span>
@@ -424,7 +420,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                         indicatorClassName="bg-blue-500"
                       />
                      
-                     {/* Mini Stats Grid */}
                      <div className="grid grid-cols-2 gap-2 mt-4">
                         <div className="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg text-center">
                             <div className="text-xs text-muted-foreground">Due</div>
@@ -439,25 +434,26 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                 </CardContent>
 
                 <CardFooter className="pt-2 pb-4 flex justify-between items-center gap-2 border-t bg-slate-50/50 dark:bg-slate-900/20">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => handleOpenEditDialog(deck)}>
-                            <Edit className="w-4 h-4 mr-2" /> Rename
-                        </DropdownMenuItem>
-                        <AlertDialogTrigger asChild>
-                             <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                             </DropdownMenuItem>
-                        </AlertDialogTrigger>
-                    </DropdownMenuContent>
-                    
-                     {/* Nested Delete Dialog (Needs to be outside Dropdown theoretically, but works with preventDefault) */}
-                    <AlertDialog>
+                  {/* WRAPPED with AlertDialog to fix DialogTrigger error */}
+                  <AlertDialog>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => handleOpenEditDialog(deck)}>
+                              <Edit className="w-4 h-4 mr-2" /> Rename
+                          </DropdownMenuItem>
+                          <AlertDialogTrigger asChild>
+                              <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+                                  <Trash2 className="w-4 h-4 mr-2" /> Delete
+                              </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -478,41 +474,49 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  </DropdownMenu>
 
-                  <div className="flex gap-2">
-                       {/* Quick Actions Dropdown */}
-                       <DropdownMenu>
-                           <DropdownMenuTrigger asChild>
-                               <Button variant="outline" size="sm" disabled={deck.cardCount === 0} className="h-8">
-                                   Options <ChevronDown className="w-3 h-3 ml-1" />
-                               </Button>
-                           </DropdownMenuTrigger>
-                           <DropdownMenuContent align="end">
-                                <DropdownMenuItem asChild>
-                                    <Link href={`/flashcards/${deck.id}?mode=new`}>
-                                    <CheckCircle className="w-4 h-4 mr-2" /> Learn New ({deck.newCount})
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href={`/flashcards/${deck.id}?mode=cram`}>
-                                    <Layers className="w-4 h-4 mr-2" /> Cram All ({deck.cardCount})
-                                    </Link>
-                                </DropdownMenuItem>
-                           </DropdownMenuContent>
-                       </DropdownMenu>
-
+                  {/* CONSOLIDATED STUDY ACTIONS */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button 
                         size="sm" 
                         disabled={deck.cardCount === 0} 
                         className={cn("h-8 shadow-sm", deck.dueCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "")}
-                        asChild
                       >
-                         <Link href={`/flashcards/${deck.id}?mode=due`}>
-                            Study
-                         </Link>
+                         <Play className="w-3.5 h-3.5 mr-2 fill-current" />
+                         Start Session
+                         <ChevronDown className="w-3 h-3 ml-1 opacity-70" />
                       </Button>
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Choose Mode</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      
+                      <DropdownMenuItem asChild>
+                         <Link href={`/flashcards/${deck.id}?mode=due`} className="flex items-center justify-between cursor-pointer">
+                            <span className="flex items-center"><Clock className="w-4 h-4 mr-2 text-red-500" /> Review Due</span>
+                            <span className="text-xs text-muted-foreground font-mono">{deck.dueCount}</span>
+                         </Link>
+                      </DropdownMenuItem>
+                      
+                      <DropdownMenuItem asChild>
+                        <Link href={`/flashcards/${deck.id}?mode=new`} className="flex items-center justify-between cursor-pointer">
+                            <span className="flex items-center"><CheckCircle className="w-4 h-4 mr-2 text-blue-500" /> Learn New</span>
+                            <span className="text-xs text-muted-foreground font-mono">{deck.newCount}</span>
+                         </Link>
+                      </DropdownMenuItem>
+                      
+                      <DropdownMenuSeparator />
+                      
+                      <DropdownMenuItem asChild>
+                        <Link href={`/flashcards/${deck.id}?mode=cram`} className="flex items-center justify-between cursor-pointer">
+                           <span className="flex items-center"><Layers className="w-4 h-4 mr-2 text-orange-500" /> Cram All</span>
+                           <span className="text-xs text-muted-foreground font-mono">{deck.cardCount}</span>
+                         </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
                 </CardFooter>
               </Card>
             </motion.div>
@@ -531,6 +535,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           </p>
         </div>
       )}
+      {/* ... Edit Dialog Code ... */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
          <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
