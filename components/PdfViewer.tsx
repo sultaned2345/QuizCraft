@@ -62,7 +62,8 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
            textLayerRef.current.style.height = `${viewport.height}px`;
            textLayerRef.current.style.width = `${viewport.width}px`;
            textLayerRef.current.innerHTML = '';
-           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+           // Ensure highlight color matches globals.css
+           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(59, 130, 246, 0.3)');
 
            pdfjs.renderTextLayer({
             textContentSource: textContent,
@@ -97,7 +98,14 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
       style={{ width: width, minHeight: width * aspectRatio }}
     >
       <canvas ref={canvasRef} className="block" />
-      <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
+      {/* FIX: Added 'z-10' here. 
+          This forces the text layer to sit ON TOP of the canvas so you can select it. 
+      */}
+      <div 
+        ref={textLayerRef} 
+        className="textLayer absolute inset-0 z-10 mix-blend-multiply" 
+        onMouseUpCapture={onTextSelect} 
+      />
     </div>
   );
 }
@@ -115,6 +123,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
     const updateWidth = () => {
       if (containerRef.current) {
+        // Subtract padding (e.g., 32px for py-8 px-4)
         setContainerWidth(containerRef.current.clientWidth - 48);
       }
     };
@@ -147,7 +156,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   if (isLoading) {
     return (
         <div className="flex h-full items-center justify-center text-primary">
-            {/* Standard SVG Spinner */}
+            {/* Standard SVG Spinner to avoid Error #130 */}
             <svg className="animate-spin h-8 w-8 mr-3" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -173,7 +182,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        {/* Replaced ScrollArea with standard div overflow */}
+        {/* Standard div for scrolling (Fixes Error #130) */}
         <div className="flex-1 w-full overflow-y-auto" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
                 {containerWidth > 0 && pages.map((pageNum) => (
