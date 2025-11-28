@@ -69,7 +69,7 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
   const [isCombining, setIsCombining] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { user, session } = useAuth();
+  const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
