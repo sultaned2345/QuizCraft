@@ -3,11 +3,7 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
-import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { FixedSizeList as List, ListChildComponentProps, areEqual } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
@@ -20,115 +16,116 @@ interface PdfViewerProps {
   className?: string;
 }
 
-// Data passed to every row
-interface RowData {
-  pdfDoc: pdfjs.PDFDocumentProxy;
+interface PdfPageProps {
+  doc: pdfjs.PDFDocumentProxy;
+  pageNum: number;
   width: number;
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
-// --- The Row Component (One Page) ---
-// We use memoization to prevent unnecessary re-renders of pages
-const PdfPageRow = React.memo(({ index, style, data }: ListChildComponentProps<RowData>) => {
-  const { pdfDoc, width, onTextSelect } = data;
-  const pageNum = index + 1; // 0-based index to 1-based page number
-  
+function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
-  const [isRendered, setIsRendered] = React.useState(false);
+  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
   React.useEffect(() => {
-    let active = true;
+    let isMounted = true;
+    doc.getPage(pageNum).then((p) => {
+      if (isMounted) setPage(p);
+    }).catch(console.error);
+    return () => { isMounted = false; };
+  }, [doc, pageNum]);
+
+  React.useEffect(() => {
+    if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
+
+    const unscaledViewport = page.getViewport({ scale: 1 });
+    const scale = width / unscaledViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
     let renderTask: any = null;
 
-    const renderPage = async () => {
+    const render = async () => {
       try {
-        const page = await pdfDoc.getPage(pageNum);
-        if (!active) return;
-
-        // Calculate scale to fit width
-        const viewportUnscaled = page.getViewport({ scale: 1 });
-        const scale = width / viewportUnscaled.width;
-        const viewport = page.getViewport({ scale });
-
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const context = canvas.getContext('2d');
-          if (context) {
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            // Render PDF to Canvas
-            renderTask = page.render({ canvasContext: context, viewport });
-            await renderTask.promise;
-          }
-        }
-
-        if (!active) return;
-
-        // Render Text Layer (for selection)
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+        
         const textContent = await page.getTextContent();
-        if (textLayerRef.current && active) {
-          textLayerRef.current.style.height = `${viewport.height}px`;
-          textLayerRef.current.style.width = `${viewport.width}px`;
-          textLayerRef.current.innerHTML = '';
-          textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
-          
-          pdfjs.renderTextLayer({
+        if (textLayerRef.current) {
+           textLayerRef.current.style.height = `${viewport.height}px`;
+           textLayerRef.current.style.width = `${viewport.width}px`;
+           textLayerRef.current.innerHTML = '';
+           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+
+           pdfjs.renderTextLayer({
             textContentSource: textContent,
             container: textLayerRef.current,
             viewport: viewport,
             textDivs: [],
-          });
-          setIsRendered(true);
+           });
         }
-
-      } catch (error: any) {
-        if (error.name !== 'RenderingCancelledException') {
-          console.error(`Error rendering page ${pageNum}:`, error);
+      } catch (err: any) {
+        if (err.name !== 'RenderingCancelledException') {
+            console.error("Error rendering PDF page:", err);
         }
       }
     };
 
-    renderPage();
+    render();
 
     return () => {
-      active = false;
       if (renderTask) {
         renderTask.cancel();
       }
     };
-  }, [pdfDoc, pageNum, width]);
+  }, [page, width]);
 
+  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
+
+  const aspectRatio = page.view[3] / page.view[2];
+  
   return (
-    <div style={style} className="flex justify-center bg-zinc-100 dark:bg-zinc-900/50 pb-4 px-4">
-      <div 
-        className={cn("relative bg-white shadow-md transition-opacity duration-200", isRendered ? "opacity-100" : "opacity-50")}
-        style={{ width: width, height: style.height as number - 16 }} // Subtract padding-bottom
-      >
-        {!isRendered && (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/20">
-             <Loader2 className="w-8 h-8 animate-spin" />
-          </div>
-        )}
-        <canvas ref={canvasRef} className="block" />
-        <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
-      </div>
+    <div
+      className="relative shadow-md mb-4 bg-white"
+      style={{ width: width, minHeight: width * aspectRatio }}
+    >
+      <canvas ref={canvasRef} className="block" />
+      <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
     </div>
   );
-}, areEqual);
+}
 
-PdfPageRow.displayName = 'PdfPageRow';
-
-
-// --- Main Component ---
 export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [pageAspectRatio, setPageAspectRatio] = React.useState<number>(1.414); // Default to A4
+  
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
-  // 1. Load Document & Get Metadata
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth - 48);
+      }
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [isLoading]);
+
   React.useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true);
@@ -137,13 +134,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
-
-        // Fetch first page to determine dimensions/aspect ratio for the list
-        const firstPage = await doc.getPage(1);
-        const viewport = firstPage.getViewport({ scale: 1 });
-        // Aspect Ratio = Height / Width
-        setPageAspectRatio(viewport.height / viewport.width);
-
       } catch (e: any) {
         console.error("PDF Load Error:", e);
         setError(e.message || "Failed to load PDF");
@@ -151,62 +141,52 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         setIsLoading(false);
       }
     };
-
     if (url) loadPdf();
   }, [url]);
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-zinc-100 dark:bg-zinc-900/50">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading Document...</span>
-      </div>
+        <div className="flex h-full items-center justify-center text-primary">
+            {/* Standard SVG Spinner */}
+            <svg className="animate-spin h-8 w-8 mr-3" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-sm font-medium">Loading Document...</span>
+        </div>
     );
   }
 
-  if (error || !pdfDoc) {
+  if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center h-full text-destructive bg-zinc-100 dark:bg-zinc-900/50">
-        <Alert variant="destructive" className="max-w-md bg-white">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            Unable to load this document.
-            <br />
-            <span className="text-xs opacity-70 mt-2 block">{error}</span>
-          </AlertDescription>
-        </Alert>
-      </div>
+        <div className="p-8 flex flex-col items-center justify-center h-full text-destructive">
+            <div className="max-w-md border border-destructive/20 bg-destructive/10 p-4 rounded-md text-center">
+                <div className="font-semibold mb-2">Unable to load document</div>
+                <div className="text-sm opacity-80">{error}</div>
+            </div>
+        </div>
     );
   }
+
+  const numPages = pdfDoc ? pdfDoc.numPages : 0;
+  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
   return (
-    <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50", className)}>
-      <AutoSizer>
-        {({ height, width }) => {
-          // Calculate content width (subtract padding if needed, here we use full width minus margins inside row)
-          // We apply padding inside the row component, so we pass full width here
-          const contentWidth = width - 48; // 24px padding on each side roughly
-          const itemHeight = contentWidth * pageAspectRatio + 16; // +16 for bottom margin
-
-          return (
-            <List
-              height={height}
-              width={width}
-              itemCount={pdfDoc.numPages}
-              itemSize={itemHeight}
-              itemData={{
-                pdfDoc,
-                width: contentWidth,
-                onTextSelect
-              }}
-              overscanCount={2} // Render 2 pages above/below view to prevent flicker
-            >
-              {PdfPageRow}
-            </List>
-          );
-        }}
-      </AutoSizer>
+    <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
+        {/* Replaced ScrollArea with standard div overflow */}
+        <div className="flex-1 w-full overflow-y-auto" ref={containerRef}>
+            <div className="flex flex-col items-center py-8 px-4 min-h-full">
+                {containerWidth > 0 && pages.map((pageNum) => (
+                <PdfPage 
+                    key={pageNum} 
+                    doc={pdfDoc!} 
+                    pageNum={pageNum} 
+                    width={containerWidth} 
+                    onTextSelect={onTextSelect} 
+                />
+                ))}
+            </div>
+        </div>
     </div>
   );
 }

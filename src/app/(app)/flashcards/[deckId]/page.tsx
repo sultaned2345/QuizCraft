@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Card as Flashcard, Deck, ApiResponse } from '@/types/database'; // Import ApiResponse
+import { Card as Flashcard, Deck, ApiResponse } from '@/types/database'; 
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,18 +22,18 @@ import {
   Check,
   X,
   AlertCircle,
+  Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 
-// This is the shape from /api/decks/[deckId]/study
 interface DeckData {
   id: string;
   user_id: string;
   title: string;
   created_at: string;
   updated_at: string;
-  flashcards: Flashcard[]; // The cards are nested
+  flashcards: Flashcard[];
   cardCount: number;
   cardLimit: number | typeof Infinity;
 }
@@ -44,12 +44,11 @@ interface StudyCard extends Flashcard {
 
 type StudyMode = 'due' | 'new' | 'cram';
 
-// Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // Swap
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
   return newArray;
 }
@@ -123,7 +122,6 @@ export default function FlashcardStudyPage() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session!.access_token}`,
       },
-      // --- FIX: Send the correct 'isCramming' flag ---
       body: JSON.stringify({ quality: quality, isCramming: isCramming }),
     })
       .then(async (res) => {
@@ -203,25 +201,49 @@ export default function FlashcardStudyPage() {
     );
   }
 
+  // --- FIX: Logic to handle empty response but valid deck ---
   if (!data || !data.flashcards || data.flashcards.length === 0) {
     let emptyMessage = 'This deck has no cards in it.';
-    if (studyMode === 'due')
-      emptyMessage = 'You have no cards due for review in this deck!';
-    if (studyMode === 'new')
-      emptyMessage = 'You have no new cards to learn in this deck!';
+    let showCramOption = false;
+
+    if (data && data.cardCount > 0) {
+        if (studyMode === 'due') {
+            emptyMessage = 'You have no cards due for review right now! Good job.';
+            showCramOption = true;
+        } else if (studyMode === 'new') {
+            emptyMessage = 'You have no new cards to learn.';
+            showCramOption = true;
+        }
+    }
 
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">{data?.title || 'Flashcard Deck'}</h2>
-        <p className="text-center">{emptyMessage}</p>
-        <Button
-          onClick={() => router.push('/flashcards')}
-          variant="outline"
-          className="mt-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
-        </Button>
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6">
+        {showCramOption ? (
+            <Check className="h-12 w-12 mb-4 text-green-500" />
+        ) : (
+            <AlertCircle className="h-12 w-12 mb-4" />
+        )}
+        
+        <h2 className="text-2xl font-semibold text-foreground mb-2">{data?.title || 'Flashcard Deck'}</h2>
+        <p className="text-center mb-6 max-w-md">{emptyMessage}</p>
+        
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+            {showCramOption && (
+                <Button 
+                    onClick={() => router.push(`/flashcards/${deckId}?mode=cram`)} 
+                    className="w-full"
+                >
+                    <Layers className="mr-2 h-4 w-4" /> Cram All {data?.cardCount} Cards
+                </Button>
+            )}
+            <Button
+                onClick={() => router.push('/flashcards')}
+                variant="outline"
+                className="w-full"
+            >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
+            </Button>
+        </div>
       </div>
     );
   }
@@ -268,10 +290,8 @@ export default function FlashcardStudyPage() {
           </p>
         )}
 
-        {/* Progress Bar */}
         <Progress value={progress} className="w-full h-2 mb-6" />
 
-        {/* Main Content Area: Study or Summary */}
         <AnimatePresence mode="wait">
           {!showSummary ? (
             <motion.div
@@ -281,12 +301,10 @@ export default function FlashcardStudyPage() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center"
             >
-              {/* Flippable Card */}
               <div
                 className="w-full h-80 [perspective:1000px] cursor-pointer"
                 onClick={handleCardFlip}
               >
-                {/* --- FIX: Use correct 3D transform classes --- */}
                 <motion.div
                   className="relative w-full h-full [transform-style:preserve-3d]"
                   animate={{ rotateY: isFlipped ? 180 : 0 }}
@@ -294,31 +312,23 @@ export default function FlashcardStudyPage() {
                 >
                   {/* Front of Card */}
                   <div className="absolute backface-hidden w-full h-full">
-                    {/* --- END FIX --- */}
                     <Card className="flex h-full items-center justify-center p-6 shadow-lg">
-                      {/* --- FIX: Use correct property --- */}
-                      <p className="text-2xl font-medium text-center">
+                      <p className="text-2xl font-medium text-center select-none">
                         {currentCard.front_content}
                       </p>
-                      {/* --- END FIX --- */}
                     </Card>
                   </div>
                   {/* Back of Card */}
-                  {/* --- FIX: Use correct 3D transform classes --- */}
                   <div className="absolute backface-hidden w-full h-full [transform:rotateY(180deg)]">
-                    {/* --- END FIX --- */}
-                    <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary">
-                      {/* --- FIX: Use correct property --- */}
-                      <p className="text-xl text-center">
+                    <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary/50 dark:bg-secondary/20">
+                      <p className="text-xl text-center select-none">
                         {currentCard.back_content}
                       </p>
-                      {/* --- END FIX --- */}
                     </Card>
                   </div>
                 </motion.div>
               </div>
 
-              {/* Study Controls */}
               <AnimatePresence>
                 {isFlipped && (
                   <motion.div

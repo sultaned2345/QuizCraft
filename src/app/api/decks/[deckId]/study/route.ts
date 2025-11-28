@@ -8,9 +8,8 @@ import { USAGE_LIMITS } from '@/lib/usage-limits';
 
 export const runtime = 'nodejs';
 
-const STUDY_SESSION_LIMIT = 20; // Increased session limit
+const STUDY_SESSION_LIMIT = 20;
 
-// --- GET Handler: Fetch a study session for a specific deck ---
 export async function GET(
     request: NextRequest,
     { params }: { params: { deckId: string } }
@@ -19,8 +18,7 @@ export async function GET(
         const user = await requireAuth(request);
         const { deckId } = params;
         const url = new URL(request.url);
-        // --- NEW: Read study mode from query param ---
-        const mode = url.searchParams.get('mode') || 'due'; // 'due', 'new', 'all'
+        const mode = url.searchParams.get('mode') || 'due';
 
         if (!deckId) {
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck ID is required.' }, { status: 400 });
@@ -29,7 +27,7 @@ export async function GET(
         const deck = await prisma.flashcard_decks.findUnique({
             where: {
                 id: deckId,
-                user_id: user.id, // Ensures the user owns the deck
+                user_id: user.id,
             },
             include: {
                  profile: {
@@ -42,30 +40,25 @@ export async function GET(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck not found or access denied.' }, { status: 404 });
         }
         
-        // --- NEW: Dynamic query based on mode ---
         let whereClause: Prisma.flashcardsWhereInput = { deck_id: deckId };
         let orderByClause: Prisma.flashcardsOrderByWithRelationInput | Prisma.flashcardsOrderByWithRelationInput[] = {};
         let takeClause: number | undefined = undefined;
         const now = new Date();
 
         if (mode === 'due') {
-            // Original logic: only cards due for review
             whereClause.review_at = { lte: now };
-            orderByClause = { review_at: 'asc' }; // Oldest due first
+            orderByClause = { review_at: 'asc' };
             takeClause = STUDY_SESSION_LIMIT;
         } else if (mode === 'new') {
-            // New logic: cards with default ease factor and due
             whereClause.review_at = { lte: now };
-            whereClause.ease_factor = 2.5; // Default ease factor
-            orderByClause = { created_at: 'asc' }; // Oldest new cards first
+            whereClause.ease_factor = 2.5;
+            orderByClause = { created_at: 'asc' };
             takeClause = STUDY_SESSION_LIMIT;
-        } else if (mode === 'all') {
-            // New logic: All cards in the deck
+        } else if (mode === 'cram' || mode === 'all') { // <-- FIX: Explicitly handle 'cram'
             whereClause = { deck_id: deckId };
-            orderByClause = { created_at: 'asc' }; // Study in creation order
-            takeClause = undefined; // No limit
+            orderByClause = { created_at: 'asc' };
+            takeClause = undefined; // Return all cards for cramming
         }
-        // --- END NEW ---
         
         const dueCards = await prisma.flashcards.findMany({
             where: whereClause,
@@ -86,8 +79,8 @@ export async function GET(
             title: deck.title,
             created_at: deck.created_at?.toISOString() || '',
             updated_at: deck.updated_at?.toISOString() || '',
-            flashcards: dueCards, // Only return the cards for this study session
-            cardCount: totalCardCount, // Total cards in deck
+            flashcards: dueCards,
+            cardCount: totalCardCount,
             cardLimit: cardLimit,
         };
 
