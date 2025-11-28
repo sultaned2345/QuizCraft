@@ -1,6 +1,6 @@
 // src/lib/aiGeneration.ts
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { Question, QuestionType } from '@/types/database';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
@@ -52,7 +52,16 @@ function buildQuizPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
+  // --- UPDATED SYSTEM PROMPT FOR DISTRACTORS ---
+  const system = `You are an expert educational assessment creator. Your goal is to generate ${numQuestions} ${difficulty}-level questions based ONLY on the provided text.
+
+CRITICAL INSTRUCTIONS FOR GENERATING "DISTRACTORS" (WRONG ANSWERS):
+1. PLAUSIBILITY: Distractors must be plausible to a student who understands the general topic but misses specific details. Do NOT use obvious joke answers or impossibilities (e.g., "Mitochondria" vs "A Pizza").
+2. COMMON MISCONCEPTIONS: Base incorrect options on common confusions found in the domain (e.g., confusing "Effect" with "Cause", or similar-sounding terms).
+3. HOMOGENEITY: All options must be of similar length, grammatical structure, and complexity.
+4. INDEPENDENCE: The correct answer should not be guessable purely by logic (e.g., avoiding "All of the above" unless strictly necessary).
+
+Generate questions of type: ${questionTypes}. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
   const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
@@ -68,9 +77,9 @@ Return ONLY valid JSON with this exact shape:
     {
       "question_text": "string",
       "question_type": "MULTIPLE_CHOICE",
-      "options": ["string", "string", "string", "string"],
+      "options": ["string", "string", "string", "string"], // 1 Correct, 3 Plausible Distractors
       "correct_answer": "string",
-      "explanation": "string"
+      "explanation": "string" // Explain why the correct answer is right AND why the misconceptions are wrong.
     },
     {
       "question_text": "string",
