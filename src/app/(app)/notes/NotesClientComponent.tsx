@@ -5,15 +5,24 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note, ApiResponse } from '@/types/database';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; 
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X, Calendar, FileText } from 'lucide-react';
+import { 
+  Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X, 
+  StickyNote, Calendar, MoreVertical, ArrowUpRight, Book 
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +64,6 @@ interface PaginatedNotesData {
 interface NotesClientComponentProps {
   initialData: PaginatedNotesData;
 }
-
 
 export function NotesClientComponent({ initialData }: NotesClientComponentProps) {
   const [notes, setNotes] = useState<NoteListItem[]>(initialData.notes);
@@ -149,7 +157,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
      const originalNotes = [...notes];
      setNotes(prevNotes => prevNotes.filter(n => n.id !== noteId));
      setUsage(prev => ({ ...prev, count: prev.count - 1 }));
-     setIsDeleting(true); 
+     setIsDeleting(true);
 
      try {
        const response = await fetch(`/api/notes/${noteId}`, { 
@@ -182,13 +190,23 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
     });
   }, [notes, searchTerm, selectedTag]);
 
-  const formatDate = (dateString: string) => {
-      return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Helper for generating consistent colors based on tags
+  const getTagColor = (tag: string) => {
+    const colors = [
+      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+      "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+      "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
+      "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+      "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
+    ];
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
   };
-
 
   return (
     <>
+      {/* (Header Section) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
          <div>
           <h1 className="text-3xl font-bold">My Notes</h1>
@@ -208,6 +226,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       </div>
 
+      {/* (Search Bar & Filters) */}
       <div className="mb-6 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -219,7 +238,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
               variant={!selectedTag ? 'default' : 'secondary'}
               size="sm"
               onClick={() => setSelectedTag(null)}
-              className="rounded-full"
+              className="rounded-full transition-all"
             >
               All
             </Button>
@@ -229,7 +248,10 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                 variant={selectedTag === tag ? 'default' : 'secondary'}
                 size="sm"
                 onClick={() => setSelectedTag(tag)}
-                className="rounded-full"
+                className={cn(
+                    "rounded-full transition-all border border-transparent",
+                    selectedTag === tag ? "shadow-md" : "hover:border-primary/20"
+                )}
               >
                 {tag}
               </Button>
@@ -264,88 +286,119 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         >
           {filteredNotes.map((note) => (
             <motion.div key={note.id} variants={itemVariants}>
-              <Card className="flex flex-col h-full group hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary/60 bg-card">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start gap-2">
-                     <CardTitle className="text-lg font-semibold leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                        {note.title}
-                     </CardTitle>
-                     <FileText className="w-5 h-5 text-muted-foreground opacity-20 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>{formatDate(note.updated_at || note.created_at)}</span>
-                  </div>
+              <Card 
+                className={cn(
+                    "flex flex-col h-full relative group transition-all duration-300",
+                    "hover:-translate-y-1 hover:shadow-lg",
+                    "border-l-4 border-l-amber-400 dark:border-l-amber-600" // Notebook accent
+                )}
+                // Clicking the card body navigates (improves UX)
+                onClick={() => router.push(`/notes/${note.id}`)}
+              >
+                {/* Background Decoration (Binder Holes or Watermark) */}
+                <div className="absolute top-4 left-0 w-4 flex flex-col gap-2 items-center opacity-20 pointer-events-none">
+                     <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
+                     <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
+                     <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
+                </div>
+                
+                <div className="absolute -right-8 -bottom-8 opacity-[0.03] pointer-events-none transition-transform group-hover:scale-110">
+                   <StickyNote className="w-40 h-40" />
+                </div>
+
+                <CardHeader className="pl-6 pb-2">
+                   <div className="flex justify-between items-start gap-4">
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(note.updated_at).toLocaleDateString()}
+                            </span>
+                            <CardTitle className="text-xl font-bold leading-tight group-hover:text-primary transition-colors line-clamp-2 cursor-pointer">
+                                {note.title}
+                            </CardTitle>
+                        </div>
+
+                        {/* Actions Dropdown (Stop propagation to prevent navigating when clicking menu) */}
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-background/80">
+                                        <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => router.push(`/notes/${note.id}`)}>
+                                        <Edit className="w-4 h-4 mr-2" /> Edit Note
+                                    </DropdownMenuItem>
+                                    <AlertDialogTrigger asChild>
+                                        <DropdownMenuItem 
+                                            className="text-destructive focus:text-destructive" 
+                                            onSelect={(e) => e.preventDefault()} // Prevent closing for alert dialog
+                                        >
+                                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                        </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                </DropdownMenuContent>
+                                {/* Nested Alert Dialog for Delete */}
+                                <AlertDialog>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This will permanently delete the note <strong>"{note.title}"</strong>.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            className={cn(buttonVariants({ variant: 'destructive' }))}
+                                            disabled={isDeleting}
+                                            onClick={() => handleDeleteNote(note.id, note.title)}
+                                        >
+                                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Delete Note
+                                        </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </DropdownMenu>
+                        </div>
+                   </div>
                 </CardHeader>
-                <CardContent className="flex-grow">
+
+                <CardContent className="flex-grow pl-6 pt-2">
                    {note.tags && note.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1.5 mt-auto">
                       {note.tags.slice(0, 4).map(tag => (
-                        <Badge key={tag} variant="secondary" className="font-normal text-xs bg-muted/60 hover:bg-muted text-muted-foreground">
-                          #{tag}
+                        <Badge 
+                            key={tag} 
+                            variant="secondary" 
+                            className={cn("font-normal text-[10px] px-2 py-0.5 border-0", getTagColor(tag))}
+                        >
+                            #{tag}
                         </Badge>
                       ))}
                       {note.tags.length > 4 && (
-                        <span className="text-xs text-muted-foreground self-center pl-1">+{note.tags.length - 4}</span>
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground border-dashed">
+                            +{note.tags.length - 4}
+                        </Badge>
                       )}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic mt-2 opacity-50">No tags</p>
+                      <p className="text-xs text-muted-foreground italic mt-2">No tags</p>
                   )}
                 </CardContent>
-                <CardFooter className="flex justify-between items-center gap-2 pt-0 pb-4">
-                     <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => router.push(`/notes/${note.id}`)} 
-                      disabled={isDeleting}
-                      className="text-muted-foreground hover:text-primary -ml-2"
-                    >
-                        Read Note
-                    </Button>
-                    
-                    <div className="flex gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          onClick={() => router.push(`/notes/${note.id}`)} 
-                          disabled={isDeleting}
-                        >
-                            <Edit className="w-4 h-4" />
-                            <span className="sr-only">Edit</span>
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors" disabled={isDeleting}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete the note:
-                                <br />
-                                <strong className="py-2 inline-block">{note.title}</strong>
-                                <br />
-                                All associated data will also be deleted.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                className={cn(buttonVariants({ variant: 'destructive' }))}
-                                disabled={isDeleting}
-                                onClick={() => handleDeleteNote(note.id, note.title)}
-                              >
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Delete Note
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
+
+                <CardFooter className="pl-6 pt-0 pb-4">
+                     <div className="w-full flex items-center justify-between">
+                         <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-muted-foreground hover:text-primary p-0 h-auto font-normal text-xs group/btn"
+                         >
+                             Open Note <ArrowUpRight className="w-3 h-3 ml-1 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+                         </Button>
+                     </div>
                 </CardFooter>
               </Card>
             </motion.div>
@@ -353,6 +406,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </motion.div>
       )}
 
+      {/* (Load More Button) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -364,6 +418,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       )}
 
+      {/* (Generate Dialog) */}
       {isGeneratorOpen && (
         <GenerateNotesDialog
           isOpen={isGeneratorOpen}

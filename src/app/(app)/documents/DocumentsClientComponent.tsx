@@ -12,7 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, FileText, Trash2, Eye, FileQuestion, StickyNote, Layers, AlertCircle, CheckCircle } from 'lucide-react';
+import { 
+  Loader2, Upload, FileText, Trash2, Eye, FileQuestion, StickyNote, Layers, 
+  AlertCircle, CheckCircle, MoreVertical, File, FileType 
+} from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { usePageContext } from '@/contexts/PageContext';
 import { motion } from 'framer-motion';
@@ -28,9 +31,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from "@/lib/utils";
 import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; 
 import { Skeleton } from '@/components/ui/skeleton'; 
+import { Badge } from '@/components/ui/badge';
 
 interface PaginatedDocumentsData {
   documents: DocumentMetadata[];
@@ -64,7 +74,6 @@ export function DocumentsClientComponent() {
 
   const documentsPerPage = 9;
 
-  // --- FIX 1: Update SWR Generic to ApiResponse ---
   const { 
     data: swrData, 
     error: swrError, 
@@ -80,7 +89,6 @@ export function DocumentsClientComponent() {
     }
   );
 
-  // --- FIX 2: Access data inside ApiResponse ---
   useEffect(() => {
     if (swrData && swrData.success && swrData.data) {
       setDocuments(swrData.data.documents);
@@ -97,7 +105,6 @@ export function DocumentsClientComponent() {
     if (!session || isLoadingMore || page > totalPages) return; 
     setIsLoadingMore(true); 
     try { 
-      // --- FIX 3: Update fetcher call to handle ApiResponse ---
       const response = await fetcher<PaginatedDocumentsData>(
         `/api/documents?page=${page}&limit=${documentsPerPage}`, 
         { headers: { Authorization: `Bearer ${session.access_token}` } }
@@ -218,16 +225,20 @@ export function DocumentsClientComponent() {
     }
   };
   
-  const handleGenerateQuiz = (docId: string) => { 
-    handleStartGenerationJob(docId, 'quiz', 'Quiz');
-  };
-  
-  const handleGenerateNotes = (docId: string) => { 
-    handleStartGenerationJob(docId, 'note', 'Note');
-  };
-  
-  const handleGenerateFlashcards = (docId: string) => { 
-    handleStartGenerationJob(docId, 'flashcard', 'Flashcard Deck');
+  const handleGenerateQuiz = (docId: string) => handleStartGenerationJob(docId, 'quiz', 'Quiz');
+  const handleGenerateNotes = (docId: string) => handleStartGenerationJob(docId, 'note', 'Note');
+  const handleGenerateFlashcards = (docId: string) => handleStartGenerationJob(docId, 'flashcard', 'Flashcard Deck');
+
+  // Helper to determine file visuals
+  const getFileVisuals = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    switch(ext) {
+      case 'pdf': return { color: 'text-red-500 bg-red-50 dark:bg-red-950/30', label: 'PDF', icon: FileText };
+      case 'docx': return { color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30', label: 'DOCX', icon: FileType };
+      case 'pptx': return { color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30', label: 'PPTX', icon: Layers };
+      case 'txt': return { color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30', label: 'TXT', icon: File };
+      default: return { color: 'text-gray-500 bg-gray-50 dark:bg-gray-950/30', label: ext?.toUpperCase() || 'FILE', icon: File };
+    }
   };
 
   if (isSWRLoading && documents.length === 0) {
@@ -237,18 +248,6 @@ export function DocumentsClientComponent() {
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <h2 className="text-2xl font-semibold text-foreground">Loading Documents...</h2>
           <p className="text-sm">Getting your files ready.</p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-          <div>
-            <Skeleton className="h-9 w-48 rounded mb-2" />
-            <Skeleton className="h-4 w-56 rounded" />
-          </div>
-          <div className="w-full sm:max-w-md p-6 border rounded-xl shadow-sm bg-card">
-            <Skeleton className="h-5 w-3/5 rounded mb-4" />
-            <Skeleton className="h-10 w-full rounded-md mb-2" />
-            <Skeleton className="h-4 w-4/5 rounded mb-3" />
-            <Skeleton className="h-9 w-24 rounded-md" />
-          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
@@ -280,38 +279,36 @@ export function DocumentsClientComponent() {
           <h1 className="text-3xl font-bold">My Documents</h1>
           {usage.limit !== Infinity && (<p className="text-sm text-muted-foreground mt-1">Total Docs: {usage.count ?? 0} / {usage.limit}.</p>)}
         </div>
-        <Card className="w-full sm:max-w-md bg-card-foreground/5 dark:bg-card-foreground/10">
-          <CardHeader className="pb-2"><CardTitle className="text-lg">Upload New</CardTitle></CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="file-upload" className="sr-only">Choose</Label>
-              <Input 
-                id="file-upload" 
-                type="file" 
-                accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" 
-                onChange={handleFileChange} 
-                ref={fileInputRef} 
-                disabled={isUploading} 
-                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-              />
+        <Card className="w-full sm:max-w-md bg-card shadow-sm border-dashed">
+          <CardContent className="pt-6">
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                  <Input 
+                    id="file-upload" 
+                    type="file" 
+                    accept=".pdf,.txt,.docx,.pptx" 
+                    onChange={handleFileChange} 
+                    ref={fileInputRef} 
+                    disabled={isUploading} 
+                    className="flex-1 text-xs file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                  />
+                  <Button onClick={handleUpload} disabled={!selectedFile || isUploading} size="sm" className="shrink-0">
+                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} 
+                  </Button>
+              </div>
               {selectedFile ? (
                 <p className="text-xs text-muted-foreground truncate">Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
               ) : (
-                <p className="text-xs text-muted-foreground">PDF, TXT, DOCX, PPTX (Max 10MB)</p>
+                <p className="text-[10px] text-muted-foreground text-center">Supported: PDF, DOCX, PPTX, TXT (Max 10MB)</p>
               )}
-              {uploadError && <div className="flex items-start gap-2 text-xs text-destructive"><AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /><span>{uploadError}</span></div>}
-              <Button onClick={handleUpload} disabled={!selectedFile || isUploading || (usage.limit !== Infinity && (usage.count ?? 0) >= (usage.limit ?? Infinity))} className="mt-2 w-full sm:w-auto" size="sm">
-                {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} 
-                {isUploading ? 'Uploading...' : 'Upload'}
-              </Button>
-              {usage.limit !== Infinity && (usage.count ?? 0) >= (usage.limit ?? Infinity) && <p className="text-xs text-destructive mt-1">Limit reached.</p>}
+              {uploadError && <div className="flex items-start gap-2 text-xs text-destructive"><AlertCircle className="h-3 w-3 shrink-0 mt-0.5" /><span>{uploadError}</span></div>}
             </div>
           </CardContent>
         </Card>
       </div>
 
       {documents.length === 0 && !isSWRLoading ? (
-          <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload your first PDF, TXT, DOCX, or PPTX file.</p></div>
+          <div className="text-center py-16 border-2 border-dashed rounded-lg"><FileText className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">No Documents Yet</h3><p className="mt-1 text-sm text-muted-foreground">Upload your first file to get started.</p></div>
       ) : (
           <motion.div 
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
@@ -323,60 +320,122 @@ export function DocumentsClientComponent() {
                 const isQuizQueued = recentlyQueued.has(`${doc.id}-quiz`);
                 const isNoteQueued = recentlyQueued.has(`${doc.id}-note`);
                 const isCardQueued = recentlyQueued.has(`${doc.id}-flashcard`);
+                const visuals = getFileVisuals(doc.file_name);
+                const Icon = visuals.icon;
 
                 return (
                   <motion.div key={doc.id} variants={itemVariants}>
-                    <Card className="flex flex-col h-full">
+                    <Card className="flex flex-col h-full group transition-all duration-300 hover:shadow-md border-slate-200 dark:border-slate-800">
+                      
+                      {/* --- HEADER: FILE TYPE & META --- */}
                       <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
-                        <div className="space-y-1 overflow-hidden flex-1">
-                          <CardTitle className="text-base truncate" title={doc.file_name}>{doc.file_name}</CardTitle>
-                          <CardDescription className="text-xs">{doc.file_type} &bull; {formatFileSize(doc.file_size)}</CardDescription>
-                          <CardDescription className="text-xs">Uploaded: {new Date(doc.created_at).toLocaleDateString()}</CardDescription>
+                        <div className="flex items-center gap-3">
+                            <div className={cn("h-12 w-12 rounded-lg flex items-center justify-center shrink-0", visuals.color)}>
+                                <Icon className="h-6 w-6" />
+                            </div>
+                            <div className="overflow-hidden">
+                                <CardTitle className="text-base truncate leading-tight mb-1" title={doc.file_name}>
+                                    {doc.file_name}
+                                </CardTitle>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[10px] h-5 font-normal text-muted-foreground border-slate-200 dark:border-slate-800">
+                                        {visuals.label}
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {formatFileSize(doc.file_size)} • {new Date(doc.created_at).toLocaleDateString()}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" disabled={isGenerating?.docId === doc.id || isDeleting}>
-                              <Trash2 className="w-4 h-4 text-destructive" /><span className="sr-only">Delete</span>
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete the document:
-                                <br />
-                                <strong className="py-2 inline-block">{doc.file_name}</strong>
-                                <br />
-                                All associated data (summaries, insights, embeddings) will also be deleted. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                className={cn(buttonVariants({ variant: 'destructive' }))}
-                                disabled={isDeleting}
-                                onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
-                              >
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+
+                        {/* --- ACTIONS MENU --- */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => router.push(`/documents/${doc.id}`)}>
+                                    <Eye className="w-4 h-4 mr-2" /> View Document
+                                </DropdownMenuItem>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+                                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                        </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete "{doc.file_name}"?</AlertDialogTitle>
+                                            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction 
+                                                className={cn(buttonVariants({ variant: 'destructive' }))}
+                                                disabled={isDeleting}
+                                                onClick={() => handleDeleteDocument(doc.id, doc.file_name)}
+                                            >
+                                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                       </CardHeader>
-                      <CardContent className="flex-grow">
-                          <p className="text-sm text-muted-foreground italic line-clamp-2" title={doc.ai_summary || 'No summary available.'}>
-                              {doc.ai_summary || 'No summary available.'}
-                          </p>
+
+                      {/* --- CONTENT: AI INSIGHT --- */}
+                      <CardContent className="flex-grow py-2">
+                          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-md p-3 border border-slate-100 dark:border-slate-800">
+                                <p className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary/60" /> Key Insight
+                                </p>
+                                <p className="text-sm text-foreground/90 line-clamp-3 italic">
+                                    "{doc.ai_summary || 'No summary available yet. Open the document to generate one.'}"
+                                </p>
+                          </div>
                       </CardContent>
-                      <CardFooter className="flex flex-col items-stretch gap-2 pt-2">
-                        <Button variant="outline" size="sm" onClick={() => router.push(`/documents/${doc.id}`)} disabled={isGenerating?.docId === doc.id || isDeleting}>
-                          <Eye className="w-4 h-4 mr-2" /> View & Chat
-                        </Button>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <Button title={isQuizQueued ? "Quiz is being generated" : "Generate Quiz"} variant="secondary" size="sm" onClick={() => handleGenerateQuiz(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isQuizQueued}>{isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileQuestion className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Quiz</span></Button>
-                          <Button title={isNoteQueued ? "Note is being generated" : "Generate Notes"} variant="secondary" size="sm" onClick={() => handleGenerateNotes(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isNoteQueued}>{isGenerating?.type === 'note' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Notes</span></Button>
-                          <Button title={isCardQueued ? "Cards are being generated" : "Generate Cards"} variant="secondary" size="sm" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isGenerating?.docId === doc.id || isDeleting || isCardQueued}>{isGenerating?.type === 'flashcard' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isCardQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Layers className="w-4 h-4" />}<span className="ml-1 sm:ml-0 sm:sr-only">Cards</span></Button>
+
+                      {/* --- FOOTER: GENERATION TOOLBAR --- */}
+                      <CardFooter className="pt-2 pb-4">
+                        <div className="w-full flex items-center justify-between gap-2">
+                            <Button 
+                                variant="default" 
+                                size="sm" 
+                                className="flex-1 bg-slate-900 dark:bg-slate-100 dark:text-slate-900 hover:bg-slate-800"
+                                onClick={() => router.push(`/documents/${doc.id}`)}
+                            >
+                                <Eye className="w-4 h-4 mr-2" /> View & Chat
+                            </Button>
+                            
+                            <div className="flex gap-1 border-l pl-2 ml-1">
+                                <Button 
+                                    variant="ghost" size="icon" className="h-8 w-8" 
+                                    title="Generate Quiz"
+                                    onClick={() => handleGenerateQuiz(doc.id)} 
+                                    disabled={isGenerating?.docId === doc.id || isQuizQueued}
+                                >
+                                    {isGenerating?.type === 'quiz' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isQuizQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <FileQuestion className="h-4 w-4 text-purple-500" />}
+                                </Button>
+                                <Button 
+                                    variant="ghost" size="icon" className="h-8 w-8"
+                                    title="Generate Notes"
+                                    onClick={() => handleGenerateNotes(doc.id)}
+                                    disabled={isGenerating?.docId === doc.id || isNoteQueued}
+                                >
+                                    {isGenerating?.type === 'note' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isNoteQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <StickyNote className="h-4 w-4 text-amber-500" />}
+                                </Button>
+                                <Button 
+                                    variant="ghost" size="icon" className="h-8 w-8"
+                                    title="Generate Flashcards"
+                                    onClick={() => handleGenerateFlashcards(doc.id)}
+                                    disabled={isGenerating?.docId === doc.id || isCardQueued}
+                                >
+                                    {isGenerating?.type === 'flashcard' && isGenerating.docId === doc.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isCardQueued ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Layers className="h-4 w-4 text-blue-500" />}
+                                </Button>
+                            </div>
                         </div>
                       </CardFooter>
                     </Card>
