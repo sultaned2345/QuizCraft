@@ -7,7 +7,7 @@ import {
   Loader2,
   ArrowLeft,
   FileText,
-  Star, // <-- Replaced Sparkles
+  Star,
   Target,
   Zap,
   ChevronRight,
@@ -16,7 +16,8 @@ import {
   Download,
   Share2,
   BookOpen,
-  HelpCircle // <-- Replaced FileQuestion
+  HelpCircle,
+  MessageCircle // <-- Added Icon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
@@ -45,7 +46,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// --- Dynamic Imports ---
 const PopQuizModal = dynamic(
   () => import('@/components/PopQuizModal').then((mod) => mod.PopQuizModal),
   {
@@ -54,7 +54,6 @@ const PopQuizModal = dynamic(
   }
 );
 
-// --- Helpers ---
 const safeRender = (content: any): string => {
   if (typeof content === 'string') return content;
   if (typeof content === 'number') return String(content);
@@ -70,7 +69,6 @@ const safeRender = (content: any): string => {
   return '';
 };
 
-// --- Interfaces ---
 interface AIDocumentInsights {
   keyConcepts: any[];
   examQuestions: any[];
@@ -84,9 +82,9 @@ interface MenuState {
   text: string;
 }
 
-type MenuAction = 'explain' | 'summarize' | 'question';
+// --- UPDATED: Added 'ask' action ---
+type MenuAction = 'explain' | 'summarize' | 'question' | 'ask';
 
-// --- Selection Menu Component ---
 function SelectionMenu({
   menu,
   onClose,
@@ -112,6 +110,17 @@ function SelectionMenu({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center gap-1 p-1">
+        {/* --- NEW: Ask Button --- */}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onAction('ask')}
+          className="h-7 px-2 text-xs font-medium hover:bg-primary/10 hover:text-primary"
+        >
+          <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Ask AI
+        </Button>
+        <div className="w-px h-4 bg-border" />
+        
         <Button
           size="sm"
           variant="ghost"
@@ -121,6 +130,7 @@ function SelectionMenu({
           <Star className="w-3.5 h-3.5 mr-1.5 text-sky-500" /> Explain
         </Button>
         <div className="w-px h-4 bg-border" />
+        
         <Button
           size="sm"
           variant="ghost"
@@ -131,13 +141,14 @@ function SelectionMenu({
           Summarize
         </Button>
         <div className="w-px h-4 bg-border" />
+        
         <Button
           size="sm"
           variant="ghost"
           onClick={() => onAction('question')}
           className="h-7 px-2 text-xs font-medium"
         >
-          <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-500" /> Quiz Me
+          <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-500" /> Quiz
         </Button>
       </div>
       <div className="absolute bottom-[-5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-popover border-r border-b rotate-45" />
@@ -237,6 +248,7 @@ export default function DocumentViewPage() {
   };
 
   const handleMouseUpCapture = (e: React.MouseEvent) => {
+    // Prevent menu from appearing if clicking inside the chat panel
     const chatPanel = (e.target as HTMLElement).closest(
       'div[data-chat-panel="true"]',
     );
@@ -245,11 +257,13 @@ export default function DocumentViewPage() {
     const selection = window.getSelection();
     const selectedText = selection?.toString().trim() || '';
 
-    if (selectedText.length > 2 && selectedText.length < 2000) {
+    // Only show menu for valid text length
+    if (selectedText.length > 2 && selectedText.length < 3000) {
       const range = selection?.getRangeAt(0);
       const rect = range?.getBoundingClientRect();
 
       if (rect) {
+        // Adjust for scroll offset if inside scrolling container
         setMenu({
           visible: true,
           x: rect.left + rect.width / 2,
@@ -257,19 +271,39 @@ export default function DocumentViewPage() {
           text: selectedText,
         });
       }
+    } else {
+      // Hide menu if clicked without selection
+      setMenu(prev => ({ ...prev, visible: false }));
     }
   };
 
   const handleMenuAction = (action: MenuAction) => {
-    const prompt =
-      action === 'explain'
-        ? `Explain this simply: "${menu.text}"`
-        : action === 'summarize'
-          ? `Summarize: "${menu.text}"`
-          : `Quiz me on: "${menu.text}"`;
+    let prompt = '';
+    
+    switch(action) {
+        case 'ask':
+            prompt = `I have a question about this text: "${menu.text}"\n\n[Your Question Here]`;
+            // Optional: If you want it to just start the chat context without sending immediately:
+            // You might need a method on chatRef to set input value, but standard sendMessage works fine.
+            // For now, let's ask for an explanation if they just click "Ask", or you can prompt them.
+            prompt = `Context: "${menu.text}"\n\nCan you explain this part?`;
+            break;
+        case 'explain':
+            prompt = `Explain this simply: "${menu.text}"`;
+            break;
+        case 'summarize':
+            prompt = `Summarize this section: "${menu.text}"`;
+            break;
+        case 'question':
+            prompt = `Quiz me on this specific text: "${menu.text}"`;
+            break;
+    }
 
     chatRef.current?.sendMessage(prompt);
     setMenu({ ...menu, visible: false });
+    
+    // Clear selection after action
+    window.getSelection()?.removeAllRanges();
   };
 
   if (authLoading || isLoading) {
@@ -289,7 +323,6 @@ export default function DocumentViewPage() {
       />
 
       <div className="flex flex-col h-screen overflow-hidden bg-background">
-        {/* Toolbar Header */}
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-background/95 backdrop-blur z-10">
           <div className="flex items-center gap-3 min-w-0">
             <Button
@@ -344,9 +377,7 @@ export default function DocumentViewPage() {
           </div>
         </div>
 
-        {/* Resizable Content Area */}
         <ResizablePanelGroup direction="horizontal" className="flex-1 h-full">
-          {/* Left Panel: Content */}
           <ResizablePanel
             defaultSize={60}
             minSize={30}
@@ -379,7 +410,6 @@ export default function DocumentViewPage() {
                   className="h-full m-0 border-0 data-[state=inactive]:hidden"
                 >
                   {urlData?.data?.signedUrl ? (
-                    // PDF Viewer
                     <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
                       <div className="h-full w-full overflow-hidden">
                         <PdfViewer
@@ -389,7 +419,6 @@ export default function DocumentViewPage() {
                       </div>
                     </div>
                   ) : (
-                    // Markdown Viewer
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
                       <div
                         className="min-h-full py-8 px-4 flex justify-center"
@@ -410,7 +439,6 @@ export default function DocumentViewPage() {
                   className="h-full m-0 overflow-y-auto data-[state=inactive]:hidden bg-zinc-50 dark:bg-zinc-950"
                 >
                   <div className="max-w-4xl mx-auto p-6 space-y-8">
-                    {/* Header Section */}
                     <div className="flex flex-col gap-2">
                       <h2 className="text-2xl font-bold flex items-center gap-2 text-foreground">
                         <Star className="w-6 h-6 text-primary" /> 
@@ -422,7 +450,6 @@ export default function DocumentViewPage() {
                     </div>
 
                     {!insightsData?.data ? (
-                      /* Loading Skeleton */
                       <div className="grid gap-4">
                          <div className="h-32 w-full bg-muted/50 rounded-xl animate-pulse" />
                          <div className="grid grid-cols-2 gap-4">
@@ -432,8 +459,6 @@ export default function DocumentViewPage() {
                       </div>
                     ) : (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        
-                        {/* 1. Executive Summary */}
                         <Card className="border-none shadow-md bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-zinc-900">
                           <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
@@ -452,7 +477,6 @@ export default function DocumentViewPage() {
                           </CardContent>
                         </Card>
 
-                        {/* 2. Key Concepts Cloud */}
                         <div>
                           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                             <Lightbulb className="w-5 h-5 text-yellow-500" /> Key Concepts
@@ -474,7 +498,6 @@ export default function DocumentViewPage() {
                           </div>
                         </div>
 
-                        {/* 3. Interactive Practice Questions */}
                         <div>
                           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                             <HelpCircle className="w-5 h-5 text-blue-500" /> Practice Questions
@@ -512,7 +535,6 @@ export default function DocumentViewPage() {
 
           <ResizableHandle withHandle />
 
-          {/* Right Panel: Chat */}
           <ResizablePanel
             defaultSize={40}
             minSize={25}
@@ -530,7 +552,6 @@ export default function DocumentViewPage() {
           </ResizablePanel>
         </ResizablePanelGroup>
 
-        {/* Pop Quiz Modal */}
         {isPopQuizOpen && (
           <PopQuizModal
             isOpen={isPopQuizOpen}

@@ -1,6 +1,5 @@
-/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/app/globals.css */
+/* src/app/globals.css */
 @import "tailwindcss";
-/* @import "tw-animate-css"; <-- REMOVED THIS LINE */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,7 +26,6 @@
   --ring: oklch(57.56% 0.16 270.38);
   --radius: 0.75rem;
 }
-/* src/app/globals.css */
 
 /* Dark Mode Theme - Inspired by YouLearn AI */
 .dark {
@@ -51,6 +49,7 @@
   --input: oklch(30% 0 0);
   --ring: oklch(65.91% 0.17 270.38);
 }
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -86,19 +85,45 @@
   }
 }
 
-/* --- ADDED: NProgress Styles --- */
+/* --- NProgress Styles --- */
 #nprogress {
   pointer-events: none;
 }
 
 #nprogress .bar {
-  background: oklch(var(--primary)); /* Use theme's primary color */
+  background: var(--primary);
   position: fixed;
   z-index: 9999;
   top: 0;
   left: 0;
   width: 100%;
   height: 3px;
-  box-shadow: 0 0 10px oklch(var(--primary)), 0 0 5px oklch(var(--primary));
+  box-shadow: 0 0 10px var(--primary), 0 0 5px var(--primary);
 }
-/* --- END NProgress Styles --- */
+
+/* --- PDF.js Text Layer (Essential for highlighting) --- */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1.0;
+  pointer-events: none; /* Container ignores clicks */
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  pointer-events: auto; /* Spans capture clicks for selection */
+}
+
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.3); /* Custom highlight color (Blue) */
+}
