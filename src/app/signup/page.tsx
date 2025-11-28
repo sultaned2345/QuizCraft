@@ -1,17 +1,9 @@
-// src/app/signup/page.tsx
 'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
@@ -21,6 +13,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -31,10 +24,17 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
     setMessage('');
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
+
+    if (!agreedToTerms) {
+      setError('You must agree to the Terms of Service and Privacy Policy to create an account.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -103,6 +103,24 @@ export default function SignupPage() {
                 disabled={loading}
                 required
               />
+            </div>
+
+            <div className="flex items-start space-x-2 py-2">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="terms"
+                  className="text-sm font-medium leading-tight text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  I agree to the <Link href="/terms" className="underline hover:text-primary" target="_blank">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-primary" target="_blank">Privacy Policy</Link>.
+                </label>
+              </div>
             </div>
 
             {error && (
