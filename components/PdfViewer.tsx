@@ -3,11 +3,11 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Type } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
@@ -27,6 +27,9 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
+  // New: Toggle text layer to prevent DOM overload
+  const [enableTextLayer, setEnableTextLayer] = React.useState(false);
+
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
   const renderTaskRef = React.useRef<any>(null);
@@ -41,7 +44,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
-        setPageNum(1); // Reset to page 1 on new doc
+        setPageNum(1);
       } catch (e: any) {
         console.error("PDF Load Error:", e);
         setError(e.message || "Failed to load PDF");
@@ -52,27 +55,24 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     if (url) loadPdf();
   }, [url]);
 
-  // 2. Render Page (Whenever pageNum, pdfDoc, or scale changes)
+  // 2. Render Page
   React.useEffect(() => {
     if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
 
     const renderPage = async () => {
       try {
-        // Cancel previous render if active
         if (renderTaskRef.current) {
           renderTaskRef.current.cancel();
         }
 
         const page = await pdfDoc.getPage(pageNum);
         
-        // Auto-calculate scale to fit container width if scale is 1.0 (default)
-        // Otherwise use manual zoom level
+        // Auto-fit width if scale is 1.0
         let viewport = page.getViewport({ scale: 1 });
         let currentScale = scale;
         
         if (scale === 1.0) {
             const containerWidth = containerRef.current?.clientWidth || 800;
-            // Subtract padding
             const availableWidth = containerWidth - 48; 
             currentScale = availableWidth / viewport.width;
         }
@@ -86,30 +86,31 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         canvas!.height = viewport.height;
         canvas!.width = viewport.width;
 
-        // Render Canvas
-        const renderContext = {
+        // Render Canvas (The visual part)
+        const renderTask = page.render({
           canvasContext: context,
           viewport: viewport,
-        };
+        });
         
-        const renderTask = page.render(renderContext);
         renderTaskRef.current = renderTask;
         await renderTask.promise;
 
-        // Render Text Layer
+        // Render Text Layer (The heavy DOM part) - Only if enabled
         if (textLayerRef.current) {
-            const textContent = await page.getTextContent();
-            textLayerRef.current.style.height = `${viewport.height}px`;
-            textLayerRef.current.style.width = `${viewport.width}px`;
-            textLayerRef.current.innerHTML = '';
-            textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+           textLayerRef.current.innerHTML = ''; // Clear previous
+           if (enableTextLayer) {
+              const textContent = await page.getTextContent();
+              textLayerRef.current.style.height = `${viewport.height}px`;
+              textLayerRef.current.style.width = `${viewport.width}px`;
+              textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-            pdfjs.renderTextLayer({
-                textContentSource: textContent,
-                container: textLayerRef.current,
-                viewport: viewport,
-                textDivs: [],
-            });
+              await pdfjs.renderTextLayer({
+                  textContentSource: textContent,
+                  container: textLayerRef.current,
+                  viewport: viewport,
+                  textDivs: [],
+              }).promise;
+           }
         }
 
       } catch (err: any) {
@@ -126,12 +127,13 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
             renderTaskRef.current.cancel();
         }
     };
-  }, [pdfDoc, pageNum, scale]);
+  }, [pdfDoc, pageNum, scale, enableTextLayer]);
 
   // Navigation Handlers
   const changePage = (offset: number) => {
     if (!pdfDoc) return;
-    setPageNum(prev => Math.min(Math.max(prev + offset, 1), pdfDoc.numPages));
+    const newPage = Math.min(Math.max(pageNum + offset, 1), pdfDoc.numPages);
+    setPageNum(newPage);
   };
 
   const handleZoom = (delta: number) => {
@@ -161,35 +163,36 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-zinc-900 border-b shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-zinc-900 border-b shrink-0 flex-wrap gap-2">
             <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={() => changePage(-1)} disabled={pageNum <= 1}>
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <div className="flex items-center gap-1 text-sm font-medium">
-                    <span>Page</span>
-                    <Input 
-                        value={pageNum}
-                        onChange={(e) => {
-                            const val = parseInt(e.target.value);
-                            if (val > 0 && val <= (pdfDoc?.numPages || 0)) setPageNum(val);
-                        }}
-                        className="w-12 h-8 text-center p-0"
-                    />
-                    <span className="text-muted-foreground">of {pdfDoc?.numPages}</span>
-                </div>
+                <span className="text-sm font-medium whitespace-nowrap">
+                    Page {pageNum} / {pdfDoc?.numPages}
+                </span>
                 <Button variant="outline" size="icon" onClick={() => changePage(1)} disabled={pageNum >= (pdfDoc?.numPages || 0)}>
                     <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
-            
+
             <div className="flex items-center gap-2">
+               <Button 
+                 variant={enableTextLayer ? "secondary" : "ghost"} 
+                 size="sm" 
+                 onClick={() => setEnableTextLayer(!enableTextLayer)}
+                 className="hidden sm:flex gap-2"
+                 title="Toggle Text Selection (High Memory)"
+               >
+                 <Type className="h-4 w-4" />
+                 <span className="text-xs">{enableTextLayer ? 'Text On' : 'Text Off'}</span>
+               </Button>
+
                 <Button variant="ghost" size="icon" onClick={() => handleZoom(-0.25)}>
                     <ZoomOut className="h-4 w-4" />
                 </Button>
-                <span className="text-xs text-muted-foreground w-12 text-center">
+                <span className="text-xs text-muted-foreground w-8 text-center">
                     {Math.round(scale * 100)}%
                 </span>
                 <Button variant="ghost" size="icon" onClick={() => handleZoom(0.25)}>
@@ -200,9 +203,17 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
         {/* Viewer Area */}
         <div className="flex-1 overflow-auto relative flex justify-center p-4" ref={containerRef}>
-            <div className="relative shadow-lg bg-white">
+            <div className="relative shadow-lg bg-white" style={{ alignSelf: 'flex-start' }}>
                 <canvas ref={canvasRef} className="block" />
-                <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
+                {/* Text Layer Container */}
+                <div 
+                  ref={textLayerRef} 
+                  className={cn(
+                    "textLayer absolute inset-0 mix-blend-multiply",
+                    !enableTextLayer && "pointer-events-none"
+                  )} 
+                  onMouseUpCapture={enableTextLayer ? onTextSelect : undefined} 
+                />
             </div>
         </div>
     </div>
