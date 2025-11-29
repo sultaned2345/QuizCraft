@@ -8,30 +8,34 @@ import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/u
 
 export const runtime = 'nodejs';
 
+// Keep 500k limit
+const MAX_INPUT_LENGTH = 500000;
+
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
 
-// --- 1. CONFIGURATION HELPER ---
-function parseQuery(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  return {
-    numQuestions: Number(searchParams.get('numQuestions') ?? '10'),
-    difficulty: (searchParams.get('difficulty') as Difficulty) ?? 'medium',
-    questionType: (searchParams.get('questionType') as QuestionTypeOption) ?? 'MIXED',
-    immediateFeedback: searchParams.get('immediateFeedback') !== 'false',
-  };
+// ... (parseQuery and readMultipartOrText remain the same) ...
+function parseQuery(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const numQuestions = Number(searchParams.get('numQuestions') ?? '10');
+  const difficulty = (searchParams.get('difficulty') as Difficulty) ?? 'medium';
+  const questionType = (searchParams.get('questionType') as QuestionTypeOption) ?? 'MIXED';
+  const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
+  return { numQuestions, difficulty, questionType, immediateFeedback };
 }
 
-async function readMultipartOrText(req: NextRequest) {
-  const contentType = req.headers.get('content-type') || '';
+async function readMultipartOrText(request: NextRequest) {
+  const contentType = request.headers.get('content-type') || '';
   if (contentType.includes('multipart/form-data')) {
-    const form = await req.formData();
-    return { text: (form.get('text') as string).trim(), sourceType: 'text' };
+    const form = await request.formData();
+    return { text: (form.get('text') as string).trim(), sourceType: 'text' as const };
   }
-  return { text: (await req.text()).trim(), sourceType: 'text' };
+  if (contentType.includes('text/plain')) {
+    return { text: (await request.text()).trim(), sourceType: 'text' as const };
+  }
+  throw new Error(`Unsupported Content-Type: ${contentType}`);
 }
 
-// --- 2. INTELLIGENT PROMPT ENGINEERING ---
 function buildPrompt({
   text,
   numQuestions,
@@ -43,181 +47,142 @@ function buildPrompt({
   difficulty: Difficulty;
   questionType: QuestionTypeOption;
 }) {
-  const typeStr = questionType === 'MIXED' 
-    ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING' 
-    : questionType;
+  const questionTypes =
+    questionType === 'MIXED'
+      ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
+      : questionType;
 
-  // System Prompt: Instructions on HOW to think
-  const system = `You are an expert educational AI. 
-  
-  **Your Process:**
-  1. **Topic Extraction:** First, silently read the text and identify the core concepts, themes, and key facts ("The Topics").
-  2. **Question Generation:** Generate exactly ${numQuestions} questions that test understanding of these specific Topics.
-  
-  **Guidelines:**
-  - **Understand, Don't just Quote:** Questions should test if the user understands the *meaning* of the topic, not just word-matching.
-  - **Contextual:** Use "Fill in the Blank" for key terminology. Use "Matching" for definitions or relationships.
-  - **Difficulty:** ${difficulty} (Adjust complexity of scenarios accordingly).
-  - **Distribution:** Ensure questions cover the identified topics evenly.`;
+  // --- REVERTED TO ORIGINAL PROMPT ---
+  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
-  // User Prompt: The Content and Output Format
-  const user = `Content to Analyze:
-  """
-  ${text}
-  """
+  const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
-  Task: Generate a ${numQuestions}-question quiz (${difficulty}) covering: ${typeStr}.
-  
-  Return strictly valid JSON with this exact schema:
-  {
-    "title": "A descriptive title based on the Identified Topics",
-    "questions": [
-      {
-        "question_text": "The question or scenario...",
-        "question_type": "MULTIPLE_CHOICE",
-        "options": ["Correct Answer", "Distractor 1", "Distractor 2", "Distractor 3"],
-        "correct_answer": "Correct Answer",
-        "explanation": "Why this is correct..."
-      },
-      {
-        "question_text": "True or False statement...",
-        "question_type": "TRUE_FALSE",
-        "correct_answer": "True",
-        "explanation": "..."
-      },
-      {
-        "question_text": "The missing term is ____.",
-        "question_type": "FILL_IN_THE_BLANK",
-        "options": ["term"],
-        "correct_answer": "term",
-        "explanation": "..."
-      },
-      {
-        "question_text": "Match the following:",
-        "question_type": "MATCHING",
-        "prompts": ["Term A", "Term B"],
-        "options": ["Def A", "Def B"],
-        "correct_answer": "N/A",
-        "explanation": "..."
-      }
-    ]
-  }`;
+Content:
+"""
+${text}
+"""
 
+Return ONLY valid JSON with this exact shape:
+{
+  "title": string,
+  "questions": [
+    {
+      "question_text": string,
+      "question_type": "MULTIPLE_CHOICE",
+      "options": [string, string, string, string],
+      "correct_answer": string,
+      "explanation": string
+    },
+    {
+      "question_text": string,
+      "question_type": "TRUE_FALSE",
+      "correct_answer": "True" | "False",
+      "explanation": string
+    },
+    {
+      "question_text": string,
+      "question_type": "FILL_IN_THE_BLANK",
+      "correct_answer": string,
+      "explanation": string
+    },
+    {
+      "question_text": "Match the following items:",
+      "question_type": "MATCHING",
+      "prompts": ["A", "B", "C"],
+      "options": ["1", "2", "3"],
+      "correct_answer": "N/A",
+      "explanation": "string"
+    }
+  ]
+}`;
   return { system, user };
 }
 
-// --- 3. AI GENERATION & VALIDATION ---
-async function callGeminiForQuiz(params: any): Promise<{ title: string; questions: Question[] }> {
+async function callGeminiForQuiz({
+  text,
+  numQuestions,
+  difficulty,
+  questionType,
+}: {
+  text: string;
+  numQuestions: number;
+  difficulty: Difficulty;
+  questionType: QuestionTypeOption;
+}): Promise<{ title: string; questions: Question[] }> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
-  const model = genAI.getGenerativeModel({ 
+  if (!process.env.GOOGLE_AI_API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY');
+
+  const safeText = text.substring(0, MAX_INPUT_LENGTH);
+  const { system, user } = buildPrompt({ text: safeText, numQuestions, difficulty, questionType });
+
+  const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash-lite',
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } 
+    generationConfig: {
+      temperature: 0.4, // Reverted to 0.4
+      responseMimeType: 'application/json',
+    },
   });
 
-  const { system, user } = buildPrompt(params);
   const result = await model.generateContent(`${system}\n\n${user}`);
-  const text = result.response.text();
+  const response = await result.response;
+  const content = response.text();
 
-  let parsed;
+  if (!content) throw new Error('Empty response from Gemini');
+
+  let cleanedContent = content.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+  let parsed: any;
   try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) parsed = JSON.parse(match[0]);
-    else throw new Error("Invalid JSON from AI");
+    parsed = JSON.parse(cleanedContent);
+  } catch (parseError) {
+    const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    else throw new Error('Failed to parse Gemini JSON response.');
   }
 
-  if (!parsed.questions || !Array.isArray(parsed.questions)) {
-    throw new Error("Invalid Data Structure: 'questions' array missing.");
-  }
-
-  // Sanitize and Validate
-  const sanitizedQuestions = parsed.questions.map((q: any, i: number) => {
-    if (!q.question_text || !q.question_type || !q.correct_answer) {
-      throw new Error(`Question ${i + 1} missing required fields.`);
-    }
-
-    // 1. Multiple Choice Safety
-    if (q.question_type === 'MULTIPLE_CHOICE') {
-      if (!Array.isArray(q.options) || q.options.length < 2) {
-        throw new Error(`Question ${i + 1} (Multiple Choice) must have options.`);
-      }
-      if (!q.options.includes(q.correct_answer)) {
-        q.options[0] = q.correct_answer; // Auto-fix
-      }
-    }
-
-    // 2. Matching Safety
-    if (q.question_type === 'MATCHING') {
-      if (!Array.isArray(q.prompts) || !Array.isArray(q.options) || q.prompts.length !== q.options.length) {
-        throw new Error(`Question ${i + 1} (Matching) has mismatched prompts/options.`);
-      }
-    }
-
-    // 3. True/False Safety
-    if (q.question_type === 'TRUE_FALSE') {
-       const ans = String(q.correct_answer).toLowerCase();
-       q.correct_answer = ans === 'true' ? 'True' : 'False';
-       q.options = ['True', 'False'];
-    }
-
-    return {
-      ...q,
-      explanation: q.explanation || "No explanation provided.",
-      options: Array.isArray(q.options) ? q.options : [],
-      prompts: Array.isArray(q.prompts) ? q.prompts : [],
-    };
-  });
-
-  return { title: parsed.title || "Generated Quiz", questions: sanitizedQuestions };
+  return parsed as { title: string; questions: Question[] };
 }
 
-// --- 4. ROUTE HANDLER ---
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth(req);
-    
-    // Usage Check
-    const usage = await checkAIGenerationUsageLimit(user.id);
-    if (!usage.isValid) return NextResponse.json({ error: usage.error }, { status: 403 });
-
-    const params = parseQuery(req);
-    const { text } = await readMultipartOrText(req);
-
-    if (!text || text.length < 50) {
-      return NextResponse.json({ error: 'Content too short' }, { status: 400 });
+    const user = await requireAuth(request);
+    const usageCheck = await checkAIGenerationUsageLimit(user.id);
+    if (!usageCheck.isValid || !usageCheck.canGenerate) {
+      return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // Generate
-    const quiz = await callGeminiForQuiz({ ...params, text });
+    const { numQuestions, difficulty, questionType, immediateFeedback } = parseQuery(request);
+    const { text } = await readMultipartOrText(request);
 
-    // Save to Database
+    if (!text || text.length < 100) return NextResponse.json({ success: false, error: 'Content too short.' }, { status: 400 });
+
+    const quiz = await callGeminiForQuiz({ text, numQuestions, difficulty, questionType });
+
+    const questionsToCreate = quiz.questions.map((q) => ({
+      question_text: q.question_text,
+      question_type: q.question_type,
+      correct_answer: q.correct_answer,
+      options: Array.isArray(q.options) ? q.options : undefined,
+      prompts: Array.isArray(q.prompts) ? q.prompts : undefined,
+      explanation: q.explanation || '',
+    }));
+
     const saved = await prisma.quiz.create({
       data: {
-        title: quiz.title,
+        title: quiz.title || 'Generated Quiz',
+        is_public: false,
+        immediate_feedback: immediateFeedback,
         userId: user.id,
-        immediate_feedback: params.immediateFeedback,
-        questions: {
-          create: quiz.questions.map(q => ({
-             question_text: q.question_text,
-             question_type: q.question_type, 
-             correct_answer: q.correct_answer,
-             options: q.options as any, 
-             prompts: q.prompts as any,
-             explanation: q.explanation
-          }))
-        }
+        questions: { create: questionsToCreate },
       },
-      select: { id: true, title: true, questions: true }
+      select: { id: true, title: true, createdAt: true, questions: { select: { id: true, question_text: true, question_type: true, options: true, prompts: true, correct_answer: true, explanation: true } } },
     });
 
     await incrementAIGenerationUsage(user.id, 1);
-    
-    return NextResponse.json({ success: true, ...saved });
 
+    return NextResponse.json({ success: true, ...saved });
   } catch (error: any) {
-    console.error("Quiz Gen Error:", error);
-    const msg = error.message.includes("Usage") ? error.message : "Failed to generate quiz";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    if (error instanceof Response) return error;
+    console.error('Quiz generation error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Internal server error.' }, { status: 500 });
   }
 }

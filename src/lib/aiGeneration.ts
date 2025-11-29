@@ -1,11 +1,14 @@
 // src/lib/aiGeneration.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuestionType } from '@/types/database';
+import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
+
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
-const MAX_INPUT_LENGTH = 100000; 
+
+// Keep the high limit (approx 100 pages) to support 5MB files
+const MAX_INPUT_LENGTH = 500000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -15,14 +18,12 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
-    // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
 
 // ---------------------------------------------------------------------------
-// 1. QUIZ GENERATION (Updated with Bloom's Taxonomy)
+// 1. QUIZ GENERATION (Standard Prompt)
 // ---------------------------------------------------------------------------
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -44,18 +45,8 @@ function buildQuizPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  const system = `You are an expert educational assessment specialist. Your goal is to generate "Higher-Order Thinking" quiz questions based ONLY on the provided text.
-
-  STRICT GENERATION RULES:
-  1. **Bloom's Taxonomy (Apply & Analyze)**: Do NOT generate simple definition questions (e.g., "What is X?"). Instead:
-     - **Apply**: Present a scenario and ask how to use a concept to solve it.
-     - **Analyze**: Show a code snippet or a process description and ask the user to identify a bug, a missing step, or the underlying principle.
-     - **Evaluate**: Present two approaches and ask which is better for a specific goal.
-  2. **Scenario-Based Questions**: Questions should start with a context (e.g., "A user reports error 500...", "In a React component...", "During mitosis...").
-  3. **Plausible Distractors**: For Multiple Choice, incorrect options must be **common misconceptions** or "near-miss" answers, not random or obviously wrong fillers.
-  4. **Code & Formatting**: If the input text is technical, you MUST use markdown code blocks (\`code\`) in the 'question_text' to present snippets for analysis.
-
-  Generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions.`;
+  // --- REVERTED TO ORIGINAL SYSTEM PROMPT ---
+  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
   const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
@@ -66,13 +57,13 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": "string", // a concise, scenario-focused title
+  "title": "string", 
   "questions": [
     {
-      "question_text": "string", // E.g., "Review the code below. What is the output?\\n\\n\`\`\`javascript\\n...\\n\`\`\`",
+      "question_text": "string",
       "question_type": "MULTIPLE_CHOICE",
-      "options": ["string", "string", "string", "string"], // 4 options
-      "correct_answer": "string", // Must match one option exactly
+      "options": ["string", "string", "string", "string"],
+      "correct_answer": "string",
       "explanation": "string"
     },
     {
@@ -82,19 +73,19 @@ Return ONLY valid JSON with this exact shape:
       "explanation": "string"
     },
     {
-      "question_text": "string", // Use "____" for blanks
+      "question_text": "string", 
       "question_type": "FILL_IN_THE_BLANK",
-      "options": ["string"], // Acceptable answer(s)
-      "correct_answer": "N/A", // Ignored for this type, options array used
+      "options": ["string"], 
+      "correct_answer": "N/A", 
       "explanation": "string"
     },
     {
-      "question_text": "Match the problem to its solution:",
+      "question_text": "Match the following items:",
       "question_type": "MATCHING",
-      "prompts": ["Problem A", "Problem B", "Problem C"],
-      "options": ["Solution A", "Solution B", "Solution C"],
+      "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
+      "options": ["Answer 1", "Answer 2", "Answer 3"],
       "correct_answer": "N/A",
-      "explanation": "string"
+      "explanation": "Explanation of how the items are related."
     }
   ]
 }`;
@@ -112,7 +103,7 @@ export async function callAIToGenerateQuiz(
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
     generationConfig: {
-      temperature: 0.4,
+      temperature: 0.4, // Reverted to standard temperature
       responseMimeType: 'application/json',
     },
   });
@@ -141,7 +132,7 @@ export async function callAIToGenerateQuiz(
   }
 
   if (!parsed || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
+    throw new Error('Gemini returned invalid or empty data structure.');
   }
 
   const sanitizedQuestions = parsed.questions.map((q: any) => ({
@@ -157,7 +148,7 @@ export async function callAIToGenerateQuiz(
 }
 
 // ---------------------------------------------------------------------------
-// 2. NOTE GENERATION (Unchanged)
+// 2. NOTE GENERATION
 // ---------------------------------------------------------------------------
 
 function buildNotePrompt({ text }: { text: string }): string {
@@ -171,20 +162,19 @@ You MUST format the notes as clean, semantic HTML.
 - Use <p> for paragraphs.
 - Do NOT use any Markdown (like ##, **, or -).
 - Do NOT use <html>, <body>, or <head> tags.
-- The HTML content must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty.
 
 {
   "notes": [
     {
       "title": "Concise Title Reflecting Main Topic",
-      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
+      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p>..."
     }
   ]
 }`;
@@ -222,21 +212,10 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // Validations
-  if (
-    !parsed.notes || 
-    !Array.isArray(parsed.notes) || 
-    parsed.notes.length === 0 || 
-    !parsed.notes[0].title ||
-    typeof parsed.notes[0].content !== 'string'
-  ) {
-    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
+  if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0 || !parsed.notes[0].title || typeof parsed.notes[0].content !== 'string') {
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
-
-  // Check for meaningful content
   if (!isContentMeaningful(parsed.notes[0].content)) {
-     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
      throw new Error("AI failed to generate meaningful content for this note.");
   }
   
@@ -244,15 +223,11 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
 }
 
 // ---------------------------------------------------------------------------
-// 3. FLASHCARD GENERATION (Unchanged)
+// 3. FLASHCARD GENERATION
 // ---------------------------------------------------------------------------
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.
-
-For each flashcard:
-- 'front_content' should be a term, concept, or question.
-- 'back_content' should be its definition, explanation, or answer, derived directly from the text.
 
 Text Content:
 """
