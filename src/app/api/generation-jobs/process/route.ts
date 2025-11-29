@@ -1,80 +1,52 @@
 // src/app/api/generation-jobs/process/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { generateQueryEmbedding } from '@/lib/embedding';
 import { Prisma } from '@prisma/client';
+// --- 1. IMPORT CENTRALIZED AI HELPERS ---
 import {
   callAIToGenerateQuiz,
   callAIToGenerateNote,
   callAIToGenerateFlashcards,
 } from '@/lib/aiGeneration';
+// ---
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// --- CONFIG ---
+// 500,000 characters is roughly 100-150 single-spaced pages.
+// This ensures high quality without hitting the 4MB hard limit.
+const MAX_CONTEXT_LENGTH = 500000; 
+
 async function processJob(job: any) {
     let outputId: string | null = null;
     try {
-        console.log(`Processing job ${job.id} for doc ${job.document_id} (Smart RAG Mode)`);
+        console.log(`Processing job ${job.id} for doc ${job.document_id} (Full Text Mode)`);
         
-        // 1. Get Document & Insights
+        // 1. Get Full Document Text
+        // We do NOT use RAG here. We want the "Big Picture" for quizzes/notes.
         const document = await prisma.documents.findFirst({
             where: { id: job.document_id, user_id: job.user_id },
-            select: { ai_insights: true, file_name: true }
+            select: { extracted_text: true, file_name: true }
         });
         if (!document) throw new Error("Document not found.");
 
-        // 2. Prepare Search Queries (Smart RAG)
-        // We use the AI-generated "Key Concepts" to find the best parts of the file.
-        let searchQueries: string[] = [];
-        const insights = document.ai_insights as any;
+        let fullText = document.extracted_text || "";
         
-        if (insights && insights.keyConcepts && Array.isArray(insights.keyConcepts)) {
-            // Pick top 5 concepts to get a broad coverage of the document
-            searchQueries = insights.keyConcepts.slice(0, 5);
-        } else {
-            // Fallback if no insights exist yet
-            searchQueries = ["Summary", "Important Definitions", "Key Concepts", "Main Arguments", "Conclusion"];
+        if (fullText.length < 50) {
+            throw new Error("Document text is empty or too short.");
         }
 
-        console.log(`RAG Queries: ${JSON.stringify(searchQueries)}`);
-
-        // 3. Generate Embeddings for these Queries
-        const embeddingPromises = searchQueries.map(q => generateQueryEmbedding(q));
-        const embeddings = await Promise.all(embeddingPromises);
-
-        // 4. Find Relevant Chunks (Filtered by THIS Document)
-        // We ask for 3 chunks per query. 5 queries * 3 chunks = max 15 chunks (~30k chars).
-        const chunkPromises = embeddings.map(emb =>
-            supabaseAdmin.rpc('match_content_chunks', {
-                query_embedding: emb,
-                match_threshold: 0.5, 
-                match_count: 3, 
-                p_user_id: job.user_id,
-                p_content_id: job.document_id // <--- CRITICAL: Only look in this file
-            })
-        );
-        const chunkResults = await Promise.all(chunkPromises);
-        
-        const allChunks = chunkResults.flatMap(res => res.data || []);
-        
-        if (allChunks.length === 0) {
-             throw new Error("No content chunks found. The document might still be processing its embeddings. Please wait 1 minute and try again.");
+        // 2. Truncate if absolutely necessary (Safety Cap)
+        if (fullText.length > MAX_CONTEXT_LENGTH) {
+            console.log(`Truncating text from ${fullText.length} to ${MAX_CONTEXT_LENGTH} chars.`);
+            fullText = fullText.substring(0, MAX_CONTEXT_LENGTH);
         }
 
-        // 5. De-duplicate and Create Focused Context
-        const uniqueChunks = [...new Map(allChunks.map(c => [c.content_chunk, c])).values()];
-        const contextText = uniqueChunks.map(c => c.content_chunk).join("\n\n---\n\n");
-
-        console.log(`Constructed RAG Context: ${contextText.length} chars from ${uniqueChunks.length} chunks.`);
-
-        if (contextText.length < 100) throw new Error("Context from RAG is too short to generate quality content.");
-
-        // 6. Run the specific job type using the Focused RAG Context
+        // 3. Run the specific job type
         switch (job.job_type) {
             case 'quiz':
-                const quizData = await callAIToGenerateQuiz(contextText, 10, 'medium', 'MIXED');
+                const quizData = await callAIToGenerateQuiz(fullText, 10, 'medium', 'MIXED');
                 const newQuiz = await prisma.quiz.create({
                     data: {
                         title: quizData.title || `Quiz: ${document.file_name}`,
@@ -96,7 +68,7 @@ async function processJob(job: any) {
                 break;
             
             case 'note':
-                const noteData = await callAIToGenerateNote(contextText);
+                const noteData = await callAIToGenerateNote(fullText);
                 const newNote = await prisma.notes.create({
                     data: {
                         user_id: job.user_id,
@@ -108,7 +80,7 @@ async function processJob(job: any) {
                 break;
                 
             case 'flashcard':
-                const cards = await callAIToGenerateFlashcards(contextText, 15);
+                const cards = await callAIToGenerateFlashcards(fullText, 15);
                 const newDeck = await prisma.flashcard_decks.create({
                     data: {
                         user_id: job.user_id,
@@ -128,6 +100,7 @@ async function processJob(job: any) {
                 throw new Error(`Unknown job type: ${job.job_type}`);
         }
 
+        // 4. Mark Complete
         await prisma.generation_jobs.update({
             where: { id: job.id },
             data: { status: 'complete', output_id: outputId }
@@ -146,12 +119,10 @@ async function processJob(job: any) {
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Optional: Allow localhost to bypass for testing
-    if (process.env.NODE_ENV === 'development') {
-        console.log("Allowing dev bypass for cron");
-    } else {
+     // Allow dev bypass
+     if (process.env.NODE_ENV !== 'development') {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+     }
   }
 
   const jobsToProcess = await prisma.generation_jobs.findMany({

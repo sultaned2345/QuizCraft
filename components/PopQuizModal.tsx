@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Question } from '@/types/database';
-import { Loader2, Check, X, RotateCw, Trophy, AlertCircle, ArrowRight, Lightbulb } from 'lucide-react';
+import { Loader2, Check, X, RotateCw, Trophy, AlertCircle, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -105,15 +105,18 @@ export function PopQuizModal({
     }
     const isCorrect = currentQuestion.correct_answer === optionText;
     
-    if (isCorrect) return 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 ring-1 ring-green-500';
-    if (selectedAnswer === optionText && !isCorrect) return 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 ring-1 ring-red-500';
+    if (isCorrect) return 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400';
+    if (selectedAnswer === optionText && !isCorrect) return 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400';
     
     return 'border-border opacity-50';
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]">
+      {/* FIX: Changed max-h-[85vh] to max-h-[90dvh] for better mobile support. 
+         Added w-full to ensure it takes width on small screens.
+      */}
+      <DialogContent className="sm:max-w-2xl w-full p-0 gap-0 overflow-hidden flex flex-col max-h-[90dvh] bg-background">
         <AnimatePresence mode="wait">
           {!currentQuestion ? (
             <div className="flex h-64 items-center justify-center">
@@ -125,7 +128,7 @@ export function PopQuizModal({
               key="results"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center p-8 text-center"
+              className="flex flex-col items-center p-8 text-center overflow-y-auto"
             >
               <div className="w-20 h-20 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center mb-6">
                 <Trophy className="w-10 h-10 text-yellow-600 dark:text-yellow-500" />
@@ -157,13 +160,15 @@ export function PopQuizModal({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="flex flex-col h-full"
+              // FIX: Added 'overflow-hidden' to ensure children (ScrollArea) trigger scrolling 
+              // instead of expanding this container and pushing the footer off-screen.
+              className="flex flex-col h-full w-full overflow-hidden"
             >
               {/* Header */}
-              <DialogHeader className="p-6 pb-4 border-b bg-muted/10">
-                <div className="flex justify-between items-center mb-4">
-                  <DialogTitle className="text-xl">{title}</DialogTitle>
-                  <span className="text-xs font-bold text-muted-foreground bg-secondary px-2 py-1 rounded-md">
+              <DialogHeader className="p-6 pb-4 border-b shrink-0">
+                <div className="flex justify-between items-center mb-2">
+                  <DialogTitle>{title}</DialogTitle>
+                  <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-1 rounded">
                     {currentQuestionIndex + 1} / {quizQuestions.length}
                   </span>
                 </div>
@@ -185,20 +190,19 @@ export function PopQuizModal({
                           key={option}
                           variant="outline"
                           className={cn(
-                            "w-full justify-start text-left h-auto p-4 whitespace-normal transition-all text-base",
+                            "w-full justify-start text-left h-auto p-4 whitespace-normal transition-all",
                             getOptionClass(option)
                           )}
                           disabled={answerStatus !== 'unanswered'}
                           onClick={() => handleAnswerSelect(option)}
                         >
                           <div className="flex items-center w-full gap-3">
-                             {/* Circle Indicator */}
                             <div className={cn(
-                                "w-6 h-6 rounded-full border flex items-center justify-center shrink-0 transition-colors",
-                                selectedAnswer === option ? "border-current" : "border-muted-foreground/30"
+                                "w-6 h-6 rounded-full border flex items-center justify-center shrink-0",
+                                selectedAnswer === option ? "border-primary" : "border-muted-foreground/30"
                             )}>
-                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-3.5 h-3.5" />}
-                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-3.5 h-3.5" />}
+                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-3.5 h-3.5 text-green-600" />}
+                                {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-3.5 h-3.5 text-red-600" />}
                             </div>
                             <span className="flex-1">{option}</span>
                           </div>
@@ -212,56 +216,41 @@ export function PopQuizModal({
                           key={option}
                           variant="outline"
                           className={cn(
-                            "w-full justify-start text-left h-auto p-4 text-base",
+                            "w-full justify-start text-left h-auto p-4",
                             getOptionClass(option)
                           )}
                           disabled={answerStatus !== 'unanswered'}
                           onClick={() => handleAnswerSelect(option)}
                         >
-                           <span className="flex-1 font-medium">{option}</span>
-                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-4 h-4 ml-auto" />}
-                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-4 h-4 ml-auto" />}
+                           <span className="flex-1">{option}</span>
+                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-4 h-4 ml-auto text-green-600" />}
+                           {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-4 h-4 ml-auto text-red-600" />}
                         </Button>
                       ))}
                   </div>
 
-                  {/* Enhanced Explanation Feedback */}
-                  <AnimatePresence>
-                    {answerStatus !== 'unanswered' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0, y: 10 }}
-                            animate={{ opacity: 1, height: 'auto', y: 0 }}
-                            className={cn(
-                                "rounded-xl border p-5 overflow-hidden",
-                                answerStatus === 'correct' 
-                                    ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900" 
-                                    : "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900"
-                            )}
-                        >
-                            <div className={cn(
-                                "flex items-center gap-2 font-bold text-lg mb-2",
-                                answerStatus === 'correct' ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"
-                            )}>
-                                {answerStatus === 'correct' ? <Check className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                                {answerStatus === 'correct' ? "Correct!" : "Incorrect"}
-                            </div>
-                            
-                            <div className={cn(
-                                "pl-3 border-l-2",
-                                answerStatus === 'correct' ? "border-emerald-200 dark:border-emerald-800" : "border-red-200 dark:border-red-800"
-                            )}>
-                                <p className="text-sm text-foreground/80 leading-relaxed">
-                                    {currentQuestion.explanation || "No explanation provided."}
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* Explanation Feedback */}
+                  {answerStatus !== 'unanswered' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-lg bg-muted/50 border p-4 text-sm"
+                    >
+                      <div className="flex items-center gap-2 font-semibold mb-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Explanation
+                      </div>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {currentQuestion.explanation || "No explanation provided."}
+                      </p>
+                    </motion.div>
+                  )}
                 </div>
               </ScrollArea>
 
               {/* Footer */}
-              <div className="p-6 pt-4 border-t bg-muted/5 flex justify-end">
+              {/* FIX: Added shrink-0 so it doesn't get squashed, and z-10 for layering safety */}
+              <div className="p-6 pt-4 border-t bg-muted/5 flex justify-end shrink-0 z-10">
                 <Button 
                   onClick={handleNext} 
                   disabled={answerStatus === 'unanswered'}

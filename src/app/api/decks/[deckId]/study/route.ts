@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { ApiResponse, DeckWithCardsResponse, Flashcard } from '@/types/database';
+import { ApiResponse, DeckWithCardsResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 import { USAGE_LIMITS } from '@/lib/usage-limits';
 
@@ -18,7 +18,7 @@ export async function GET(
         const user = await requireAuth(request);
         const { deckId } = params;
         const url = new URL(request.url);
-        const mode = url.searchParams.get('mode') || 'due';
+        const mode = url.searchParams.get('mode') || 'due'; // 'due', 'new', 'cram'
 
         if (!deckId) {
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck ID is required.' }, { status: 400 });
@@ -40,6 +40,7 @@ export async function GET(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Deck not found or access denied.' }, { status: 404 });
         }
         
+        // --- LOGIC UPDATE ---
         let whereClause: Prisma.flashcardsWhereInput = { deck_id: deckId };
         let orderByClause: Prisma.flashcardsOrderByWithRelationInput | Prisma.flashcardsOrderByWithRelationInput[] = {};
         let takeClause: number | undefined = undefined;
@@ -54,13 +55,14 @@ export async function GET(
             whereClause.ease_factor = 2.5;
             orderByClause = { created_at: 'asc' };
             takeClause = STUDY_SESSION_LIMIT;
-        } else if (mode === 'cram' || mode === 'all') { // <-- FIX: Explicitly handle 'cram'
+        } else if (mode === 'cram' || mode === 'all') {
+            // Return ALL cards, ignoring due dates
             whereClause = { deck_id: deckId };
-            orderByClause = { created_at: 'asc' };
-            takeClause = undefined; // Return all cards for cramming
+            orderByClause = { created_at: 'asc' }; // Frontend will shuffle
+            takeClause = undefined; // No limit for cramming
         }
         
-        const dueCards = await prisma.flashcards.findMany({
+        const cards = await prisma.flashcards.findMany({
             where: whereClause,
             orderBy: orderByClause,
             take: takeClause
@@ -69,6 +71,7 @@ export async function GET(
         const plan = deck.profile?.subscription_plan === 'pro' ? 'pro' : 'free';
         const cardLimit = plan === 'pro' ? Infinity : USAGE_LIMITS.FREE_TOTAL_FLASHCARDS;
         
+        // Count TOTAL cards (ignoring the 'due' filter)
         const totalCardCount = await prisma.flashcards.count({
             where: { deck_id: deckId }
         });
@@ -79,8 +82,8 @@ export async function GET(
             title: deck.title,
             created_at: deck.created_at?.toISOString() || '',
             updated_at: deck.updated_at?.toISOString() || '',
-            flashcards: dueCards,
-            cardCount: totalCardCount,
+            flashcards: cards,
+            cardCount: totalCardCount, // This tells frontend if deck is truly empty
             cardLimit: cardLimit,
         };
 
@@ -92,10 +95,6 @@ export async function GET(
     } catch (error: any) {
         if (error instanceof Response) return error; 
         console.error(`Error fetching study session for deck ${params.deckId}:`, error);
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2023') {
-             return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Deck ID format.' }, { status: 400 });
-        }
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch deck';
-        return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
+        return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to load cards' }, { status: 500 });
     }
 }
