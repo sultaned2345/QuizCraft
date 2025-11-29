@@ -5,7 +5,8 @@ import pdfParse from "pdf-parse-fork";
 
 export const runtime = "nodejs";
 
-const MAX_BYTES = 3 * 1024 * 1024; // 3MB
+// --- CHANGED: Increased limit to 5MB ---
+const MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const SUPPORTED_TYPES = ["application/pdf", "text/plain"]; // pdf, txt
 const SUPPORTED_EXTENSIONS = [".pdf", ".txt"];
 
@@ -15,7 +16,8 @@ async function getCleanTextFromFile(file: File): Promise<string> {
 
   // Enhanced file size validation
   if (buffer.byteLength > MAX_BYTES) {
-    throw new Error(`File exceeds 3MB limit. Current size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    // --- CHANGED: Updated error message ---
+    throw new Error(`File exceeds 5MB limit. Current size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
   }
 
   // Enhanced file type validation
@@ -154,5 +156,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-
