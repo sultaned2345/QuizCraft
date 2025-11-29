@@ -273,16 +273,6 @@ export default function DocumentViewPage() {
     setMenu({ ...menu, visible: false });
   };
 
-  // --- Safe Text Truncation ---
-  // Truncate text to avoid crashing the browser with massive DOM nodes
-  const displayContent = useMemo(() => {
-    const text = contentData?.data?.extracted_text || '';
-    if (text.length > 50000) {
-      return text.substring(0, 50000) + "\n\n***\n\n**[Document Preview Truncated]**\n*The file is too large to display fully here, but the AI has read the entire document. You can still chat, generate quizzes, and ask questions about any part of it.*";
-    }
-    return text;
-  }, [contentData]);
-
   if (authLoading || isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -389,25 +379,18 @@ export default function DocumentViewPage() {
                   value="document"
                   className="h-full m-0 border-0 data-[state=inactive]:hidden"
                 >
-                  {isPdf ? (
-                    // --- PDF LOGIC: Wait for URL, don't show text fallback ---
-                    urlData?.data?.signedUrl ? (
-                      <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
-                        <div className="h-full w-full overflow-hidden">
-                          <PdfViewer
-                            url={urlData.data.signedUrl}
-                            onTextSelect={handleMouseUpCapture}
-                          />
-                        </div>
+                  {urlData?.data?.signedUrl ? (
+                    // PDF Viewer
+                    <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
+                      <div className="h-full w-full overflow-hidden">
+                        <PdfViewer
+                          url={urlData.data.signedUrl}
+                          onTextSelect={handleMouseUpCapture}
+                        />
                       </div>
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center flex-col gap-2">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Preparing PDF viewer...</p>
-                      </div>
-                    )
+                    </div>
                   ) : (
-                    // --- TEXT/MARKDOWN LOGIC: Use truncated text ---
+                    // Markdown Viewer
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
                       <div
                         className="min-h-full py-8 px-4 flex justify-center"
@@ -415,7 +398,7 @@ export default function DocumentViewPage() {
                       >
                         <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 shadow-sm border rounded-xl p-8 md:p-12 min-h-[80vh]">
                           <MarkdownViewer
-                            content={displayContent}
+                            content={contentData?.data?.extracted_text || ''}
                           />
                         </div>
                       </div>
@@ -501,7 +484,9 @@ export default function DocumentViewPage() {
                             {(insightsData.data.examQuestions || []).map((q, i) => (
                               <div
                                 key={i}
-                                onClick={() => chatRef.current?.sendMessage(`I want to answer this question: "${safeRender(q)}". Please grade my answer.`)}
+                                // --- FIX: Changed prompt to request the answer directly ---
+                                onClick={() => chatRef.current?.sendMessage(`Answer this question: "${safeRender(q)}"`)}
+                                // --------------------------------------------------------
                                 className="group relative p-5 rounded-xl border bg-card hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
                               >
                                 <div className="flex items-start justify-between gap-4">

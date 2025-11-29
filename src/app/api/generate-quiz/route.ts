@@ -1,6 +1,6 @@
 // src/app/api/generate-quiz/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai'; 
 import pdfParse from 'pdf-parse-fork';
 
 import { prisma } from '@/lib/prisma';
@@ -10,8 +10,8 @@ import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/u
 
 export const runtime = 'nodejs';
 
-// --- ENFORCED: 4M char limit (approx 4MB) ---
-const MAX_INPUT_LENGTH = 4000000;
+// 500k limit
+const MAX_INPUT_LENGTH = 500000;
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
@@ -91,9 +91,17 @@ function buildPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
+  // --- IMPROVED PROMPT ---
+  const system = `You are a strict university professor creating a ${difficulty} difficulty exam.
+  
+  Goal: Test deep understanding, not just recall.
+  
+  Rules:
+  1. **Questions must be challenging.** Focus on application, analysis, and synthesis of ideas.
+  2. **Distractors must be high quality.** No "silly" answers. They should be plausible misconceptions.
+  3. **Strict JSON output only.**`;
 
-  const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
+  const user = `Generate ${numQuestions} ${difficulty} questions of type: ${questionTypes}.
 
 Content:
 """
@@ -126,10 +134,10 @@ Return ONLY valid JSON with this exact shape:
     {
       "question_text": "Match the following items:",
       "question_type": "MATCHING",
-      "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
-      "options": ["Answer 1", "Answer 2", "Answer 3"],
+      "prompts": ["A", "B", "C"],
+      "options": ["1", "2", "3"],
       "correct_answer": "N/A",
-      "explanation": "Explanation of how the items are related."
+      "explanation": "string"
     }
   ]
 }`;
@@ -152,7 +160,7 @@ async function callGeminiForQuiz({
     throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
   }
 
-  // --- TRUNCATE INPUT TEXT IF TOO LONG ---
+  // Safe Text Limit
   const safeText = text.substring(0, MAX_INPUT_LENGTH);
 
   const { system, user } = buildPrompt({
@@ -163,10 +171,9 @@ async function callGeminiForQuiz({
   });
 
   const model = genAI.getGenerativeModel({
-    // --- ENFORCED MODEL ---
     model: 'gemini-2.5-flash-lite',
     generationConfig: {
-      temperature: 0.4,
+      temperature: 0.3,
       responseMimeType: 'application/json',
     },
   });
@@ -197,18 +204,17 @@ async function callGeminiForQuiz({
       try {
         parsed = JSON.parse(jsonMatch[0]);
       } catch (fallbackError) {
-        throw new Error('Failed to parse Gemini JSON response. The AI returned an invalid format even after fallback.');
+        throw new Error('Failed to parse Gemini JSON response.');
       }
     } else {
-      throw new Error('Failed to parse Gemini JSON response. No valid JSON object found in response.');
+      throw new Error('Failed to parse Gemini JSON response.');
     }
   }
 
   if (!parsed || typeof parsed !== 'object' || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
+    throw new Error('Gemini returned invalid or empty data structure.');
   }
 
-  // Basic structure validation (omitted deep validation for brevity, assume similar to before)
   return parsed as { title: string; questions: Question[] };
 }
 
@@ -236,7 +242,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No input text provided' }, { status: 400 });
     }
     if (text.length < 100) {
-      return NextResponse.json({ success: false, error: 'Content is too short. Please provide at least 100 characters.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Content is too short.' }, { status: 400 });
     }
 
     const quiz = await callGeminiForQuiz({

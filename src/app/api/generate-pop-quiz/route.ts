@@ -10,8 +10,7 @@ export const runtime = 'nodejs';
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 
-// --- UPDATED: 500k limit (approx 100 pages) ---
-// This ensures we get High Quality questions without context truncation errors.
+// 500k char limit
 const MAX_CONTEXT_LENGTH = 500000;
 
 interface PopQuizResponse {
@@ -22,27 +21,30 @@ function buildPopQuizPrompt(text: string, topics: string[]): string {
   const topicList = topics.join(', ');
   const numQuestions = 5;
 
-  const system = `You are an expert university professor creating a pop quiz. 
-  Based ONLY on the provided text, generate exactly ${numQuestions} questions.
-  The questions should be MULTIPLE_CHOICE or TRUE_FALSE.
-  ${topicList ? `Focus on these topics if present: ${topicList}.` : ''}
-  For each question, provide an explanation for the correct answer derived strictly from the text.`;
+  const system = `You are an expert professor creating a challenging pop quiz. 
+  
+  Instructions:
+  1. Based ONLY on the provided text, generate exactly ${numQuestions} questions.
+  2. Questions should test **comprehension and analysis**, not just keyword matching.
+  3. **Distractors (wrong answers) MUST be plausible** and derived from the text context. Do NOT use obvious wrong answers.
+  4. ${topicList ? `Focus on these specific topics: ${topicList}.` : ''}
+  5. Provide a clear explanation for the correct answer.`;
 
-  const user = `Generate ${numQuestions} quiz questions based *only* on the content below.
+  const user = `Generate ${numQuestions} high-quality quiz questions.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON with this exact shape:
+Return ONLY valid JSON:
 {
   "questions": [
     {
       "question_text": "string",
       "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE",
-      "options": ["A", "B", "C", "D"] | ["True", "False"],
-      "correct_answer": "string",
+      "options": ["Option A", "Option B", "Option C", "Option D"], 
+      "correct_answer": "string", // Must match one option exactly
       "explanation": "string"
     }
   ]
@@ -72,8 +74,7 @@ export async function POST(request: NextRequest) {
 
     const topics = (doc.ai_insights as any)?.examQuestions || [];
     
-    // --- FULL TEXT MODE (High Quality) ---
-    // Pass the large text directly to Gemini Flash Lite
+    // Use Full Text (up to limit)
     let safeText = doc.extracted_text;
     if (safeText.length > MAX_CONTEXT_LENGTH) {
         safeText = safeText.substring(0, MAX_CONTEXT_LENGTH);
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({
       model: AI_MODEL_NAME,
       generationConfig: {
-        temperature: 0.4,
+        temperature: 0.3, // Lower temperature = more precise
         responseMimeType: 'application/json',
       },
     });
