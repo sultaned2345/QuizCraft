@@ -26,8 +26,6 @@ import {
   AlertCircle,
   Trophy,
   Lightbulb,
-  MousePointerClick,
-  Link as LinkIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,6 +36,7 @@ interface QuizData {
 }
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
+
 type QuizQuestion = Question & { shuffledOptions?: string[] };
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -49,7 +48,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-// --- IMPROVED MATCHING UI ---
+// --- SUB-COMPONENT: Matching Question ---
 function MatchingQuestionUI({
   question,
   answerStatus,
@@ -62,9 +61,13 @@ function MatchingQuestionUI({
   const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
   const [userMatches, setUserMatches] = useState<(number | null)[]>([]);
 
-  const { prompts, correctOptions, shuffledOptions } = useMemo(() => ({
+  const {
+    prompts,
+    options: correctOptions,
+    shuffledOptions,
+  } = useMemo(() => ({
     prompts: (question.prompts as string[]) || [],
-    correctOptions: (question.options as string[]) || [],
+    options: (question.options as string[]) || [],
     shuffledOptions: question.shuffledOptions || [],
   }), [question]);
 
@@ -75,24 +78,25 @@ function MatchingQuestionUI({
 
   const handlePromptClick = (promptIdx: number) => {
     if (answerStatus !== 'unanswered') return;
+
     if (userMatches[promptIdx] !== null) {
       const newUserMatches = [...userMatches];
-      newUserMatches[promptIdx] = null; // Unmatch
+      newUserMatches[promptIdx] = null;
       setUserMatches(newUserMatches);
-      setSelectedPromptIdx(promptIdx); // Reselect for new match
+      setSelectedPromptIdx(promptIdx);
     } else {
-      setSelectedPromptIdx(promptIdx === selectedPromptIdx ? null : promptIdx);
+      setSelectedPromptIdx(promptIdx);
     }
   };
 
   const handleOptionClick = (optionIdx: number) => {
     if (answerStatus !== 'unanswered' || selectedPromptIdx === null) return;
+
     const newUserMatches = [...userMatches];
-    
-    // Remove option if used elsewhere
     const existingMatchIdx = newUserMatches.indexOf(optionIdx);
-    if (existingMatchIdx > -1) newUserMatches[existingMatchIdx] = null;
-    
+    if (existingMatchIdx > -1) {
+      newUserMatches[existingMatchIdx] = null;
+    }
     newUserMatches[selectedPromptIdx] = optionIdx;
     setUserMatches(newUserMatches);
     setSelectedPromptIdx(null);
@@ -100,139 +104,108 @@ function MatchingQuestionUI({
 
   const handleSubmit = () => {
     if (answerStatus !== 'unanswered') return;
+
     let correctCount = 0;
     for (let pIdx = 0; pIdx < prompts.length; pIdx++) {
       const correctAns = correctOptions[pIdx];
       const userOptionIdx = userMatches[pIdx];
-      if (userOptionIdx !== null && shuffledOptions[userOptionIdx] === correctAns) {
-        correctCount++;
+      if (userOptionIdx !== null) {
+        const userAns = shuffledOptions[userOptionIdx];
+        if (userAns === correctAns) {
+          correctCount++;
+        }
       }
     }
     onQuestionComplete(correctCount === prompts.length);
   };
 
-  const allMatched = userMatches.every((m) => m !== null);
+  const allMatched = useMemo(
+    () => userMatches.every((m) => m !== null),
+    [userMatches]
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Helper Instruction Bar */}
-      {answerStatus === 'unanswered' && (
-        <div className={cn(
-          "text-sm font-medium px-4 py-2 rounded-full text-center transition-colors",
-          selectedPromptIdx !== null 
-            ? "bg-primary/10 text-primary animate-pulse" 
-            : "bg-muted text-muted-foreground"
-        )}>
-          {selectedPromptIdx !== null 
-            ? `Select the matching definition for "${prompts[selectedPromptIdx]}"` 
-            : "Tap a term on the left to start matching"}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-        {/* Prompts (Left) */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center md:text-left">Terms</h4>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
           {prompts.map((prompt, pIdx) => {
             const isSelected = selectedPromptIdx === pIdx;
             const isMatched = userMatches[pIdx] !== null;
-            const matchedOptionIdx = userMatches[pIdx];
-            
-            // Determine styling state
-            let borderColor = "border-border";
-            let bgColor = "bg-card";
-            let textColor = "text-card-foreground";
+            let state: 'default' | 'selected' | 'matched' | 'correct' | 'incorrect' = 'default';
 
-            if (answerStatus !== 'unanswered') {
-               const correctAns = correctOptions[pIdx];
-               const userAns = matchedOptionIdx !== null ? shuffledOptions[matchedOptionIdx] : null;
-               if (userAns === correctAns) {
-                 borderColor = "border-green-500";
-                 bgColor = "bg-green-50";
-                 textColor = "text-green-700";
-               } else {
-                 borderColor = "border-red-500";
-                 bgColor = "bg-red-50";
-                 textColor = "text-red-700";
-               }
+            if (answerStatus === 'unanswered') {
+              if (isSelected) state = 'selected';
+              else if (isMatched) state = 'matched';
             } else {
-              if (isSelected) {
-                borderColor = "border-primary";
-                bgColor = "bg-primary/5";
-                textColor = "text-primary";
-              } else if (isMatched) {
-                borderColor = "border-primary/50";
-                bgColor = "bg-muted/30";
-              }
+              const correctAns = correctOptions[pIdx];
+              const userAns = userMatches[pIdx] !== null ? shuffledOptions[userMatches[pIdx]!] : null;
+              state = userAns === correctAns ? 'correct' : 'incorrect';
             }
 
             return (
-              <div 
+              <Button
                 key={pIdx}
+                variant="outline"
                 onClick={() => handlePromptClick(pIdx)}
                 className={cn(
-                  "relative p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group shadow-sm",
-                  borderColor, bgColor, textColor,
-                  answerStatus !== 'unanswered' && "pointer-events-none"
+                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
+                  state === 'selected' && 'ring-2 ring-primary',
+                  state === 'matched' && 'bg-primary/10 text-primary-foreground',
+                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
+                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none'
                 )}
+                disabled={answerStatus !== 'unanswered'}
               >
-                <span className="font-medium text-sm">{prompt}</span>
-                {isMatched && answerStatus === 'unanswered' && (
-                  <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
-                    <LinkIcon className="w-3 h-3" />
-                  </div>
-                )}
-                {isSelected && (
-                  <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full md:block hidden" />
-                )}
-              </div>
+                {prompt}
+              </Button>
             );
           })}
         </div>
         
-        {/* Options (Right) */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center md:text-left">Definitions</h4>
+        <div className="space-y-2">
           {shuffledOptions.map((option, oIdx) => {
-            const isUsed = userMatches.includes(oIdx);
-            // Logic to highlight correct matches after submit
-            let statusClass = "border-border bg-card hover:border-primary/50";
-            
-            if (answerStatus !== 'unanswered') {
-               // Find which prompt matched this option
-               const promptIdx = userMatches.indexOf(oIdx);
-               if (promptIdx !== -1) {
-                  const correctAns = correctOptions[promptIdx];
-                  statusClass = option === correctAns 
-                    ? "border-green-500 bg-green-50 text-green-700 opacity-100" 
-                    : "border-red-500 bg-red-50 text-red-700 opacity-100";
-               } else {
-                  statusClass = "opacity-40 grayscale";
-               }
-            } else {
-               if (isUsed) statusClass = "border-primary/30 bg-primary/5 text-primary opacity-60";
-               if (selectedPromptIdx !== null && !isUsed) statusClass = "border-primary ring-1 ring-primary/20 cursor-pointer shadow-md scale-[1.02]";
-            }
+            const isMatched = userMatches.includes(oIdx);
+            let state: 'default' | 'matched' | 'correct' | 'incorrect' = 'default';
 
+            if (answerStatus === 'unanswered') {
+              if (isMatched) state = 'matched';
+            } else {
+              const promptIdx = userMatches.indexOf(oIdx);
+              if (promptIdx > -1) {
+                const correctAns = correctOptions[promptIdx];
+                state = option === correctAns ? 'correct' : 'incorrect';
+              } else {
+                state = 'default';
+              }
+            }
+            
             return (
-              <div
+              <Button
                 key={oIdx}
+                variant="outline"
                 onClick={() => handleOptionClick(oIdx)}
                 className={cn(
-                  "p-4 rounded-xl border transition-all text-sm shadow-sm",
-                  statusClass,
-                  answerStatus !== 'unanswered' && "pointer-events-none"
+                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
+                  state === 'matched' && 'bg-primary/10 text-primary-foreground opacity-50',
+                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
+                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none',
+                  answerStatus === 'unanswered' && selectedPromptIdx === null && 'cursor-not-allowed opacity-60'
                 )}
+                disabled={answerStatus !== 'unanswered' || selectedPromptIdx === null}
               >
                 {option}
-              </div>
+              </Button>
             );
           })}
         </div>
       </div>
       
       {answerStatus === 'unanswered' && (
-         <Button className="w-full h-12 text-lg mt-4" disabled={!allMatched} onClick={handleSubmit}>
+         <Button
+           className="w-full"
+           disabled={!allMatched}
+           onClick={handleSubmit}
+         >
            Submit Matches
          </Button>
       )}
@@ -241,7 +214,6 @@ function MatchingQuestionUI({
 }
 
 export default function TakeQuizPage() {
-  // ... (State setup remains mostly the same) ...
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
@@ -257,60 +229,99 @@ export default function TakeQuizPage() {
 
   const { data: apiResponse, error, isLoading } = useSWR<ApiResponse<QuizData>>(
     session ? `/api/quiz/${quizId}` : null,
-    (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
+    (url: string) =>
+      fetcher(url, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      }),
     { revalidateOnFocus: false }
   );
 
   const quizData = apiResponse?.data;
 
   useEffect(() => {
-    if (quizData?.questions?.length) {
+    if (quizData?.questions && quizData.questions.length > 0) {
       const shuffledQuestions = shuffleArray(quizData.questions);
-      const processed = shuffledQuestions.map((q) => {
-        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
-          return { ...q, options: shuffleArray(q.options as string[]) };
+
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        // Safe check for null/undefined options
+        const options = Array.isArray(q.options) ? q.options : [];
+        
+        if (q.question_type === 'MULTIPLE_CHOICE') {
+          return {
+            ...q,
+            options: shuffleArray(options as string[]),
+          };
         }
-        if (q.question_type === 'MATCHING' && Array.isArray(q.options)) {
-          return { ...q, shuffledOptions: shuffleArray(q.options as string[]) };
+        if (q.question_type === 'MATCHING') {
+          return {
+            ...q,
+            shuffledOptions: shuffleArray(options as string[]),
+          };
         }
         return q;
       });
-      setQuizQuestions(processed as QuizQuestion[]);
+
+      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
+      setCurrentQuestionIndex(0);
+      setSelectedAnswer(null);
+      setAnswerStatus('unanswered');
+      setCorrectAnswers(0);
+      setIsFinished(false);
+      setShowHint(false);
     }
   }, [quizData]);
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
-  const progress = quizQuestions.length > 0 ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100 : 0;
+  const progress =
+    quizQuestions.length > 0
+      ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
+      : 0;
 
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return;
-    const trimmed = answer.trim();
-    setSelectedAnswer(trimmed);
+
+    const answerTrimmed = answer.trim();
+    setSelectedAnswer(answerTrimmed);
 
     let isCorrect = false;
-    const type = currentQuestion.question_type;
-    
-    // Robust Type Checking
-    if (type === 'MULTIPLE_CHOICE' || type === 'TRUE_FALSE') {
-      isCorrect = currentQuestion.correct_answer === trimmed;
-    } else if (type === 'FILL_IN_THE_BLANK') {
-      const opts = (currentQuestion.options as string[]) || [];
-      if (opts.length > 0) isCorrect = opts.some(a => a.toLowerCase() === trimmed.toLowerCase());
-      else isCorrect = currentQuestion.correct_answer.toLowerCase() === trimmed.toLowerCase();
+    if (
+      currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
+      currentQuestion.question_type === 'TRUE_FALSE'
+    ) {
+      isCorrect = currentQuestion.correct_answer === answerTrimmed;
+    } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
+      const correctAnswers = (currentQuestion.options as string[]) || [];
+      if (correctAnswers.length > 0) {
+        isCorrect = correctAnswers.some(
+          (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
+        );
+      } else {
+        isCorrect = currentQuestion.correct_answer.toLowerCase() === answerTrimmed.toLowerCase();
+      }
     }
 
-    setAnswerStatus(isCorrect ? 'correct' : 'incorrect');
-    if (isCorrect) setCorrectAnswers(p => p + 1);
+    if (isCorrect) {
+      setAnswerStatus('correct');
+      setCorrectAnswers((prev) => prev + 1);
+    } else {
+      setAnswerStatus('incorrect');
+    }
   };
 
   const handleMatchingComplete = (isCorrect: boolean) => {
-    setAnswerStatus(isCorrect ? 'correct' : 'incorrect');
-    if (isCorrect) setCorrectAnswers(p => p + 1);
+    if (answerStatus !== 'unanswered') return; 
+
+    if (isCorrect) {
+      setAnswerStatus('correct');
+      setCorrectAnswers((prev) => prev + 1);
+    } else {
+      setAnswerStatus('incorrect');
+    }
   };
 
   const handleNext = () => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
-      setCurrentQuestionIndex(p => p + 1);
+      setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
       setShowHint(false);
@@ -319,109 +330,280 @@ export default function TakeQuizPage() {
       if (session) {
         fetch('/api/quiz/attempt', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-          body: JSON.stringify({ quizId, score: correctAnswers, total: quizQuestions.length })
-        }).catch(console.error);
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            quizId: quizId,
+            score: correctAnswers,
+            total: quizQuestions.length
+          })
+        }).catch(err => console.error("Failed to save quiz attempt:", err));
       }
     }
   };
 
   const handleRestart = () => {
-    window.location.reload(); 
+    if (quizData?.questions && quizData.questions.length > 0) {
+      const shuffledQuestions = shuffleArray(quizData.questions);
+      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
+        const options = Array.isArray(q.options) ? q.options : [];
+        if (q.question_type === 'MULTIPLE_CHOICE') {
+          return {
+            ...q,
+            options: shuffleArray(options as string[]),
+          };
+        }
+        if (q.question_type === 'MATCHING') {
+          return {
+            ...q,
+            shuffledOptions: shuffleArray(options as string[]),
+          };
+        }
+        return q;
+      });
+      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
+    }
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setAnswerStatus('unanswered');
+    setCorrectAnswers(0);
+    setIsFinished(false);
+    setShowHint(false);
   };
 
-  const getOptionClass = (opt: string) => {
-    if (answerStatus === 'unanswered') return 'hover:border-primary hover:bg-muted/50';
-    if (currentQuestion.correct_answer === opt) return 'border-green-500 bg-green-50 text-green-900 ring-1 ring-green-500';
-    if (selectedAnswer === opt) return 'border-red-500 bg-red-50 text-red-900 ring-1 ring-red-500';
-    return 'opacity-50';
+  const getOptionClass = (optionText: string) => {
+    if (answerStatus === 'unanswered') {
+      return 'border-border hover:bg-muted/50';
+    }
+    const isThisCorrect = currentQuestion.correct_answer === optionText;
+    if (isThisCorrect) {
+      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
+    }
+    if (selectedAnswer === optionText && !isThisCorrect) {
+      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
+    }
+    return 'border-border opacity-60';
   };
 
-  if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin mr-2" /> Loading...</div>;
-  if (error || !quizData || !quizQuestions.length) return <div className="p-8 text-center text-muted-foreground">Quiz not found or empty.</div>;
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="ml-2">Loading Quiz...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-destructive">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
+        <p className="text-center">{error.message}</p>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
+        </Button>
+      </div>
+    );
+  }
+
+  if (!quizData || quizQuestions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <h2 className="text-2xl font-semibold">{quizData?.quiz?.title || 'Quiz'}</h2>
+        <p className="text-center">This quiz has no questions in it.</p>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full items-center py-8">
-      <div className="w-full max-w-2xl px-4">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" onClick={() => router.push('/quizzes')} className="pl-0"><ArrowLeft className="mr-2 h-4 w-4" /> Exit</Button>
-          <div className="flex flex-col items-end">
-            <span className="text-sm font-medium text-muted-foreground">Question {currentQuestionIndex + 1}/{quizQuestions.length}</span>
-            <Progress value={progress} className="w-32 h-2 mt-2" />
-          </div>
+      <div className="w-full max-w-2xl">
+        <div className="flex items-center justify-between mb-2">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/quizzes')}
+            className="pl-0"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Quizzes
+          </Button>
+          <h1
+            className="text-xl font-semibold truncate text-center"
+            title={quizData.quiz.title}
+          >
+            {quizData.quiz.title}
+          </h1>
+          <div className="w-24"></div>
         </div>
-
+        {!isFinished && (
+          <div className="flex items-center gap-4 mb-6">
+            <span className="text-sm font-medium text-muted-foreground">
+              Question {currentQuestionIndex + 1} of {quizQuestions.length}
+            </span>
+            <Progress value={progress} className="flex-1 h-2" />
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {isFinished ? (
-            <motion.div key="summary" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
-              <Card className="w-full max-w-md shadow-lg text-center p-6">
-                <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-4" />
-                <h2 className="text-3xl font-bold mb-2">{Math.round((correctAnswers/quizQuestions.length)*100)}%</h2>
-                <p className="text-muted-foreground mb-6">You got {correctAnswers} out of {quizQuestions.length} correct.</p>
-                <div className="space-y-2 w-full">
-                  <Button onClick={handleRestart} className="w-full"><RotateCw className="mr-2 h-4 w-4"/> Try Again</Button>
-                  <Button variant="outline" onClick={() => router.push('/quizzes')} className="w-full">Dashboard</Button>
-                </div>
+            <motion.div
+              key="summary"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center"
+            >
+              <Card className="w-full max-w-md shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-center text-2xl">
+                    Quiz Complete!
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center gap-4">
+                  <Trophy className="w-16 h-16 text-yellow-500" />
+                  <h3 className="text-4xl font-bold mt-4">
+                    {correctAnswers} / {quizQuestions.length}
+                  </h3>
+                  <p className="text-lg text-muted-foreground">
+                    Your score:{' '}
+                    {Math.round(
+                      (correctAnswers / quizQuestions.length) * 100
+                    )}
+                    %
+                  </p>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-3">
+                  <Button className="w-full" onClick={handleRestart}>
+                    <RotateCw className="mr-2 h-4 w-4" />
+                    Take Again
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => router.push('/quizzes')}
+                  >
+                    Back to Quizzes
+                  </Button>
+                </CardFooter>
               </Card>
             </motion.div>
           ) : (
             <motion.div
               key={currentQuestionIndex}
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              exit={{ opacity: 0, x: -50 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="shadow-md border-t-4 border-t-primary">
-                <CardContent className="p-6 md:p-8">
-                  <h2 className="text-xl font-semibold mb-8 whitespace-pre-wrap">{currentQuestion.question_text}</h2>
-
-                  {/* --- RENDER QUESTION TYPES --- */}
-                  <div className="space-y-4">
-                    {/* 1. Multiple Choice / True False */}
-                    {(['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type)) && (
-                      <div className="grid grid-cols-1 gap-3">
-                        {(currentQuestion.options as string[] || []).map((option) => (
+              <Card className="shadow-lg">
+                <CardContent className="p-6">
+                  <p className="text-lg font-semibold mb-4 min-h-[60px]">
+                    {currentQuestion.question_text}
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {/* CASE 1: MULTIPLE CHOICE */}
+                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' && (
+                       // Added Array.isArray check to prevent mapping on null/undefined
+                       Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? (
+                        (currentQuestion.options as string[]).map((option) => (
                           <Button
                             key={option}
                             variant="outline"
-                            className={cn("justify-start text-left p-4 h-auto text-base", answerStatus !== 'unanswered' && "pointer-events-none", getOptionClass(option))}
+                            className={cn(
+                              'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
+                              answerStatus !== 'unanswered' &&
+                                'pointer-events-none',
+                              getOptionClass(option)
+                            )}
                             onClick={() => handleAnswerSelect(option)}
                           >
-                            {option}
+                            <span className="flex-1">{option}</span>
+                            {answerStatus !== 'unanswered' &&
+                              getOptionClass(option).includes('green') && (
+                                <Check className="w-5 h-5 ml-2 text-green-600" />
+                              )}
+                            {answerStatus !== 'unanswered' &&
+                              getOptionClass(option).includes('destructive') && (
+                                <X className="w-5 h-5 ml-2 text-destructive" />
+                              )}
                           </Button>
-                        ))}
-                      </div>
+                        ))
+                       ) : (
+                        <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-destructive">
+                          <AlertCircle className="w-5 h-5 inline mr-2" />
+                          Error: No options found for this multiple choice question.
+                        </div>
+                       )
                     )}
 
-                    {/* 2. Fill in the Blank - IMPROVED */}
+                    {/* CASE 2: TRUE/FALSE */}
+                    {currentQuestion.question_type === 'TRUE_FALSE' &&
+                      ['True', 'False'].map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            'h-12 w-full text-left p-4',
+                            answerStatus !== 'unanswered' &&
+                              'pointer-events-none',
+                            getOptionClass(option)
+                          )}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                          <span className="flex-1">{option}</span>
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('green') && (
+                              <Check className="w-5 h-5 ml-2 text-green-600" />
+                            )}
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('destructive') && (
+                              <X className="w-5 h-5 ml-2 text-destructive" />
+                            )}
+                        </Button>
+                      ))}
+                      
+                    {/* CASE 3: FILL IN THE BLANK */}
                     {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                      <div className="py-6">
-                        <div className="relative group">
-                           <Input
-                             autoFocus
-                             type="text"
-                             placeholder="Type your answer here..."
-                             value={selectedAnswer || ''}
-                             onChange={(e) => setSelectedAnswer(e.target.value)}
-                             disabled={answerStatus !== 'unanswered'}
-                             className="text-2xl h-16 border-0 border-b-2 border-primary/20 rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary placeholder:text-muted-foreground/30 text-center font-medium bg-transparent transition-all"
-                             onKeyDown={(e) => e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer && handleAnswerSelect(selectedAnswer.trim())}
-                           />
-                           <div className="text-xs text-muted-foreground text-center mt-2 uppercase tracking-widest">Your Answer</div>
-                        </div>
-                        <Button 
-                           className="w-full mt-8 h-12 text-lg" 
-                           disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()}
-                           onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
+                      <div className="space-y-3">
+                        <Input
+                          type="text"
+                          placeholder="Type your answer..."
+                          value={selectedAnswer || ''}
+                          onChange={(e) => setSelectedAnswer(e.target.value)}
+                          disabled={answerStatus !== 'unanswered'}
+                          className="text-base"
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === 'Enter' &&
+                              answerStatus === 'unanswered' &&
+                              selectedAnswer
+                            ) {
+                              handleAnswerSelect(selectedAnswer.trim());
+                            }
+                          }}
+                        />
+                        <Button
+                          className="w-full"
+                          disabled={
+                            answerStatus !== 'unanswered' ||
+                            !selectedAnswer?.trim()
+                          }
+                          onClick={() =>
+                            handleAnswerSelect(selectedAnswer!.trim())
+                          }
                         >
                           Submit Answer
                         </Button>
                       </div>
                     )}
 
-                    {/* 3. Matching - IMPROVED */}
+                    {/* CASE 4: MATCHING */}
                     {currentQuestion.question_type === 'MATCHING' && (
                       <MatchingQuestionUI
                         question={currentQuestion}
@@ -430,43 +612,117 @@ export default function TakeQuizPage() {
                       />
                     )}
 
-                    {/* 4. Fallback for Unknown Types */}
+                    {/* CASE 5: FALLBACK (Handles Typos or Unsupported Types) */}
                     {!['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING'].includes(currentQuestion.question_type) && (
-                      <div className="p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-                        <AlertCircle className="w-5 h-5 mb-2 inline-block mr-2" />
-                        <strong>Error:</strong> Unsupported Question Type ("{currentQuestion.question_type}").
-                        <br />Please report this issue.
+                      <div className="p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-md text-yellow-700">
+                        <AlertCircle className="w-5 h-5 inline mr-2" />
+                        <strong>Unsupported Question Type:</strong> {currentQuestion.question_type}
+                        <p className="text-sm mt-1 text-muted-foreground">
+                          Please edit this quiz and check if the Question Type is set correctly.
+                        </p>
                       </div>
                     )}
+
                   </div>
-                  
-                  {/* Feedback Section */}
+
                   <AnimatePresence>
-                    {answerStatus !== 'unanswered' && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className={cn("mt-6 p-4 rounded-lg border", answerStatus === 'correct' ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
-                        <div className="font-bold flex items-center mb-1">
-                          {answerStatus === 'correct' ? <><Check className="w-5 h-5 mr-2 text-green-600"/> Correct!</> : <><X className="w-5 h-5 mr-2 text-red-600"/> Incorrect</>}
+                    {answerStatus === 'unanswered' &&
+                      showHint &&
+                      currentQuestion.explanation && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-4 flex flex-col font-medium text-yellow-600"
+                        >
+                          <div className="flex items-center">
+                            <Lightbulb className="w-5 h-5 mr-2" />
+                            Hint:
+                          </div>
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
+                          </p>
+                        </motion.div>
+                      )}
+
+                    {answerStatus === 'correct' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex flex-col font-medium text-green-600"
+                      >
+                        <div className="flex items-center">
+                          <Check className="w-5 h-5 mr-2" />
+                          That's correct!
                         </div>
-                        {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                          <p className="text-sm text-muted-foreground mb-2">Correct Answer: <strong>{currentQuestion.correct_answer}</strong></p>
+                        {currentQuestion.explanation && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
+                          </p>
                         )}
-                        <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                      </motion.div>
+                    )}
+
+                    {answerStatus === 'incorrect' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex flex-col font-medium text-destructive"
+                      >
+                        <div className="flex items-center">
+                          <X className="w-5 h-5 mr-2" />
+                          That's not right.
+                        </div>
+
+                        {currentQuestion.question_type ===
+                          'FILL_IN_THE_BLANK' && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            Correct answer(s):{' '}
+                            {Array.isArray(currentQuestion.options) &&
+                            currentQuestion.options.length > 0
+                              ? currentQuestion.options.join(', ')
+                              : currentQuestion.correct_answer}
+                          </p>
+                        )}
+
+                        {currentQuestion.explanation && (
+                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                            {currentQuestion.explanation}
+                          </p>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </CardContent>
-                
-                <CardFooter className="flex justify-between bg-muted/20 p-6">
-                  <Button variant="ghost" onClick={() => setShowHint(true)} disabled={answerStatus !== 'unanswered' || !currentQuestion.explanation} className={cn(!currentQuestion.explanation && "invisible")}>
-                    <Lightbulb className="w-4 h-4 mr-2" /> Hint
+                <CardFooter className="p-6 pt-0 flex justify-between">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowHint(true)}
+                    disabled={
+                      answerStatus !== 'unanswered' ||
+                      showHint ||
+                      !currentQuestion.explanation
+                    }
+                    className={cn(
+                      'transition-all',
+                      answerStatus !== 'unanswered' ||
+                        showHint ||
+                        !currentQuestion.explanation
+                        ? 'opacity-0'
+                        : 'opacity-100'
+                    )}
+                  >
+                    <Lightbulb className="w-4 h-4 mr-2" />
+                    Show Hint
                   </Button>
-                  {showHint && answerStatus === 'unanswered' && (
-                    <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="absolute bottom-20 left-8 right-8 bg-yellow-50 border border-yellow-200 p-3 rounded shadow-lg text-sm text-yellow-800 z-10">
-                      <strong>Hint:</strong> {currentQuestion.explanation}
-                    </motion.div>
-                  )}
-                  <Button onClick={handleNext} disabled={answerStatus === 'unanswered'}>
-                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next'} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" />
+
+                  <Button
+                    className="w-full sm:w-auto"
+                    disabled={answerStatus === 'unanswered'}
+                    onClick={handleNext}
+                  >
+                    {currentQuestionIndex === quizQuestions.length - 1
+                      ? 'Finish Quiz'
+                      : 'Next Question'}
                   </Button>
                 </CardFooter>
               </Card>
