@@ -3,7 +3,11 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
@@ -16,125 +20,19 @@ interface PdfViewerProps {
   className?: string;
 }
 
-interface PdfPageProps {
-  doc: pdfjs.PDFDocumentProxy;
-  pageNum: number;
-  width: number;
-  onTextSelect: (e: React.MouseEvent) => void;
-}
-
-function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const textLayerRef = React.useRef<HTMLDivElement>(null);
-  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
-
-  React.useEffect(() => {
-    let isMounted = true;
-    doc.getPage(pageNum).then((p) => {
-      if (isMounted) setPage(p);
-    }).catch(console.error);
-    return () => { isMounted = false; };
-  }, [doc, pageNum]);
-
-  React.useEffect(() => {
-    if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
-
-    const unscaledViewport = page.getViewport({ scale: 1 });
-    const scale = width / unscaledViewport.width;
-    const viewport = page.getViewport({ scale });
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-
-    let renderTask: any = null;
-
-    const render = async () => {
-      try {
-        renderTask = page.render({ canvasContext: context, viewport });
-        await renderTask.promise;
-        
-        const textContent = await page.getTextContent();
-        if (textLayerRef.current) {
-           textLayerRef.current.style.height = `${viewport.height}px`;
-           textLayerRef.current.style.width = `${viewport.width}px`;
-           textLayerRef.current.innerHTML = '';
-           // Ensure highlight color matches globals.css
-           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(59, 130, 246, 0.3)');
-
-           pdfjs.renderTextLayer({
-            textContentSource: textContent,
-            container: textLayerRef.current,
-            viewport: viewport,
-            textDivs: [],
-           });
-        }
-      } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
-            console.error("Error rendering PDF page:", err);
-        }
-      }
-    };
-
-    render();
-
-    return () => {
-      if (renderTask) {
-        renderTask.cancel();
-      }
-    };
-  }, [page, width]);
-
-  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
-
-  const aspectRatio = page.view[3] / page.view[2];
-  
-  return (
-    <div
-      className="relative shadow-md mb-4 bg-white"
-      style={{ width: width, minHeight: width * aspectRatio }}
-    >
-      <canvas ref={canvasRef} className="block" />
-      {/* FIX: Added 'z-10' here. 
-          This forces the text layer to sit ON TOP of the canvas so you can select it. 
-      */}
-      <div 
-        ref={textLayerRef} 
-        className="textLayer absolute inset-0 z-10 mix-blend-multiply" 
-        onMouseUpCapture={onTextSelect} 
-      />
-    </div>
-  );
-}
-
 export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
+  const [pageNum, setPageNum] = React.useState(1);
+  const [scale, setScale] = React.useState(1.0);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const textLayerRef = React.useRef<HTMLDivElement>(null);
+  const renderTaskRef = React.useRef<any>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
-  React.useEffect(() => {
-    if (!containerRef.current) return;
-
-    const updateWidth = () => {
-      if (containerRef.current) {
-        // Subtract padding (e.g., 32px for py-8 px-4)
-        setContainerWidth(containerRef.current.clientWidth - 48);
-      }
-    };
-
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(containerRef.current);
-
-    return () => observer.disconnect();
-  }, [isLoading]);
-
+  // 1. Load Document
   React.useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true);
@@ -143,6 +41,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
+        setPageNum(1); // Reset to page 1 on new doc
       } catch (e: any) {
         console.error("PDF Load Error:", e);
         setError(e.message || "Failed to load PDF");
@@ -153,47 +52,157 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     if (url) loadPdf();
   }, [url]);
 
+  // 2. Render Page (Whenever pageNum, pdfDoc, or scale changes)
+  React.useEffect(() => {
+    if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
+
+    const renderPage = async () => {
+      try {
+        // Cancel previous render if active
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel();
+        }
+
+        const page = await pdfDoc.getPage(pageNum);
+        
+        // Auto-calculate scale to fit container width if scale is 1.0 (default)
+        // Otherwise use manual zoom level
+        let viewport = page.getViewport({ scale: 1 });
+        let currentScale = scale;
+        
+        if (scale === 1.0) {
+            const containerWidth = containerRef.current?.clientWidth || 800;
+            // Subtract padding
+            const availableWidth = containerWidth - 48; 
+            currentScale = availableWidth / viewport.width;
+        }
+
+        viewport = page.getViewport({ scale: currentScale });
+
+        const canvas = canvasRef.current;
+        const context = canvas!.getContext('2d');
+        if (!context) return;
+
+        canvas!.height = viewport.height;
+        canvas!.width = viewport.width;
+
+        // Render Canvas
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
+        
+        const renderTask = page.render(renderContext);
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
+
+        // Render Text Layer
+        if (textLayerRef.current) {
+            const textContent = await page.getTextContent();
+            textLayerRef.current.style.height = `${viewport.height}px`;
+            textLayerRef.current.style.width = `${viewport.width}px`;
+            textLayerRef.current.innerHTML = '';
+            textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+
+            pdfjs.renderTextLayer({
+                textContentSource: textContent,
+                container: textLayerRef.current,
+                viewport: viewport,
+                textDivs: [],
+            });
+        }
+
+      } catch (err: any) {
+        if (err.name !== 'RenderingCancelledException') {
+            console.error("Render Error:", err);
+        }
+      }
+    };
+
+    renderPage();
+
+    return () => {
+        if (renderTaskRef.current) {
+            renderTaskRef.current.cancel();
+        }
+    };
+  }, [pdfDoc, pageNum, scale]);
+
+  // Navigation Handlers
+  const changePage = (offset: number) => {
+    if (!pdfDoc) return;
+    setPageNum(prev => Math.min(Math.max(prev + offset, 1), pdfDoc.numPages));
+  };
+
+  const handleZoom = (delta: number) => {
+    setScale(prev => Math.max(0.5, Math.min(prev + delta, 3.0)));
+  };
+
   if (isLoading) {
     return (
-        <div className="flex h-full items-center justify-center text-primary">
-            {/* Standard SVG Spinner to avoid Error #130 */}
-            <svg className="animate-spin h-8 w-8 mr-3" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            <span className="text-sm font-medium">Loading Document...</span>
+        <div className="flex h-full items-center justify-center flex-col gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Loading PDF...</span>
         </div>
     );
   }
 
   if (error) {
     return (
-        <div className="p-8 flex flex-col items-center justify-center h-full text-destructive">
-            <div className="max-w-md border border-destructive/20 bg-destructive/10 p-4 rounded-md text-center">
-                <div className="font-semibold mb-2">Unable to load document</div>
-                <div className="text-sm opacity-80">{error}</div>
-            </div>
+        <div className="p-8 flex items-center justify-center h-full">
+            <Alert variant="destructive" className="max-w-md">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
         </div>
     );
   }
 
-  const numPages = pdfDoc ? pdfDoc.numPages : 0;
-  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
-
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        {/* Standard div for scrolling (Fixes Error #130) */}
-        <div className="flex-1 w-full overflow-y-auto" ref={containerRef}>
-            <div className="flex flex-col items-center py-8 px-4 min-h-full">
-                {containerWidth > 0 && pages.map((pageNum) => (
-                <PdfPage 
-                    key={pageNum} 
-                    doc={pdfDoc!} 
-                    pageNum={pageNum} 
-                    width={containerWidth} 
-                    onTextSelect={onTextSelect} 
-                />
-                ))}
+        
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-zinc-900 border-b shrink-0">
+            <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => changePage(-1)} disabled={pageNum <= 1}>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1 text-sm font-medium">
+                    <span>Page</span>
+                    <Input 
+                        value={pageNum}
+                        onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (val > 0 && val <= (pdfDoc?.numPages || 0)) setPageNum(val);
+                        }}
+                        className="w-12 h-8 text-center p-0"
+                    />
+                    <span className="text-muted-foreground">of {pdfDoc?.numPages}</span>
+                </div>
+                <Button variant="outline" size="icon" onClick={() => changePage(1)} disabled={pageNum >= (pdfDoc?.numPages || 0)}>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={() => handleZoom(-0.25)}>
+                    <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-12 text-center">
+                    {Math.round(scale * 100)}%
+                </span>
+                <Button variant="ghost" size="icon" onClick={() => handleZoom(0.25)}>
+                    <ZoomIn className="h-4 w-4" />
+                </Button>
+            </div>
+        </div>
+
+        {/* Viewer Area */}
+        <div className="flex-1 overflow-auto relative flex justify-center p-4" ref={containerRef}>
+            <div className="relative shadow-lg bg-white">
+                <canvas ref={canvasRef} className="block" />
+                <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
             </div>
         </div>
     </div>
