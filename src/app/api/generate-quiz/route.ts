@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
 
-// --- 1. CONFIGURATION ---
+// --- 1. CONFIGURATION HELPER ---
 function parseQuery(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   return {
@@ -31,7 +31,7 @@ async function readMultipartOrText(req: NextRequest) {
   return { text: (await req.text()).trim(), sourceType: 'text' };
 }
 
-// --- 2. PROMPT ENGINEERING (Natural & Smart) ---
+// --- 2. INTELLIGENT PROMPT ENGINEERING ---
 function buildPrompt({
   text,
   numQuestions,
@@ -44,55 +44,56 @@ function buildPrompt({
   questionType: QuestionTypeOption;
 }) {
   const typeStr = questionType === 'MIXED' 
-    ? 'Multiple Choice, True/False, Fill-in-Blank, and Matching' 
+    ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING' 
     : questionType;
 
-  const system = `You are a helpful tutor creating a practice quiz.
+  // System Prompt: Instructions on HOW to think
+  const system = `You are an expert educational AI. 
   
-  Your goal is to test *understanding*, not just memorization.
+  **Your Process:**
+  1. **Topic Extraction:** First, silently read the text and identify the core concepts, themes, and key facts ("The Topics").
+  2. **Question Generation:** Generate exactly ${numQuestions} questions that test understanding of these specific Topics.
   
-  **Style Guidelines:**
-  1. **Be Natural:** Use clear, conversational English. Avoid stiff academic phrasing.
-  2. **Be Practical:** Wherever possible, frame questions as small "real world" scenarios (e.g. "You see this error...", "You need to fix X...").
-  3. **No Trick Questions:** Distractors should be plausible common mistakes, not confusing word-play.
-  4. **Code Snippets:** If the content is technical, include short code blocks (markdown) in the question text.
+  **Guidelines:**
+  - **Understand, Don't just Quote:** Questions should test if the user understands the *meaning* of the topic, not just word-matching.
+  - **Contextual:** Use "Fill in the Blank" for key terminology. Use "Matching" for definitions or relationships.
+  - **Difficulty:** ${difficulty} (Adjust complexity of scenarios accordingly).
+  - **Distribution:** Ensure questions cover the identified topics evenly.`;
 
-  Generate exactly ${numQuestions} ${difficulty} questions.`;
-
-  const user = `Create a ${numQuestions}-question quiz (${difficulty} level) covering: ${typeStr}.
-  Base it ONLY on the text below.
-
-  Text Content:
+  // User Prompt: The Content and Output Format
+  const user = `Content to Analyze:
   """
   ${text}
   """
 
-  Return valid JSON matching this structure:
+  Task: Generate a ${numQuestions}-question quiz (${difficulty}) covering: ${typeStr}.
+  
+  Return strictly valid JSON with this exact schema:
   {
-    "title": "Short, catchy title",
+    "title": "A descriptive title based on the Identified Topics",
     "questions": [
       {
-        "question_text": "Scenario or Question here...",
+        "question_text": "The question or scenario...",
         "question_type": "MULTIPLE_CHOICE",
-        "options": ["Correct Answer", "Wrong 1", "Wrong 2", "Wrong 3"], // Exactly 4 options
-        "correct_answer": "Correct Answer", // MUST match one option exactly
-        "explanation": "Simple explanation of why this is correct."
+        "options": ["Correct Answer", "Distractor 1", "Distractor 2", "Distractor 3"],
+        "correct_answer": "Correct Answer",
+        "explanation": "Why this is correct..."
       },
       {
-        "question_text": "Statement...",
+        "question_text": "True or False statement...",
         "question_type": "TRUE_FALSE",
         "correct_answer": "True",
         "explanation": "..."
       },
       {
-        "question_text": "The function used to print is ____.",
+        "question_text": "The missing term is ____.",
         "question_type": "FILL_IN_THE_BLANK",
-        "options": ["console.log"], // Acceptable answer(s)
-        "correct_answer": "console.log", // Primary answer
+        "options": ["term"],
+        "correct_answer": "term",
         "explanation": "..."
       },
       {
-        "question_text": "Match the terms:",
+        "question_text": "Match the following:",
         "question_type": "MATCHING",
         "prompts": ["Term A", "Term B"],
         "options": ["Def A", "Def B"],
@@ -117,7 +118,6 @@ async function callGeminiForQuiz(params: any): Promise<{ title: string; question
   const result = await model.generateContent(`${system}\n\n${user}`);
   const text = result.response.text();
 
-  // Robust Parsing
   let parsed;
   try {
     parsed = JSON.parse(text);
@@ -127,14 +127,12 @@ async function callGeminiForQuiz(params: any): Promise<{ title: string; question
     else throw new Error("Invalid JSON from AI");
   }
 
-  // --- RESTORED VALIDATION LOGIC ---
   if (!parsed.questions || !Array.isArray(parsed.questions)) {
     throw new Error("Invalid Data Structure: 'questions' array missing.");
   }
 
-  // Sanitize and Validate each question
+  // Sanitize and Validate
   const sanitizedQuestions = parsed.questions.map((q: any, i: number) => {
-    // Basic Field Checks
     if (!q.question_text || !q.question_type || !q.correct_answer) {
       throw new Error(`Question ${i + 1} missing required fields.`);
     }
@@ -144,10 +142,8 @@ async function callGeminiForQuiz(params: any): Promise<{ title: string; question
       if (!Array.isArray(q.options) || q.options.length < 2) {
         throw new Error(`Question ${i + 1} (Multiple Choice) must have options.`);
       }
-      // Ensure correct answer is actually in the options
       if (!q.options.includes(q.correct_answer)) {
-        // Auto-fix: Add correct answer if missing
-        q.options[0] = q.correct_answer; 
+        q.options[0] = q.correct_answer; // Auto-fix
       }
     }
 
@@ -160,7 +156,6 @@ async function callGeminiForQuiz(params: any): Promise<{ title: string; question
 
     // 3. True/False Safety
     if (q.question_type === 'TRUE_FALSE') {
-       // Normalize to Title Case
        const ans = String(q.correct_answer).toLowerCase();
        q.correct_answer = ans === 'true' ? 'True' : 'False';
        q.options = ['True', 'False'];
@@ -168,7 +163,6 @@ async function callGeminiForQuiz(params: any): Promise<{ title: string; question
 
     return {
       ...q,
-      // Fallbacks for optional fields to prevent null crashes
       explanation: q.explanation || "No explanation provided.",
       options: Array.isArray(q.options) ? q.options : [],
       prompts: Array.isArray(q.prompts) ? q.prompts : [],
@@ -187,7 +181,6 @@ export async function POST(req: NextRequest) {
     const usage = await checkAIGenerationUsageLimit(user.id);
     if (!usage.isValid) return NextResponse.json({ error: usage.error }, { status: 403 });
 
-    // Input Parsing
     const params = parseQuery(req);
     const { text } = await readMultipartOrText(req);
 
@@ -207,9 +200,8 @@ export async function POST(req: NextRequest) {
         questions: {
           create: quiz.questions.map(q => ({
              question_text: q.question_text,
-             question_type: q.question_type, // Cast as QuestionType
+             question_type: q.question_type, 
              correct_answer: q.correct_answer,
-             // Explicitly handle JSON types for Prisma
              options: q.options as any, 
              prompts: q.prompts as any,
              explanation: q.explanation
@@ -219,14 +211,12 @@ export async function POST(req: NextRequest) {
       select: { id: true, title: true, questions: true }
     });
 
-    // Increment Usage
     await incrementAIGenerationUsage(user.id, 1);
     
     return NextResponse.json({ success: true, ...saved });
 
   } catch (error: any) {
     console.error("Quiz Gen Error:", error);
-    // Safe error message to client
     const msg = error.message.includes("Usage") ? error.message : "Failed to generate quiz";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
