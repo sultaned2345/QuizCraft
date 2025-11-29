@@ -14,7 +14,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Trash2, GripVertical, Plus, ArrowRight } from 'lucide-react';
+import {
+  Trash2,
+  GripVertical,
+  Plus,
+  ArrowRight,
+} from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +39,7 @@ export function QuestionEditor({
   // Generic handler for any text-based field
   const handleChange = (
     field: keyof Question,
-    value: string | string[] | null // Allow string array for options
+    value: string | string[] | null
   ) => {
     onQuestionChange(index, { ...question, [field]: value });
   };
@@ -42,42 +47,49 @@ export function QuestionEditor({
   // Handler for question type change
   const handleTypeChange = (value: QuestionType) => {
     const newQuestion: Question = { ...question, question_type: value };
-    // Reset options/answers when type changes
+    
+    // Reset defaults based on type
     if (value === 'MULTIPLE_CHOICE') {
       newQuestion.options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
-      newQuestion.prompts = null; // Clear prompts
+      newQuestion.prompts = null;
       newQuestion.correct_answer = 'Option 1';
     } else if (value === 'TRUE_FALSE') {
       newQuestion.options = ['True', 'False'];
-      newQuestion.prompts = null; // Clear prompts
+      newQuestion.prompts = null;
       newQuestion.correct_answer = 'True';
     } else if (value === 'FILL_IN_THE_BLANK') {
-      // --- MODIFICATION: Use 'options' for answers ---
-      newQuestion.options = ['Answer']; // Store answers as an array
-      newQuestion.prompts = null; // Clear prompts
-      newQuestion.correct_answer = 'N/A'; // Correct answer is now in options
-      // --- END MODIFICATION ---
+      newQuestion.options = ['Answer'];
+      newQuestion.prompts = null;
+      newQuestion.correct_answer = 'N/A';
     } else if (value === 'MATCHING') {
       newQuestion.prompts = ['Prompt 1'];
-      newQuestion.options = ['Answer 1']; // 'options' stores the correct answers in order
+      newQuestion.options = ['Answer 1']; // Corresponds to Prompt 1
+      newQuestion.correct_answer = 'N/A';
+    } else if (value === 'ORDERING') {
+      newQuestion.options = ['Step 1', 'Step 2', 'Step 3']; // Defined in correct order
+      newQuestion.prompts = null;
       newQuestion.correct_answer = 'N/A';
     }
+    
     onQuestionChange(index, newQuestion);
   };
 
-  // Handler for multiple-choice option text
+  // Handler for option text changes (MC, Ordering, Matching answers)
   const handleOptionChange = (optionIndex: number, value: string) => {
     const newOptions = [
       ...(Array.isArray(question.options) ? question.options : []),
     ];
-    const oldOptionValue = newOptions[optionIndex]; // Get old value before changing
+    const oldOptionValue = newOptions[optionIndex];
     newOptions[optionIndex] = value;
 
-    // If the changed option was the correct answer, update the correct answer string as well
-    const newCorrectAnswer =
+    // For Multiple Choice, if we renamed the correct option, update correct_answer too
+    let newCorrectAnswer = question.correct_answer;
+    if (
+      question.question_type === 'MULTIPLE_CHOICE' &&
       question.correct_answer === oldOptionValue
-        ? value
-        : question.correct_answer;
+    ) {
+      newCorrectAnswer = value;
+    }
 
     onQuestionChange(index, {
       ...question,
@@ -86,20 +98,18 @@ export function QuestionEditor({
     });
   };
 
-  // Handler for changing the *correct* multiple-choice option
+  // Handler for selecting the correct answer (MC, TF)
   const handleCorrectAnswerChange = (value: string) => {
     onQuestionChange(index, { ...question, correct_answer: value });
   };
 
-  // --- NEW: Handler for FILL_IN_THE_BLANK answers ---
+  // Handler for Fill-in-the-Blank (comma-separated)
   const handleFillInTheBlankChange = (value: string) => {
-    // Split by comma, trim whitespace, and filter out empty strings
     const answers = value.split(',').map((s) => s.trim()).filter(Boolean);
     handleChange('options', answers);
   };
-  // --- END NEW ---
 
-  // Handlers for MATCHING type
+  // --- MATCHING Handlers ---
   const handleMatchingChange = (
     type: 'prompt' | 'option',
     pairIndex: number,
@@ -148,13 +158,33 @@ export function QuestionEditor({
     const newOptions = [
       ...(Array.isArray(question.options) ? question.options : []),
     ];
+    
+    // Remove both to keep indices aligned
     newPrompts.splice(pairIndex, 1);
     newOptions.splice(pairIndex, 1);
+    
     onQuestionChange(index, {
       ...question,
       prompts: newPrompts,
       options: newOptions,
     });
+  };
+
+  // --- ORDERING Handlers ---
+  const addOrderingItem = () => {
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+      `Step ${question.options ? question.options.length + 1 : 1}`,
+    ];
+    onQuestionChange(index, { ...question, options: newOptions });
+  };
+
+  const removeOrderingItem = (idx: number) => {
+    const newOptions = [
+      ...(Array.isArray(question.options) ? question.options : []),
+    ];
+    newOptions.splice(idx, 1);
+    onQuestionChange(index, { ...question, options: newOptions });
   };
 
   return (
@@ -188,6 +218,7 @@ export function QuestionEditor({
               <SelectItem value="TRUE_FALSE">True/False</SelectItem>
               <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
               <SelectItem value="MATCHING">Matching</SelectItem>
+              <SelectItem value="ORDERING">Ordering</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -204,7 +235,7 @@ export function QuestionEditor({
           />
         </div>
 
-        {/* Answer Fields based on Type */}
+        {/* --- MULTIPLE CHOICE --- */}
         {question.question_type === 'MULTIPLE_CHOICE' && (
           <div className="space-y-3">
             <Label>Options & Correct Answer</Label>
@@ -233,6 +264,7 @@ export function QuestionEditor({
           </div>
         )}
 
+        {/* --- TRUE / FALSE --- */}
         {question.question_type === 'TRUE_FALSE' && (
           <div className="space-y-2">
             <Label>Correct Answer</Label>
@@ -253,7 +285,7 @@ export function QuestionEditor({
           </div>
         )}
 
-        {/* --- MODIFICATION: Updated FILL_IN_THE_BLANK UI --- */}
+        {/* --- FILL IN THE BLANK --- */}
         {question.question_type === 'FILL_IN_THE_BLANK' && (
           <div className="space-y-2">
             <Label htmlFor={`q-${index}-answer`}>
@@ -262,19 +294,20 @@ export function QuestionEditor({
             <Input
               id={`q-${index}-answer`}
               value={
-                Array.isArray(question.options) ? question.options.join(', ') : ''
+                Array.isArray(question.options)
+                  ? question.options.join(', ')
+                  : ''
               }
               onChange={(e) => handleFillInTheBlankChange(e.target.value)}
-              placeholder="Enter one or more exact answers"
+              placeholder="Enter one or more acceptable answers (e.g. Color, Colour)"
             />
             <p className="text-xs text-muted-foreground">
-              Tip: Use "____" in the question text. Grading is
-              case-insensitive.
+              Tip: Use "____" in the question text. Grading is case-insensitive.
             </p>
           </div>
         )}
-        {/* --- END MODIFICATION --- */}
 
+        {/* --- MATCHING --- */}
         {question.question_type === 'MATCHING' && (
           <div className="space-y-3">
             <Label>Matching Pairs (Prompt &rarr; Correct Answer)</Label>
@@ -313,7 +346,9 @@ export function QuestionEditor({
                           : 'text-muted-foreground opacity-50 cursor-not-allowed'
                       )}
                       onClick={() => removeMatchingPair(pairIndex)}
-                      disabled={!question.prompts || question.prompts.length <= 1}
+                      disabled={
+                        !question.prompts || question.prompts.length <= 1
+                      }
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -328,6 +363,52 @@ export function QuestionEditor({
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Pair
+            </Button>
+          </div>
+        )}
+
+        {/* --- ORDERING (NEW) --- */}
+        {question.question_type === 'ORDERING' && (
+          <div className="space-y-3">
+            <Label>Correct Sequence (Item 1 is First, Item N is Last)</Label>
+            <p className="text-sm text-muted-foreground mb-2">
+              Enter the steps in the correct logical order. The system will
+              automatically shuffle them for the user.
+            </p>
+            <div className="space-y-2">
+              {Array.isArray(question.options) &&
+                question.options.map((option, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="w-8 h-8 flex items-center justify-center bg-muted rounded-full text-xs font-bold shrink-0">
+                      {idx + 1}
+                    </div>
+                    <Input
+                      value={option}
+                      onChange={(e) => handleOptionChange(idx, e.target.value)}
+                      placeholder={`Step ${idx + 1}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-destructive"
+                      onClick={() => removeOrderingItem(idx)}
+                      disabled={
+                        !question.options || question.options.length <= 2
+                      }
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addOrderingItem}
+              className="mt-2"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Step
             </Button>
           </div>
         )}

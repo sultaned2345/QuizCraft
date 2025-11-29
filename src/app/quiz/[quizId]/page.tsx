@@ -26,6 +26,9 @@ import {
   AlertCircle,
   Trophy,
   Lightbulb,
+  ArrowUp,
+  ArrowDown,
+  RefreshCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,8 +40,10 @@ interface QuizData {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
+// Extended type to hold shuffled options for display
 type QuizQuestion = Question & { shuffledOptions?: string[] };
 
+// Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -48,7 +53,132 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-// --- SUB-COMPONENT: Matching Question ---
+// ---------------------------------------------------------------------------
+// SUB-COMPONENT: Ordering Question UI
+// ---------------------------------------------------------------------------
+function OrderingQuestionUI({
+  question,
+  answerStatus,
+  onQuestionComplete,
+}: {
+  question: QuizQuestion;
+  answerStatus: AnswerStatus;
+  onQuestionComplete: (isCorrect: boolean) => void;
+}) {
+  // Local state for the user's current ordering
+  const [currentOrder, setCurrentOrder] = useState<string[]>([]);
+
+  // Initialize with the shuffled options provided by the parent
+  useEffect(() => {
+    if (question.shuffledOptions) {
+      setCurrentOrder([...question.shuffledOptions]);
+    } else if (question.options && Array.isArray(question.options)) {
+        // Fallback if shuffle didn't happen for some reason
+        setCurrentOrder([...question.options]);
+    }
+  }, [question]);
+
+  const moveItem = (index: number, direction: 'up' | 'down') => {
+    if (answerStatus !== 'unanswered') return;
+
+    const newOrder = [...currentOrder];
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+
+    // Bounds check
+    if (swapIndex < 0 || swapIndex >= newOrder.length) return;
+
+    // Swap
+    [newOrder[index], newOrder[swapIndex]] = [
+      newOrder[swapIndex],
+      newOrder[index],
+    ];
+    setCurrentOrder(newOrder);
+  };
+
+  const handleSubmit = () => {
+    if (answerStatus !== 'unanswered') return;
+
+    // Compare currentOrder with the correct order (question.options)
+    const correctOrder = question.options as string[];
+    
+    // Simple array equality check
+    const isCorrect =
+      JSON.stringify(currentOrder) === JSON.stringify(correctOrder);
+      
+    onQuestionComplete(isCorrect);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {currentOrder.map((item, index) => {
+          // Check if this specific item is in the correct slot (for feedback)
+          const correctOrder = question.options as string[];
+          const isSlotCorrect = correctOrder[index] === item;
+
+          let itemClass = 'bg-background border-border';
+          if (answerStatus === 'correct') {
+            itemClass = 'border-green-500 bg-green-50 text-green-700';
+          } else if (answerStatus === 'incorrect') {
+            itemClass = isSlotCorrect
+              ? 'border-green-500 bg-green-50 text-green-700' // Correctly placed items
+              : 'border-destructive bg-red-50 text-destructive'; // Incorrectly placed
+          }
+
+          return (
+            <div
+              key={`${item}-${index}`}
+              className={cn(
+                'flex items-center gap-3 p-3 border rounded-md transition-colors',
+                itemClass
+              )}
+            >
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => moveItem(index, 'up')}
+                  disabled={index === 0 || answerStatus !== 'unanswered'}
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => moveItem(index, 'down')}
+                  disabled={
+                    index === currentOrder.length - 1 ||
+                    answerStatus !== 'unanswered'
+                  }
+                >
+                  <ArrowDown className="w-4 h-4" />
+                </Button>
+              </div>
+              <span className="flex-1 font-medium">{item}</span>
+              {answerStatus !== 'unanswered' &&
+                (isSlotCorrect ? (
+                  <Check className="w-5 h-5 text-green-600" />
+                ) : (
+                  <X className="w-5 h-5 text-destructive" />
+                ))}
+            </div>
+          );
+        })}
+      </div>
+      {answerStatus === 'unanswered' && (
+        <Button className="w-full mt-4" onClick={handleSubmit}>
+          Submit Order
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SUB-COMPONENT: Matching Question UI
+// ---------------------------------------------------------------------------
 function MatchingQuestionUI({
   question,
   answerStatus,
@@ -58,19 +188,26 @@ function MatchingQuestionUI({
   answerStatus: AnswerStatus;
   onQuestionComplete: (isCorrect: boolean) => void;
 }) {
-  const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
+  const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(
+    null
+  );
+  // userMatches[promptIndex] = optionIndex (in the shuffledOptions array)
   const [userMatches, setUserMatches] = useState<(number | null)[]>([]);
 
   const {
     prompts,
-    options: correctOptions,
-    shuffledOptions,
-  } = useMemo(() => ({
-    prompts: (question.prompts as string[]) || [],
-    options: (question.options as string[]) || [],
-    shuffledOptions: question.shuffledOptions || [],
-  }), [question]);
+    options: correctOptions, // This is the unshuffled answer key
+    shuffledOptions, // This is the shuffled list for display
+  } = useMemo(
+    () => ({
+      prompts: (question.prompts as string[]) || [],
+      options: (question.options as string[]) || [],
+      shuffledOptions: question.shuffledOptions || [],
+    }),
+    [question]
+  );
 
+  // Reset state when the question changes
   useEffect(() => {
     setUserMatches(new Array(prompts.length).fill(null));
     setSelectedPromptIdx(null);
@@ -80,10 +217,11 @@ function MatchingQuestionUI({
     if (answerStatus !== 'unanswered') return;
 
     if (userMatches[promptIdx] !== null) {
+      // This prompt is already matched, clear its match
       const newUserMatches = [...userMatches];
       newUserMatches[promptIdx] = null;
       setUserMatches(newUserMatches);
-      setSelectedPromptIdx(promptIdx);
+      setSelectedPromptIdx(promptIdx); // Reselect it to allow new match
     } else {
       setSelectedPromptIdx(promptIdx);
     }
@@ -93,12 +231,20 @@ function MatchingQuestionUI({
     if (answerStatus !== 'unanswered' || selectedPromptIdx === null) return;
 
     const newUserMatches = [...userMatches];
+    // If this option was used elsewhere, clear that old match first
     const existingMatchIdx = newUserMatches.indexOf(optionIdx);
     if (existingMatchIdx > -1) {
       newUserMatches[existingMatchIdx] = null;
     }
+    // Set new match
     newUserMatches[selectedPromptIdx] = optionIdx;
     setUserMatches(newUserMatches);
+    setSelectedPromptIdx(null);
+  };
+
+  const handleReset = () => {
+    if (answerStatus !== 'unanswered') return;
+    setUserMatches(new Array(prompts.length).fill(null));
     setSelectedPromptIdx(null);
   };
 
@@ -125,101 +271,170 @@ function MatchingQuestionUI({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        {answerStatus === 'unanswered' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="text-muted-foreground"
+          >
+            <RefreshCcw className="w-3 h-3 mr-1" /> Reset Matches
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 relative">
+        {/* Prompts Column */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Items
+          </h4>
           {prompts.map((prompt, pIdx) => {
             const isSelected = selectedPromptIdx === pIdx;
             const isMatched = userMatches[pIdx] !== null;
-            let state: 'default' | 'selected' | 'matched' | 'correct' | 'incorrect' = 'default';
+            let state:
+              | 'default'
+              | 'selected'
+              | 'matched'
+              | 'correct'
+              | 'incorrect' = 'default';
 
             if (answerStatus === 'unanswered') {
               if (isSelected) state = 'selected';
               else if (isMatched) state = 'matched';
             } else {
+              // After submission
               const correctAns = correctOptions[pIdx];
-              const userAns = userMatches[pIdx] !== null ? shuffledOptions[userMatches[pIdx]!] : null;
+              const userAns =
+                userMatches[pIdx] !== null
+                  ? shuffledOptions[userMatches[pIdx]!]
+                  : null;
               state = userAns === correctAns ? 'correct' : 'incorrect';
             }
 
             return (
-              <Button
-                key={pIdx}
-                variant="outline"
-                onClick={() => handlePromptClick(pIdx)}
-                className={cn(
-                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
-                  state === 'selected' && 'ring-2 ring-primary',
-                  state === 'matched' && 'bg-primary/10 text-primary-foreground',
-                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
-                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none'
-                )}
-                disabled={answerStatus !== 'unanswered'}
-              >
-                {prompt}
-              </Button>
+              <div key={pIdx} className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => handlePromptClick(pIdx)}
+                  className={cn(
+                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border-2 transition-all',
+                    state === 'selected' &&
+                      'border-primary ring-1 ring-primary bg-primary/5',
+                    state === 'matched' &&
+                      'border-primary/50 bg-primary/5 text-primary',
+                    state === 'correct' &&
+                      'border-green-500 bg-green-50 text-green-700',
+                    state === 'incorrect' &&
+                      'border-destructive bg-red-50 text-destructive'
+                  )}
+                  disabled={answerStatus !== 'unanswered'}
+                >
+                  <span className="mr-2 font-bold opacity-50">{pIdx + 1}.</span>{' '}
+                  {prompt}
+                </Button>
+                {/* Visual connector dot (only on larger screens) */}
+                <div
+                  className={cn(
+                    'absolute right-[-18px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full hidden md:block z-10',
+                    isMatched || state !== 'default'
+                      ? 'bg-primary'
+                      : 'bg-border',
+                    state === 'correct' && 'bg-green-500',
+                    state === 'incorrect' && 'bg-destructive'
+                  )}
+                />
+              </div>
             );
           })}
         </div>
-        
-        <div className="space-y-2">
+
+        {/* Options Column */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Matches
+          </h4>
           {shuffledOptions.map((option, oIdx) => {
             const isMatched = userMatches.includes(oIdx);
-            let state: 'default' | 'matched' | 'correct' | 'incorrect' = 'default';
+            let state: 'default' | 'matched' | 'correct' | 'incorrect' =
+              'default';
 
             if (answerStatus === 'unanswered') {
               if (isMatched) state = 'matched';
             } else {
+              // Find which prompt matched this option to determine color
               const promptIdx = userMatches.indexOf(oIdx);
               if (promptIdx > -1) {
                 const correctAns = correctOptions[promptIdx];
                 state = option === correctAns ? 'correct' : 'incorrect';
-              } else {
-                state = 'default';
               }
             }
-            
+
             return (
-              <Button
-                key={oIdx}
-                variant="outline"
-                onClick={() => handleOptionClick(oIdx)}
-                className={cn(
-                  "h-auto min-h-12 w-full justify-start text-left p-3 whitespace-normal",
-                  state === 'matched' && 'bg-primary/10 text-primary-foreground opacity-50',
-                  state === 'correct' && 'border-green-500 bg-green-500/10 text-green-700 pointer-events-none',
-                  state === 'incorrect' && 'border-destructive bg-destructive/10 text-destructive pointer-events-none',
-                  answerStatus === 'unanswered' && selectedPromptIdx === null && 'cursor-not-allowed opacity-60'
-                )}
-                disabled={answerStatus !== 'unanswered' || selectedPromptIdx === null}
-              >
-                {option}
-              </Button>
+              <div key={oIdx} className="relative">
+                {/* Visual connector dot */}
+                <div
+                  className={cn(
+                    'absolute left-[-18px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full hidden md:block z-10',
+                    isMatched || state !== 'default'
+                      ? 'bg-primary'
+                      : 'bg-border',
+                    state === 'correct' && 'bg-green-500',
+                    state === 'incorrect' && 'bg-destructive'
+                  )}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => handleOptionClick(oIdx)}
+                  className={cn(
+                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border-2 transition-all',
+                    state === 'matched' &&
+                      'border-primary/50 bg-primary/5 text-primary',
+                    state === 'correct' &&
+                      'border-green-500 bg-green-50 text-green-700',
+                    state === 'incorrect' &&
+                      'border-destructive bg-red-50 text-destructive',
+                    answerStatus === 'unanswered' &&
+                      selectedPromptIdx === null &&
+                      'opacity-60 cursor-not-allowed hover:bg-transparent'
+                  )}
+                  disabled={
+                    answerStatus !== 'unanswered' || selectedPromptIdx === null
+                  }
+                >
+                  {option}
+                </Button>
+              </div>
             );
           })}
         </div>
       </div>
-      
+
       {answerStatus === 'unanswered' && (
-         <Button
-           className="w-full"
-           disabled={!allMatched}
-           onClick={handleSubmit}
-         >
-           Submit Matches
-         </Button>
+        <Button
+          className="w-full mt-4"
+          disabled={!allMatched}
+          onClick={handleSubmit}
+        >
+          Submit Matches
+        </Button>
       )}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// MAIN PAGE COMPONENT
+// ---------------------------------------------------------------------------
 export default function TakeQuizPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('unanswered');
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]); 
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [showHint, setShowHint] = useState(false);
 
   const router = useRouter();
@@ -227,7 +442,11 @@ export default function TakeQuizPage() {
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
-  const { data: apiResponse, error, isLoading } = useSWR<ApiResponse<QuizData>>(
+  const {
+    data: apiResponse,
+    error,
+    isLoading,
+  } = useSWR<ApiResponse<QuizData>>(
     session ? `/api/quiz/${quizId}` : null,
     (url: string) =>
       fetcher(url, {
@@ -238,26 +457,39 @@ export default function TakeQuizPage() {
 
   const quizData = apiResponse?.data;
 
+  // Initialize and shuffle questions once data loads
   useEffect(() => {
     if (quizData?.questions && quizData.questions.length > 0) {
       const shuffledQuestions = shuffleArray(quizData.questions);
 
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        // Safe check for null/undefined options
-        const options = Array.isArray(q.options) ? q.options : [];
-        
-        if (q.question_type === 'MULTIPLE_CHOICE') {
+        // Shuffle Multiple Choice options
+        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
-            options: shuffleArray(options as string[]),
+            options: shuffleArray(q.options as string[]),
           };
         }
-        if (q.question_type === 'MATCHING') {
+        // Shuffle Matching options for display
+        if (
+          q.question_type === 'MATCHING' &&
+          Array.isArray(q.options)
+        ) {
           return {
             ...q,
-            shuffledOptions: shuffleArray(options as string[]),
+            shuffledOptions: shuffleArray(q.options as string[]),
           };
         }
+        // Shuffle Ordering options for display
+        if (
+            q.question_type === 'ORDERING' &&
+            Array.isArray(q.options)
+          ) {
+            return {
+              ...q,
+              shuffledOptions: shuffleArray(q.options as string[]),
+            };
+          }
         return q;
       });
 
@@ -277,6 +509,7 @@ export default function TakeQuizPage() {
       ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
       : 0;
 
+  // Handler for text-based answers (MC, TF, Blank)
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return;
 
@@ -292,11 +525,15 @@ export default function TakeQuizPage() {
     } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
       const correctAnswers = (currentQuestion.options as string[]) || [];
       if (correctAnswers.length > 0) {
+        // Check against list of acceptable answers
         isCorrect = correctAnswers.some(
           (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
         );
       } else {
-        isCorrect = currentQuestion.correct_answer.toLowerCase() === answerTrimmed.toLowerCase();
+        // Legacy check
+        isCorrect =
+          currentQuestion.correct_answer.toLowerCase() ===
+          answerTrimmed.toLowerCase();
       }
     }
 
@@ -308,8 +545,9 @@ export default function TakeQuizPage() {
     }
   };
 
-  const handleMatchingComplete = (isCorrect: boolean) => {
-    if (answerStatus !== 'unanswered') return; 
+  // Handler for complex components (Matching, Ordering)
+  const handleComplexQuestionComplete = (isCorrect: boolean) => {
+    if (answerStatus !== 'unanswered') return;
 
     if (isCorrect) {
       setAnswerStatus('correct');
@@ -332,14 +570,14 @@ export default function TakeQuizPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             quizId: quizId,
             score: correctAnswers,
-            total: quizQuestions.length
-          })
-        }).catch(err => console.error("Failed to save quiz attempt:", err));
+            total: quizQuestions.length,
+          }),
+        }).catch((err) => console.error('Failed to save quiz attempt:', err));
       }
     }
   };
@@ -348,17 +586,19 @@ export default function TakeQuizPage() {
     if (quizData?.questions && quizData.questions.length > 0) {
       const shuffledQuestions = shuffleArray(quizData.questions);
       const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        const options = Array.isArray(q.options) ? q.options : [];
-        if (q.question_type === 'MULTIPLE_CHOICE') {
+        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
-            options: shuffleArray(options as string[]),
+            options: shuffleArray(q.options as string[]),
           };
         }
-        if (q.question_type === 'MATCHING') {
+        if (
+          (q.question_type === 'MATCHING' || q.question_type === 'ORDERING') &&
+          Array.isArray(q.options)
+        ) {
           return {
             ...q,
-            shuffledOptions: shuffleArray(options as string[]),
+            shuffledOptions: shuffleArray(q.options as string[]),
           };
         }
         return q;
@@ -379,7 +619,7 @@ export default function TakeQuizPage() {
     }
     const isThisCorrect = currentQuestion.correct_answer === optionText;
     if (isThisCorrect) {
-      return 'border-green-500 bg-green-500/10 text-green-700 ring-2 ring-green-500';
+      return 'border-green-500 bg-green-50 text-green-700 ring-2 ring-green-500';
     }
     if (selectedAnswer === optionText && !isThisCorrect) {
       return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
@@ -402,7 +642,11 @@ export default function TakeQuizPage() {
         <AlertCircle className="h-12 w-12 mb-4" />
         <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
         <p className="text-center">{error.message}</p>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+        <Button
+          onClick={() => router.push('/quizzes')}
+          variant="outline"
+          className="mt-4"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -413,9 +657,15 @@ export default function TakeQuizPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">{quizData?.quiz?.title || 'Quiz'}</h2>
+        <h2 className="text-2xl font-semibold">
+          {quizData?.quiz?.title || 'Quiz'}
+        </h2>
         <p className="text-center">This quiz has no questions in it.</p>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-4">
+        <Button
+          onClick={() => router.push('/quizzes')}
+          variant="outline"
+          className="mt-4"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
         </Button>
       </div>
@@ -425,6 +675,7 @@ export default function TakeQuizPage() {
   return (
     <div className="flex flex-col h-full items-center py-8">
       <div className="w-full max-w-2xl">
+        {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <Button
             variant="ghost"
@@ -440,8 +691,9 @@ export default function TakeQuizPage() {
           >
             {quizData.quiz.title}
           </h1>
-          <div className="w-24"></div>
+          <div className="w-24"></div> {/* Spacer */}
         </div>
+
         {!isFinished && (
           <div className="flex items-center gap-4 mb-6">
             <span className="text-sm font-medium text-muted-foreground">
@@ -450,6 +702,7 @@ export default function TakeQuizPage() {
             <Progress value={progress} className="flex-1 h-2" />
           </div>
         )}
+
         <AnimatePresence mode="wait">
           {isFinished ? (
             <motion.div
@@ -505,44 +758,34 @@ export default function TakeQuizPage() {
                   <p className="text-lg font-semibold mb-4 min-h-[60px]">
                     {currentQuestion.question_text}
                   </p>
-                  
                   <div className="space-y-3">
-                    {/* CASE 1: MULTIPLE CHOICE */}
-                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' && (
-                       // Added Array.isArray check to prevent mapping on null/undefined
-                       Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? (
-                        (currentQuestion.options as string[]).map((option) => (
-                          <Button
-                            key={option}
-                            variant="outline"
-                            className={cn(
-                              'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
-                              answerStatus !== 'unanswered' &&
-                                'pointer-events-none',
-                              getOptionClass(option)
+                    {/* Multiple Choice Options */}
+                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
+                      (currentQuestion.options as string[]).map((option) => (
+                        <Button
+                          key={option}
+                          variant="outline"
+                          className={cn(
+                            'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
+                            answerStatus !== 'unanswered' &&
+                              'pointer-events-none',
+                            getOptionClass(option)
+                          )}
+                          onClick={() => handleAnswerSelect(option)}
+                        >
+                          <span className="flex-1">{option}</span>
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('green') && (
+                              <Check className="w-5 h-5 ml-2 text-green-600" />
                             )}
-                            onClick={() => handleAnswerSelect(option)}
-                          >
-                            <span className="flex-1">{option}</span>
-                            {answerStatus !== 'unanswered' &&
-                              getOptionClass(option).includes('green') && (
-                                <Check className="w-5 h-5 ml-2 text-green-600" />
-                              )}
-                            {answerStatus !== 'unanswered' &&
-                              getOptionClass(option).includes('destructive') && (
-                                <X className="w-5 h-5 ml-2 text-destructive" />
-                              )}
-                          </Button>
-                        ))
-                       ) : (
-                        <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-destructive">
-                          <AlertCircle className="w-5 h-5 inline mr-2" />
-                          Error: No options found for this multiple choice question.
-                        </div>
-                       )
-                    )}
+                          {answerStatus !== 'unanswered' &&
+                            getOptionClass(option).includes('destructive') && (
+                              <X className="w-5 h-5 ml-2 text-destructive" />
+                            )}
+                        </Button>
+                      ))}
 
-                    {/* CASE 2: TRUE/FALSE */}
+                    {/* True/False Options */}
                     {currentQuestion.question_type === 'TRUE_FALSE' &&
                       ['True', 'False'].map((option) => (
                         <Button
@@ -567,8 +810,8 @@ export default function TakeQuizPage() {
                             )}
                         </Button>
                       ))}
-                      
-                    {/* CASE 3: FILL IN THE BLANK */}
+
+                    {/* Fill in the Blank */}
                     {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
                       <div className="space-y-3">
                         <Input
@@ -603,28 +846,26 @@ export default function TakeQuizPage() {
                       </div>
                     )}
 
-                    {/* CASE 4: MATCHING */}
+                    {/* Matching Component */}
                     {currentQuestion.question_type === 'MATCHING' && (
                       <MatchingQuestionUI
                         question={currentQuestion}
                         answerStatus={answerStatus}
-                        onQuestionComplete={handleMatchingComplete}
+                        onQuestionComplete={handleComplexQuestionComplete}
                       />
                     )}
 
-                    {/* CASE 5: FALLBACK (Handles Typos or Unsupported Types) */}
-                    {!['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING'].includes(currentQuestion.question_type) && (
-                      <div className="p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-md text-yellow-700">
-                        <AlertCircle className="w-5 h-5 inline mr-2" />
-                        <strong>Unsupported Question Type:</strong> {currentQuestion.question_type}
-                        <p className="text-sm mt-1 text-muted-foreground">
-                          Please edit this quiz and check if the Question Type is set correctly.
-                        </p>
-                      </div>
+                    {/* Ordering Component */}
+                    {currentQuestion.question_type === 'ORDERING' && (
+                      <OrderingQuestionUI
+                        question={currentQuestion}
+                        answerStatus={answerStatus}
+                        onQuestionComplete={handleComplexQuestionComplete}
+                      />
                     )}
-
                   </div>
 
+                  {/* Feedback Area */}
                   <AnimatePresence>
                     {answerStatus === 'unanswered' &&
                       showHint &&
@@ -682,6 +923,15 @@ export default function TakeQuizPage() {
                               ? currentQuestion.options.join(', ')
                               : currentQuestion.correct_answer}
                           </p>
+                        )}
+
+                        {currentQuestion.question_type === 'ORDERING' && (
+                            <div className="text-sm font-normal text-muted-foreground ml-7 mt-1">
+                                <p className="font-semibold text-foreground">Correct Order:</p>
+                                <ol className="list-decimal list-inside">
+                                    {(currentQuestion.options as string[])?.map((opt, i) => <li key={i}>{opt}</li>)}
+                                </ol>
+                            </div>
                         )}
 
                         {currentQuestion.explanation && (

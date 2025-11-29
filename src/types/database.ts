@@ -1,5 +1,4 @@
 // src/types/database.ts
-// MODIFIED FILE
 
 // --- Base Types ---
 export interface User {
@@ -13,18 +12,19 @@ export type QuestionType =
   | 'MULTIPLE_CHOICE'
   | 'TRUE_FALSE'
   | 'FILL_IN_THE_BLANK'
-  | 'MATCHING';
+  | 'MATCHING'
+  | 'ORDERING'; // --- ADDED ---
 
 // --- Quiz Types ---
 export interface Quiz {
   id: string;
-  user_id: string; // Changed from userId to match schema/API
+  user_id: string;
   title: string;
   share_link: string | null;
-  created_at: string; // Changed from createdAt to match schema/API
+  created_at: string;
   is_public: boolean;
   immediate_feedback: boolean;
-  time_limit_minutes: number | null; // Added for timer feature
+  time_limit_minutes: number | null;
   questions?: Question[]; // Relation
 }
 
@@ -33,11 +33,20 @@ export interface Question {
   quiz_id: string;
   question_text: string;
   question_type: QuestionType;
-  options: any; // Prisma Json type - consider defining more specific types if possible
-  prompts: any; // Prisma Json type - consider defining more specific types if possible
+  options: any; // Prisma Json type (string[] usually)
+  prompts: any; // Prisma Json type (string[] for Matching)
   correct_answer: string;
   explanation: string | null;
-  created_at: string; // Changed from createdAt to match schema/API
+  created_at: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  user_id: string;
+  quiz_id: string;
+  score: number;
+  total: number;
+  created_at: string;
 }
 
 // --- Note Types ---
@@ -60,7 +69,7 @@ export interface FlashcardDeck {
   created_at: string;
   updated_at: string;
   flashcards?: Flashcard[]; // Relation
-  _count?: { // For list view
+  _count?: {
     flashcards: number;
   };
 }
@@ -79,26 +88,28 @@ export interface Flashcard {
 // --- Document Types ---
 export interface DocumentMetadata {
   id: string;
-  user_id: string; // Added user_id if needed client-side
+  user_id: string;
   file_name: string;
   file_type: string;
   file_size: number;
   storage_path: string;
-  extracted_text?: string | null; // Optional, might not be needed in all contexts
+  extracted_text?: string | null;
   ai_summary?: string | null;
-  ai_insights?: any | null; // --- ADDED ---
+  ai_insights?: any | null;
   created_at: string;
 }
 
-// --- Graded Essay Types (NEW) ---
+// --- Graded Essay Types ---
 export interface EssayFeedbackHighlight {
-    text: string;
-    comment: string;
+  text: string;
+  comment: string;
 }
+
 export interface EssayFeedbackCategory {
-    summary: string;
-    highlights: EssayFeedbackHighlight[];
+  summary: string;
+  highlights: EssayFeedbackHighlight[];
 }
+
 export interface GradedEssayFeedback {
   strengths?: EssayFeedbackCategory | string;
   clarity?: EssayFeedbackCategory | string;
@@ -107,6 +118,7 @@ export interface GradedEssayFeedback {
   summary: string;
   [key: string]: EssayFeedbackCategory | string | undefined;
 }
+
 export type GenericJsonValue =
   | string
   | number
@@ -125,11 +137,13 @@ export interface GradedEssay {
   score: number | null;
   graded_at: string;
 }
+
 export interface GradeEssayData {
   essayText: string;
   rubricText?: string;
   essayTitle?: string;
 }
+
 export interface GradeEssayResponseData {
   id: string;
   feedback: GradedEssayFeedback;
@@ -139,16 +153,7 @@ export interface GradeEssayResponseData {
   essay_content: string;
 }
 
-export interface QuizAttempt {
-  id: string;
-  user_id: string;
-  quiz_id: string;
-  score: number;
-  total: number;
-  created_at: string;
-}
-
-// --- NEW: Project Types ---
+// --- Project Types ---
 export interface Project {
   id: string;
   user_id: string;
@@ -167,11 +172,10 @@ export interface ProjectContentLink {
   user_id: string;
   project_id: string;
   content_id: string;
-  content_type: 'document' | 'quiz' | 'note' | 'deck'; // Add more as needed
+  content_type: 'document' | 'quiz' | 'note' | 'deck';
   created_at: string;
 }
 
-// For API response of a project's content
 export interface ProjectContentDetails {
   links: {
     id: string; // link ID
@@ -184,8 +188,6 @@ export interface ProjectContentDetails {
     icon: string; // 'document', 'quiz', 'note', 'deck'
   }[];
 }
-// --- END NEW ---
-
 
 // --- Form Data Types ---
 export interface CreateQuizData {
@@ -260,7 +262,7 @@ export interface RelatedItem {
   content_title: string;
   content_chunk: string;
   similarity: number;
-  citation?: number; // Added for chat
+  citation?: number;
 }
 
 // For Paginated Decks List
@@ -288,12 +290,12 @@ export interface PaginatedDocumentsResponse {
   currentPage: number;
 }
 
-// For Listing Graded Essays (Example)
+// For Listing Graded Essays
 export interface GradedEssaysListResponse {
   essays: Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>[];
 }
 
-// --- Original Supabase Types ---
+// --- Database Schema Interface (Supabase/Postgres) ---
 export interface Database {
   public: {
     Tables: {
@@ -346,7 +348,6 @@ export interface Database {
         Insert: Omit<GradedEssay, 'id' | 'graded_at'>;
         Update: Partial<Omit<GradedEssay, 'id' | 'user_id' | 'graded_at'>>;
       };
-      // --- ADD NEW TABLES ---
       projects: {
         Row: Project;
         Insert: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'links'>;
@@ -357,7 +358,6 @@ export interface Database {
         Insert: Omit<ProjectContentLink, 'id' | 'created_at'>;
         Update: Partial<Omit<ProjectContentLink, 'id' | 'user_id' | 'project_id' | 'created_at'>>;
       };
-      // --- END NEW TABLES ---
     };
     Functions: {
       increment_ai_usage: {
@@ -368,10 +368,7 @@ export interface Database {
         };
         Returns: void;
       };
-      // ... (other functions) ...
     };
-    Enums: {
-      // ... (enums) ...
-    };
+    Enums: {};
   };
 }
