@@ -1,7 +1,7 @@
 // src/app/quiz/[quizId]/page.tsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
@@ -20,7 +20,6 @@ import { Progress } from '@/components/ui/progress';
 import {
   Loader2,
   ArrowLeft,
-  RotateCw,
   Check,
   X,
   AlertCircle,
@@ -42,8 +41,9 @@ type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 // Standard Question type
 type QuizQuestion = Question; 
 
-// Helper function to shuffle an array
-function shuffleArray<T>(array: T[]): T[] {
+// Helper function to shuffle an array (Safe version)
+function shuffleArray<T>(array: T[] | null | undefined): T[] {
+  if (!array || !Array.isArray(array)) return [];
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -52,12 +52,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-// --- NEW SUB-COMPONENT: MATCHING UI ---
-/**
- * A "Slot & Bank" style matching component.
- * Left Side: Prompts with empty slots.
- * Right Side: A bank of options to click.
- */
+// --- SUB-COMPONENT: MATCHING UI ---
 function MatchingQuestionUI({
   question,
   answerStatus,
@@ -68,11 +63,7 @@ function MatchingQuestionUI({
   onQuestionComplete: (isCorrect: boolean) => void;
 }) {
   const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
-  
-  // Stores the TEXT value of the answer placed in slot [index]
   const [userMatches, setUserMatches] = useState<(string | null)[]>([]);
-  
-  // The shuffled bank of options (Strings)
   const [optionBank, setOptionBank] = useState<string[]>([]);
 
   // Initialize: Shuffle options once when question loads
@@ -102,13 +93,11 @@ function MatchingQuestionUI({
   const handleOptionClick = (optionValue: string) => {
     if (answerStatus !== 'unanswered') return;
 
-    // If a prompt slot is selected, fill it
     if (selectedPromptIdx !== null) {
       const newMatches = [...userMatches];
       newMatches[selectedPromptIdx] = optionValue;
       setUserMatches(newMatches);
       
-      // Auto-advance to next empty slot if available
       const nextEmpty = newMatches.findIndex(m => m === null);
       setSelectedPromptIdx(nextEmpty !== -1 ? nextEmpty : null);
     }
@@ -120,8 +109,6 @@ function MatchingQuestionUI({
     
     let isAllCorrect = true;
 
-    // Check each slot against the original index in correctOptions
-    // Assuming prompts[i] matches correctOptions[i]
     for (let i = 0; i < prompts.length; i++) {
       const userVal = userMatches[i]?.trim().toLowerCase();
       const correctVal = correctOptions[i]?.trim().toLowerCase();
@@ -135,7 +122,6 @@ function MatchingQuestionUI({
     onQuestionComplete(isAllCorrect);
   };
 
-  // Helper to check if an option is currently used in any slot
   const isOptionUsed = (opt: string) => userMatches.includes(opt);
 
   const prompts = (question.prompts as string[]) || [];
@@ -151,7 +137,6 @@ function MatchingQuestionUI({
             const userAns = userMatches[idx];
             const isSelected = selectedPromptIdx === idx;
             
-            // State Logic for Colors
             let statusColor = "border-border";
             if (answerStatus !== 'unanswered') {
                const isCorrect = userAns?.trim().toLowerCase() === correctOptions[idx]?.trim().toLowerCase();
@@ -176,7 +161,6 @@ function MatchingQuestionUI({
                 >
                   <span className="font-medium text-sm mb-2">{prompt}</span>
                   
-                  {/* The Slot Area */}
                   <div className={cn(
                     "h-10 rounded border border-dashed flex items-center px-3 text-sm font-medium transition-colors",
                     userAns ? "bg-background border-solid border-primary/20" : "bg-muted/30 border-muted-foreground/30 text-muted-foreground italic"
@@ -188,7 +172,6 @@ function MatchingQuestionUI({
                   </div>
                 </div>
                 
-                {/* Result Indicator (Only shown after submit) */}
                 {answerStatus !== 'unanswered' && (
                   <div className="absolute top-3 right-3">
                     {userMatches[idx]?.trim().toLowerCase() === correctOptions[idx]?.trim().toLowerCase() ? (
@@ -224,7 +207,7 @@ function MatchingQuestionUI({
                   className={cn(
                     "justify-start h-auto py-3 px-4 whitespace-normal text-left transition-all",
                     used ? "opacity-40 bg-muted grayscale" : "hover:border-primary hover:bg-primary/5",
-                    answerStatus !== 'unanswered' && "opacity-0 hidden" // Hide bank after answer
+                    answerStatus !== 'unanswered' && "opacity-0 hidden"
                   )}
                   disabled={used || answerStatus !== 'unanswered'}
                   onClick={() => handleOptionClick(option)}
@@ -281,13 +264,11 @@ export default function TakeQuizPage() {
   // Initialize questions
   useEffect(() => {
     if (quizData?.questions && quizData.questions.length > 0) {
-      // Shuffle the questions only
+      // Shuffle the questions
       const shuffledQuestions = shuffleArray(quizData.questions);
       
-      // We do NOT shuffle options here anymore for Matching. 
-      // The Matching component handles its own display shuffling to avoid state desync.
-      // For Multiple Choice, we still shuffle options.
       const processedQuestions = shuffledQuestions.map((q) => {
+        // Safe shuffle for Multiple Choice options
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
           return {
             ...q,
@@ -306,12 +287,10 @@ export default function TakeQuizPage() {
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   
-  // Progress calculation
   const progress = quizQuestions.length > 0
       ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
       : 0;
 
-  // Standard handler for Non-Matching questions
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return;
 
@@ -324,7 +303,6 @@ export default function TakeQuizPage() {
     if (qType === 'MULTIPLE_CHOICE' || qType === 'TRUE_FALSE') {
       isCorrect = currentQuestion.correct_answer === answerTrimmed;
     } else if (qType === 'FILL_IN_THE_BLANK') {
-      // Robust checking for fill-in-blank
       const correctOpts = (currentQuestion.options as string[]) || [];
       const userLower = answerTrimmed.toLowerCase();
       
@@ -389,7 +367,6 @@ export default function TakeQuizPage() {
 
   const handleRestart = () => {
     if (quizData?.questions) {
-      // Re-shuffle on restart
       const shuffledQuestions = shuffleArray(quizData.questions);
       const processed = shuffledQuestions.map((q) => {
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
@@ -424,6 +401,10 @@ export default function TakeQuizPage() {
   if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin mr-2" /> Loading Quiz...</div>;
   if (error) return <div className="flex flex-col items-center justify-center h-full text-destructive"><AlertCircle className="h-12 w-12 mb-4" /><p>{error.message}</p></div>;
   if (!quizData || quizQuestions.length === 0) return <div className="flex flex-col items-center justify-center h-full text-muted-foreground"><p>This quiz has no questions.</p></div>;
+
+  // --- SAFE OPTIONS ACCESS ---
+  // Ensure options is always an array before rendering
+  const currentOptions = (currentQuestion.options as string[]) || [];
 
   return (
     <div className="flex flex-col h-full items-center py-8">
@@ -488,14 +469,12 @@ export default function TakeQuizPage() {
             >
               <Card className="shadow-md border-t-4 border-t-primary">
                 <CardContent className="p-6 sm:p-8">
-                  {/* Question Text */}
                   <div className="mb-8">
-                    <h2 className="text-xl font-semibold leading-relaxed text-foreground">
+                    <h2 className="text-xl font-semibold leading-relaxed text-foreground whitespace-pre-wrap">
                       {currentQuestion.question_text}
                     </h2>
                   </div>
 
-                  {/* Question Content */}
                   <div className="space-y-4">
                     {currentQuestion.question_type === 'MATCHING' ? (
                        <MatchingQuestionUI 
@@ -504,10 +483,10 @@ export default function TakeQuizPage() {
                           onQuestionComplete={handleMatchingComplete}
                        />
                     ) : (
-                      // Standard Options (MC, True/False, Fill Blank)
+                      // Standard Options
                       <div className="space-y-3">
                         {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
-                          (currentQuestion.options as string[]).map((option) => (
+                          currentOptions.map((option) => (
                           <Button
                             key={option}
                             variant="outline"
@@ -547,7 +526,6 @@ export default function TakeQuizPage() {
                     )}
                   </div>
 
-                  {/* Feedback / Explanations */}
                   <AnimatePresence>
                     {(answerStatus === 'correct' || answerStatus === 'incorrect') && (
                        <motion.div
@@ -565,7 +543,6 @@ export default function TakeQuizPage() {
                            }
                          </div>
                          
-                         {/* Show correct answers for Fill in blank / incorrect */}
                          {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
                             <p className="text-sm text-foreground/80 pl-7">
                               Correct Answer: <span className="font-semibold">{currentQuestion.correct_answer}</span>
@@ -573,7 +550,7 @@ export default function TakeQuizPage() {
                          )}
 
                          {currentQuestion.explanation && (
-                           <div className="text-sm text-muted-foreground pl-7 mt-1 border-l-2 border-black/5 pl-2">
+                           <div className="text-sm text-muted-foreground pl-7 mt-1 border-l-2 border-black/5 pl-2 whitespace-pre-wrap">
                              {currentQuestion.explanation}
                            </div>
                          )}
