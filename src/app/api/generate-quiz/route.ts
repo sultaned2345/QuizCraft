@@ -1,17 +1,12 @@
 // src/app/api/generate-quiz/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai'; 
-import pdfParse from 'pdf-parse-fork';
-
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { Question, QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
 
-export const runtime = 'nodejs';
-
-// 500k limit
-const MAX_INPUT_LENGTH = 500000;
+export const runtime = 'nodejs'; 
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
@@ -26,15 +21,19 @@ function parseQuery(
 } {
   const { searchParams } = new URL(request.url);
   const numQuestionsParam = Number(searchParams.get('numQuestions') ?? '10');
-  const difficultyParam = (searchParams.get('difficulty') as Difficulty) ?? 'medium';
-  const questionTypeParam = (searchParams.get('questionType') as QuestionTypeOption) ?? 'MIXED';
-  const immediateFeedbackParam = searchParams.get('immediateFeedback') !== 'false';
+  const difficultyParam =
+    (searchParams.get('difficulty') as Difficulty) ?? 'medium';
+  const questionTypeParam =
+    (searchParams.get('questionType') as QuestionTypeOption) ?? 'MIXED';
+  const immediateFeedbackParam = searchParams.get('immediateFeedback') !== 'false'; 
 
   const numQuestions = Number.isFinite(numQuestionsParam)
     ? Math.min(15, Math.max(5, numQuestionsParam))
     : 10;
 
-  const difficulty: Difficulty = ['easy', 'medium', 'hard'].includes(difficultyParam)
+  const difficulty: Difficulty = ['easy', 'medium', 'hard'].includes(
+    difficultyParam
+  )
     ? difficultyParam
     : 'medium';
 
@@ -72,9 +71,12 @@ async function readMultipartOrText(
     return { text: rawText.trim(), sourceType: 'text' };
   }
 
-  throw new Error(`Unsupported Content-Type: ${contentType}. Expected text/plain.`);
+  throw new Error(
+    `Unsupported Content-Type: ${contentType}. Expected text/plain.`
+  );
 }
 
+// --- UPGRADED PROMPT LOGIC: BLOOM'S TAXONOMY ---
 function buildPrompt({
   text,
   numQuestions,
@@ -88,20 +90,23 @@ function buildPrompt({
 }) {
   const questionTypes =
     questionType === 'MIXED'
-      ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
+      ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING' 
       : questionType;
 
-  // --- IMPROVED PROMPT ---
-  const system = `You are a strict university professor creating a ${difficulty} difficulty exam.
-  
-  Goal: Test deep understanding, not just recall.
-  
-  Rules:
-  1. **Questions must be challenging.** Focus on application, analysis, and synthesis of ideas.
-  2. **Distractors must be high quality.** No "silly" answers. They should be plausible misconceptions.
-  3. **Strict JSON output only.**`;
+  const system = `You are an expert educational assessment specialist. Your goal is to generate "Higher-Order Thinking" quiz questions based ONLY on the provided text.
 
-  const user = `Generate ${numQuestions} ${difficulty} questions of type: ${questionTypes}.
+  STRICT GENERATION RULES:
+  1. **Bloom's Taxonomy (Apply & Analyze)**: Do NOT generate simple definition questions (e.g., "What is X?"). Instead:
+     - **Apply**: Present a scenario and ask how to use a concept to solve it.
+     - **Analyze**: Show a code snippet or a process description and ask the user to identify a bug, a missing step, or the underlying principle.
+     - **Evaluate**: Present two approaches and ask which is better for a specific goal.
+  2. **Scenario-Based Questions**: Questions should start with a context (e.g., "A user reports error 500...", "In a React component...", "During mitosis...").
+  3. **Plausible Distractors**: For Multiple Choice, incorrect options must be **common misconceptions** or "near-miss" answers, not random or obviously wrong fillers.
+  4. **Code & Formatting**: If the input text is technical, you MUST use markdown code blocks (\`code\`) in the 'question_text' to present snippets for analysis.
+
+  Generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions.`;
+
+  const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
 Content:
 """
@@ -110,34 +115,34 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": string,
+  "title": string, // a concise, scenario-focused title
   "questions": [
     {
-      "question_text": string,
-      "question_type": "MULTIPLE_CHOICE",
-      "options": [string, string, string, string],
-      "correct_answer": string,
-      "explanation": string
+      "question_text": string, // E.g., "Review the code below. What causes the memory leak?\n\n\`\`\`javascript\n...\n\`\`\`",
+      "question_type": "MULTIPLE_CHOICE", 
+      "options": [string, string, string, string], // 4 options
+      "correct_answer": string, // Must match one option exactly
+      "explanation": string // Explain WHY the correct answer works and WHY the others fail
     },
     {
       "question_text": string,
-      "question_type": "TRUE_FALSE",
+      "question_type": "TRUE_FALSE", 
       "correct_answer": "True" | "False",
       "explanation": string
     },
     {
-      "question_text": string,
+      "question_text": string, // Use "____" for blanks
       "question_type": "FILL_IN_THE_BLANK",
       "correct_answer": string,
       "explanation": string
     },
     {
-      "question_text": "Match the following items:",
-      "question_type": "MATCHING",
-      "prompts": ["A", "B", "C"],
-      "options": ["1", "2", "3"],
-      "correct_answer": "N/A",
-      "explanation": "string"
+      "question_text": "Match the problem to its solution:",
+      "question_type": "MATCHING", 
+      "prompts": ["Problem A", "Problem B", "Problem C"], 
+      "options": ["Solution A", "Solution B", "Solution C"], 
+      "correct_answer": "N/A", 
+      "explanation": "Explain the relationships."
     }
   ]
 }`;
@@ -160,11 +165,8 @@ async function callGeminiForQuiz({
     throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
   }
 
-  // Safe Text Limit
-  const safeText = text.substring(0, MAX_INPUT_LENGTH);
-
   const { system, user } = buildPrompt({
-    text: safeText,
+    text,
     numQuestions,
     difficulty,
     questionType,
@@ -173,7 +175,7 @@ async function callGeminiForQuiz({
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash-lite',
     generationConfig: {
-      temperature: 0.3,
+      temperature: 0.4, 
       responseMimeType: 'application/json',
     },
   });
@@ -188,6 +190,8 @@ async function callGeminiForQuiz({
   }
 
   let cleanedContent = content.trim();
+
+  // Basic cleanup
   if (cleanedContent.startsWith('```')) {
     cleanedContent = cleanedContent.replace(/^```(?:json)?\s*\n?/i, '');
     cleanedContent = cleanedContent.replace(/\n?```\s*$/, '');
@@ -204,15 +208,30 @@ async function callGeminiForQuiz({
       try {
         parsed = JSON.parse(jsonMatch[0]);
       } catch (fallbackError) {
-        throw new Error('Failed to parse Gemini JSON response.');
+        throw new Error('Failed to parse Gemini JSON response via fallback.');
       }
     } else {
       throw new Error('Failed to parse Gemini JSON response.');
     }
   }
 
-  if (!parsed || typeof parsed !== 'object' || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    throw new Error('Gemini returned invalid or empty data structure.');
+  // Validate basic structure
+  if (!parsed || typeof parsed !== 'object' || !parsed.title || !Array.isArray(parsed.questions)) {
+    throw new Error('Gemini returned invalid data structure.');
+  }
+
+  // Validate individual questions
+  for (let i = 0; i < parsed.questions.length; i++) {
+    const q = parsed.questions[i];
+    if (!q.question_text || !q.question_type || !q.correct_answer) {
+      throw new Error(`Question ${i + 1} is missing required fields.`);
+    }
+    if (q.question_type === 'MULTIPLE_CHOICE' && (!Array.isArray(q.options) || q.options.length !== 4)) {
+      throw new Error(`Question ${i + 1} (MULTIPLE_CHOICE) must have exactly 4 options.`);
+    }
+    if (q.question_type === 'MATCHING' && (!Array.isArray(q.prompts) || !Array.isArray(q.options) || q.prompts.length !== q.options.length)) {
+      throw new Error(`Question ${i + 1} (MATCHING) mismatched prompts/options.`);
+    }
   }
 
   return parsed as { title: string; questions: Question[] };
@@ -222,15 +241,11 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
-    // Usage Check
+    // Check Usage
     const usageCheck = await checkAIGenerationUsageLimit(user.id);
     if (!usageCheck.isValid || !usageCheck.canGenerate) {
       return NextResponse.json(
-        {
-          success: false,
-          error: usageCheck.error,
-          message: usageCheck.message,
-        },
+        { success: false, error: usageCheck.error, message: usageCheck.message },
         { status: 403 }
       );
     }
@@ -238,11 +253,11 @@ export async function POST(request: NextRequest) {
     const { numQuestions, difficulty, questionType, immediateFeedback } = parseQuery(request);
     const { text } = await readMultipartOrText(request);
 
-    if (!text) {
-      return NextResponse.json({ success: false, error: 'No input text provided' }, { status: 400 });
-    }
-    if (text.length < 100) {
-      return NextResponse.json({ success: false, error: 'Content is too short.' }, { status: 400 });
+    if (!text || text.length < 100) {
+      return NextResponse.json(
+        { success: false, error: 'Content is too short. Please provide at least 100 characters.' },
+        { status: 400 }
+      );
     }
 
     const quiz = await callGeminiForQuiz({
@@ -301,13 +316,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (error instanceof Response) return error;
 
-    console.error('Quiz generation error details:', error);
-    const message = error?.message || 'Internal server error during quiz generation.';
-    let status = 500;
-    if (message.includes('limit reached')) status = 403;
-    if (message.includes('Content-Type') || message.includes('No input text') || message.includes('too short')) status = 400;
-    if (message.includes('Gemini') || message.includes('parse')) status = 502;
-
-    return NextResponse.json({ success: false, error: message }, { status });
+    console.error('Quiz generation error:', error);
+    const message = error?.message || 'Internal server error.';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
