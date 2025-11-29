@@ -5,12 +5,13 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Loader2, ArrowLeft, FileText, Sparkles, Target, Zap, ChevronRight,
-  Lightbulb, MoreVertical, Download, Share2, BrainCircuit, BookOpen, ListChecks
+  Lightbulb, MoreVertical, Download, Share2, BrainCircuit, BookOpen, ListChecks,
+  Layers, GraduationCap, ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
 import { usePageContext, PageContextType } from '@/contexts/PageContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -57,7 +58,7 @@ interface MenuState {
 
 type MenuAction = 'explain' | 'summarize' | 'question';
 
-// --- Selection Menu Component (RESTORED) ---
+// --- Selection Menu Component ---
 function SelectionMenu({ menu, onClose, onAction }: { menu: MenuState; onClose: () => void; onAction: (action: MenuAction) => void; }) {
   useEffect(() => {
     const handleClickOutside = () => onClose();
@@ -98,6 +99,7 @@ export default function DocumentViewPage() {
   const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
   const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
   const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [menu, setMenu] = useState<MenuState>({ visible: false, x: 0, y: 0, text: '' });
 
   const { session, loading: authLoading } = useAuth();
@@ -118,7 +120,8 @@ export default function DocumentViewPage() {
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
 
-  // --- 1. OPTIMIZED DATA FETCHING (No Giant Text Loads) ---
+  // --- DATA FETCHING ---
+  // 1. Metadata (Fast)
   const { data: metaData } = useSWR<ApiResponse<{ file_name: string }>>(
     session ? `/api/documents/${documentId}/content?text=false` : null,
     (url) => fetcher(url, session!.access_token),
@@ -127,7 +130,7 @@ export default function DocumentViewPage() {
 
   const isPdf = metaData?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
 
-  // Only fetch full text if it's NOT a PDF (Markdown needs text)
+  // 2. Full Text (Lazy)
   const { data: fullContentData } = useSWR<ApiResponse<{ extracted_text: string }>>(
     session && !isPdf ? `/api/documents/${documentId}/content` : null,
     (url) => fetcher(url, session!.access_token),
@@ -140,6 +143,7 @@ export default function DocumentViewPage() {
     swrOptions
   );
 
+  // 3. AI Insights (The "Understanding" part)
   const { data: insightsData } = useSWR<ApiResponse<AIDocumentInsights>>(
     session ? `/api/documents/${documentId}/insights` : null,
     (url) => fetcher(url, session!.access_token),
@@ -154,11 +158,13 @@ export default function DocumentViewPage() {
 
   const isLoading = !metaData;
 
-  // --- Handlers ---
+  // --- ACTIONS ---
+
+  // 1. Quiz Generation
   const handleStartPopQuiz = async () => {
     if (!session || isPopQuizLoading) return;
     setIsPopQuizLoading(true);
-    toast({ title: 'Creating Quiz...', description: 'Analyzing document...' });
+    toast({ title: 'Preparing Quiz', description: 'Generating questions from document...' });
     try {
       const res = await fetch('/api/generate-pop-quiz', {
         method: 'POST',
@@ -179,6 +185,78 @@ export default function DocumentViewPage() {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally {
       setIsPopQuizLoading(false);
+    }
+  };
+
+  // 2. Notes Generation
+  const handleGenerateNotes = async () => {
+    if (!session || isGenerating) return;
+    setIsGenerating(true);
+    toast({ title: 'Creating Notes', description: 'Summarizing document content...' });
+
+    try {
+        // Need full text for notes generation if we don't have it yet
+        let text = fullContentData?.data?.extracted_text;
+        
+        if (!text) {
+             const cRes = await fetch(`/api/documents/${documentId}/content`, {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+             });
+             const cResult = await cRes.json();
+             if (cResult.success) text = cResult.data.extracted_text;
+        }
+
+        if (!text) throw new Error("Could not retrieve document text");
+
+        const res = await fetch(`/api/generate-notes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ text }),
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            toast({ title: 'Success', description: 'Notes generated successfully!' });
+            router.push('/notes');
+        } else {
+            throw new Error(data.error);
+        }
+    } catch(e: any) {
+        toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+        setIsGenerating(false);
+    }
+  };
+
+  // 3. Flashcards Generation
+  const handleGenerateFlashcards = async () => {
+    if (!session || isGenerating) return;
+    setIsGenerating(true);
+    toast({ title: 'Creating Deck', description: 'Extracting key terms...' });
+    try {
+        const res = await fetch(`/api/generate-flashcards`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            documentId: documentId,
+            numberOfCards: 15,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast({ title: 'Success', description: `Deck "${data.data.title}" created.` });
+          router.push(`/flashcards/${data.data.id}`);
+        } else throw new Error(data.error);
+    } catch (e: any) {
+        toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+        setIsGenerating(false);
     }
   };
 
@@ -236,12 +314,7 @@ export default function DocumentViewPage() {
         {/* Toolbar Header */}
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-background/95 backdrop-blur z-10">
           <div className="flex items-center gap-3 min-w-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push('/documents')}
-              className="h-8 w-8"
-            >
+            <Button variant="ghost" size="icon" onClick={() => router.push('/documents')} className="h-8 w-8">
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex flex-col min-w-0">
@@ -262,27 +335,16 @@ export default function DocumentViewPage() {
               disabled={isPopQuizLoading}
               className="h-8 hidden sm:flex gap-2 bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900"
             >
-              {isPopQuizLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Zap className="w-3.5 h-3.5" />
-              )}
+              {isPopQuizLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
               <span>Pop Quiz</span>
             </Button>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <Download className="w-4 h-4 mr-2" /> Export PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Share2 className="w-4 h-4 mr-2" /> Share Document
-                </DropdownMenuItem>
+                <DropdownMenuItem><Download className="w-4 h-4 mr-2" /> Export PDF</DropdownMenuItem>
+                <DropdownMenuItem><Share2 className="w-4 h-4 mr-2" /> Share Document</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -295,86 +357,124 @@ export default function DocumentViewPage() {
             <Tabs defaultValue="document" className="flex-1 flex flex-col h-full overflow-hidden">
               <div className="px-4 border-b bg-background flex justify-center shrink-0">
                 <TabsList className="h-9 bg-transparent w-full max-w-md justify-center">
-                  <TabsTrigger
-                    value="document"
-                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
-                  >
-                    <BookOpen className="w-3.5 h-3.5" /> Document
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="analysis"
-                    className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
-                  >
-                    <BrainCircuit className="w-3.5 h-3.5" /> Smart Analysis
-                  </TabsTrigger>
+                  <TabsTrigger value="document" className="flex-1 text-xs"><BookOpen className="w-3.5 h-3.5 mr-2" /> Document</TabsTrigger>
+                  <TabsTrigger value="analysis" className="flex-1 text-xs"><BrainCircuit className="w-3.5 h-3.5 mr-2" /> Analysis</TabsTrigger>
                 </TabsList>
               </div>
 
               <div className="flex-1 relative overflow-hidden">
                 <TabsContent value="document" className="h-full m-0 border-0 data-[state=inactive]:hidden">
                   {urlData?.data?.signedUrl ? (
-                    // PDF Viewer (Optimized)
-                    // Note: 'onTextSelect' only fires if the user toggles "Text On" in the updated viewer
                     <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
-                        <PdfViewer
-                          url={urlData.data.signedUrl}
-                          onTextSelect={handleMouseUpCapture}
-                        />
+                        <PdfViewer url={urlData.data.signedUrl} onTextSelect={handleMouseUpCapture} />
                     </div>
                   ) : (
-                    // Markdown Viewer
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
-                      <div
-                        className="min-h-full py-8 px-4 flex justify-center"
-                        onMouseUp={handleMouseUpCapture}
-                      >
+                      <div className="min-h-full py-8 px-4 flex justify-center" onMouseUp={handleMouseUpCapture}>
                         <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 shadow-sm border rounded-xl p-8 md:p-12 min-h-[80vh]">
-                          <MarkdownViewer
-                            content={fullContentData?.data?.extracted_text || 'Loading content...'}
-                          />
+                          <MarkdownViewer content={fullContentData?.data?.extracted_text || 'Loading content...'} />
                         </div>
                       </div>
                     </ScrollArea>
                   )}
                 </TabsContent>
 
-                {/* --- RESTORED SMART ANALYSIS UI --- */}
+                {/* --- SMART ANALYSIS TAB --- */}
                 <TabsContent value="analysis" className="h-full m-0 overflow-y-auto data-[state=inactive]:hidden bg-zinc-50 dark:bg-zinc-950">
                   <div className="max-w-4xl mx-auto p-6 space-y-8">
+                    
+                    {/* Header */}
                     <div className="flex flex-col gap-2">
                       <h2 className="text-2xl font-bold flex items-center gap-2 text-foreground">
                         <Sparkles className="w-6 h-6 text-primary" /> 
-                        Document Intelligence
+                        AI Study Center
                       </h2>
                       <p className="text-muted-foreground">
-                        AI-generated insights, key takeaways, and study materials based on this file.
+                        We've analyzed your document. What would you like to create?
                       </p>
                     </div>
 
                     {!insightsData?.data ? (
-                      /* Loading Skeleton */
-                      <div className="grid gap-4">
-                         <div className="h-32 w-full bg-muted/50 rounded-xl animate-pulse" />
-                         <div className="grid grid-cols-2 gap-4">
-                            <div className="h-24 w-full bg-muted/50 rounded-xl animate-pulse" />
-                            <div className="h-24 w-full bg-muted/50 rounded-xl animate-pulse" />
+                       <div className="grid gap-6">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[1,2,3].map(i => <div key={i} className="h-40 bg-muted/50 rounded-xl animate-pulse" />)}
                          </div>
-                      </div>
+                         <div className="h-48 w-full bg-muted/50 rounded-xl animate-pulse" />
+                       </div>
                     ) : (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         
-                        {/* 1. Executive Summary */}
-                        <Card className="border-none shadow-md bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-zinc-900">
+                        {/* 1. ACTION CARDS (The Turbo AI Style Dashboard) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            
+                            {/* Card: Notes */}
+                            <Card className="hover:shadow-lg transition-all border-l-4 border-l-emerald-500 cursor-pointer group" onClick={handleGenerateNotes}>
+                                <CardHeader className="pb-3">
+                                    <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                        <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <CardTitle className="text-base">Study Notes</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Summaries & bullet points
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardFooter className="pt-0">
+                                    <Button size="sm" variant="ghost" className="w-full justify-between text-xs group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20" disabled={isGenerating}>
+                                        Generate <ArrowRight className="w-3 h-3 ml-2 opacity-50" />
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+
+                            {/* Card: Flashcards */}
+                            <Card className="hover:shadow-lg transition-all border-l-4 border-l-orange-500 cursor-pointer group" onClick={handleGenerateFlashcards}>
+                                <CardHeader className="pb-3">
+                                    <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                        <Layers className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                                    </div>
+                                    <CardTitle className="text-base">Flashcards</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Active recall deck
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardFooter className="pt-0">
+                                    <Button size="sm" variant="ghost" className="w-full justify-between text-xs group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20" disabled={isGenerating}>
+                                        Create Deck <ArrowRight className="w-3 h-3 ml-2 opacity-50" />
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+
+                             {/* Card: Quiz */}
+                             <Card className="hover:shadow-lg transition-all border-l-4 border-l-amber-500 cursor-pointer group" onClick={handleStartPopQuiz}>
+                                <CardHeader className="pb-3">
+                                    <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                        <GraduationCap className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                    </div>
+                                    <CardTitle className="text-base">Pop Quiz</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Test your knowledge
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardFooter className="pt-0">
+                                    <Button size="sm" variant="ghost" className="w-full justify-between text-xs group-hover:bg-amber-50 dark:group-hover:bg-amber-900/20" disabled={isPopQuizLoading}>
+                                        Start Quiz <ArrowRight className="w-3 h-3 ml-2 opacity-50" />
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+
+                        </div>
+
+                        {/* 2. Executive Summary (Proof of Understanding) */}
+                        <Card className="border-none shadow-sm bg-zinc-50 dark:bg-zinc-900/50">
                           <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                              <Target className="w-5 h-5" /> Executive Summary
+                            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                              <Target className="w-4 h-4 text-primary" /> Key Takeaways
                             </CardTitle>
                           </CardHeader>
                           <CardContent>
                             <ul className="space-y-3">
                               {(insightsData.data.mainArguments || []).map((arg, i) => (
                                 <li key={i} className="flex gap-3 text-sm text-foreground/80">
-                                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                                   <span className="leading-relaxed">{safeRender(arg)}</span>
                                 </li>
                               ))}
@@ -382,52 +482,16 @@ export default function DocumentViewPage() {
                           </CardContent>
                         </Card>
 
-                        {/* 2. Key Concepts Cloud */}
+                        {/* 3. Concepts */}
                         <div>
-                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <Lightbulb className="w-5 h-5 text-yellow-500" /> Key Concepts
+                          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                             Detected Concepts
                           </h3>
-                          <div className="flex flex-wrap gap-2 p-6 bg-white dark:bg-zinc-900 border rounded-xl shadow-sm">
+                          <div className="flex flex-wrap gap-2">
                             {(insightsData.data.keyConcepts || []).map((c, i) => (
-                              <Badge
-                                key={i}
-                                variant="outline"
-                                className="px-3 py-1.5 text-sm font-normal cursor-pointer hover:bg-primary hover:text-primary-foreground transition-all border-primary/20"
-                                onClick={() => chatRef.current?.sendMessage(`Tell me more about "${safeRender(c)}" in the context of this document.`)}
-                              >
+                              <Badge key={i} variant="secondary" className="px-3 py-1 font-normal bg-white dark:bg-zinc-900 border cursor-default">
                                 {safeRender(c)}
                               </Badge>
-                            ))}
-                            {(!insightsData.data.keyConcepts || insightsData.data.keyConcepts.length === 0) && (
-                               <span className="text-muted-foreground text-sm">No concepts extracted.</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 3. Interactive Practice Questions */}
-                        <div>
-                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <ListChecks className="w-5 h-5 text-blue-500" /> Practice Questions
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(insightsData.data.examQuestions || []).map((q, i) => (
-                              <div
-                                key={i}
-                                onClick={() => chatRef.current?.sendMessage(`I want to answer this question: "${safeRender(q)}". Please grade my answer.`)}
-                                className="group relative p-5 rounded-xl border bg-card hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
-                              >
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                      Question {i + 1}
-                                    </span>
-                                    <p className="text-sm font-medium leading-snug line-clamp-3 text-foreground/90">
-                                      {safeRender(q)}
-                                    </p>
-                                  </div>
-                                  <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
-                                </div>
-                              </div>
                             ))}
                           </div>
                         </div>
@@ -442,13 +506,7 @@ export default function DocumentViewPage() {
 
           <ResizableHandle withHandle />
 
-          {/* Right Panel: Chat */}
-          <ResizablePanel
-            defaultSize={40}
-            minSize={25}
-            className="bg-background flex flex-col"
-            data-chat-panel="true"
-          >
+          <ResizablePanel defaultSize={40} minSize={25} className="bg-background flex flex-col" data-chat-panel="true">
             <div className="h-full flex flex-col border-l border-border/50">
               <ChatInterface
                 ref={chatRef}
@@ -460,7 +518,6 @@ export default function DocumentViewPage() {
           </ResizablePanel>
         </ResizablePanelGroup>
 
-        {/* Pop Quiz Modal */}
         {isPopQuizOpen && (
           <PopQuizModal
             isOpen={isPopQuizOpen}

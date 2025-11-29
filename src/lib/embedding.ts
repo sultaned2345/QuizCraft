@@ -1,7 +1,7 @@
 // src/lib/embedding.ts
-import { GoogleGenerativeAI } from "@google/generative-ai"; // <-- FIX: Changed hyphen to slash
+import { GoogleGenerativeAI } from "@google/generative-ai"; 
 import { prisma } from '@/lib/prisma';
-import { supabaseAdmin } from './supabaseAdmin'; // Use admin client for DB operations
+import { supabaseAdmin } from './supabaseAdmin';
 
 // Use 'text-embedding-004' which is Google's new standard (768 dimensions)
 const EMBEDDING_MODEL = "text-embedding-004";
@@ -10,19 +10,109 @@ const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 /**
- * Splits text into simple chunks.
- * A more advanced implementation would use token-based splitting
- * and overlapping chunks.
+ * IMPROVED: Recursive Character Text Splitter
+ * Recursively splits text into chunks respecting semantic boundaries.
+ * Priority: Paragraphs (\n\n) -> Newlines (\n) -> Sentences (. ) -> Spaces ( ) -> Characters
  */
-function chunkText(text: string, chunkSize = 1000, chunkOverlap = 100): string[] {
-    const chunks: string[] = [];
-    let i = 0;
-    while (i < text.length) {
-        const end = Math.min(i + chunkSize, text.length);
-        chunks.push(text.substring(i, end));
-        i += (chunkSize - chunkOverlap);
+function chunkText(text: string, chunkSize = 2000, chunkOverlap = 200): string[] {
+    if (!text) return [];
+
+    const separators = ["\n\n", "\n", ". ", " ", ""];
+
+    function splitRecursively(textToSplit: string, separatorIndex: number): string[] {
+        // 1. Base Case: If text fits, return it
+        if (textToSplit.length <= chunkSize) {
+            return [textToSplit];
+        }
+
+        // 2. Fallback: If no separators left, hard split by character
+        if (separatorIndex >= separators.length) {
+             const chunks: string[] = [];
+             let i = 0;
+             while (i < textToSplit.length) {
+                 // Hard slice
+                 const end = Math.min(i + chunkSize, textToSplit.length);
+                 chunks.push(textToSplit.substring(i, end));
+                 // Move forward by stride (size - overlap)
+                 i += (chunkSize - chunkOverlap);
+             }
+             return chunks;
+        }
+
+        const separator = separators[separatorIndex];
+        // Split text by the current separator
+        // If separator is present, split. If not, this returns [textToSplit] and we recurse to next separator.
+        const parts = textToSplit.split(separator);
+        
+        // If splitting didn't actually split anything (only 1 part), 
+        // implies this separator doesn't exist here. Move to next separator immediately.
+        if (parts.length === 1) {
+            return splitRecursively(textToSplit, separatorIndex + 1);
+        }
+
+        const finalChunks: string[] = [];
+        let currentChunk: string[] = [];
+        let currentLen = 0;
+        const sepLen = separator.length;
+
+        for (const part of parts) {
+            const partLen = part.length;
+
+            // Edge Case: If a single part is HUGE (larger than chunk size),
+            // we must process it recursively with the *next* separator.
+            if (partLen > chunkSize) {
+                // 1. Flush whatever we have accumulated so far
+                if (currentChunk.length > 0) {
+                    finalChunks.push(currentChunk.join(separator));
+                    currentChunk = [];
+                    currentLen = 0;
+                }
+                // 2. Recurse on the huge part
+                const subChunks = splitRecursively(part, separatorIndex + 1);
+                finalChunks.push(...subChunks);
+                continue;
+            }
+
+            // Normal Case: Accumulate parts
+            if (currentLen + partLen + (currentChunk.length > 0 ? sepLen : 0) <= chunkSize) {
+                currentChunk.push(part);
+                currentLen += partLen + (currentChunk.length > 0 ? sepLen : 0);
+            } else {
+                // Chunk is full. Push it.
+                if (currentChunk.length > 0) {
+                    finalChunks.push(currentChunk.join(separator));
+                    
+                    // Handle Overlap: Keep the last few parts that fit within chunkOverlap
+                    // We backtrack from the end of currentChunk
+                    const overlapBuffer: string[] = [];
+                    let overlapLen = 0;
+                    for (let k = currentChunk.length - 1; k >= 0; k--) {
+                        const item = currentChunk[k];
+                        if (overlapLen + item.length + sepLen <= chunkOverlap) {
+                            overlapBuffer.unshift(item); // Prepend
+                            overlapLen += item.length + sepLen;
+                        } else {
+                            break; // Stop if we exceed overlap size
+                        }
+                    }
+                    currentChunk = overlapBuffer;
+                    currentLen = overlapLen;
+                }
+                // Add the new part to the (now emptied or overlapped) chunk
+                currentChunk.push(part);
+                currentLen += partLen + (currentChunk.length > 0 ? sepLen : 0);
+            }
+        }
+
+        // Flush remaining
+        if (currentChunk.length > 0) {
+            finalChunks.push(currentChunk.join(separator));
+        }
+
+        return finalChunks;
     }
-    return chunks;
+
+    return splitRecursively(text, 0);
 }
 
 /**
@@ -49,25 +139,34 @@ export async function generateEmbeddingsForContent(
   try {
     const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
     
-    // 1. Chunk the text
+    // 1. Chunk the text using the improved recursive splitter
     const textChunks = chunkText(textContent);
+    console.log(`Split text into ${textChunks.length} semantic chunks.`);
     
     // 2. Get embeddings for all chunks
-    const result = await model.batchEmbedContents({
-      requests: textChunks.map(chunk => ({
-        content: { parts: [{ text: chunk }] },
-        taskType: "RETRIEVAL_DOCUMENT"
-      }))
-    });
+    // Note: batchEmbedContents has a limit (often 100 items). We batch carefully.
+    const BATCH_SIZE = 90; 
+    const allEmbeddings = [];
 
-    const embeddings = result.embeddings;
+    for (let i = 0; i < textChunks.length; i += BATCH_SIZE) {
+        const batch = textChunks.slice(i, i + BATCH_SIZE);
+        const result = await model.batchEmbedContents({
+            requests: batch.map(chunk => ({
+                content: { parts: [{ text: chunk }] },
+                taskType: "RETRIEVAL_DOCUMENT"
+            }))
+        });
+        if (result.embeddings) {
+            allEmbeddings.push(...result.embeddings);
+        }
+    }
 
-    if (!embeddings || embeddings.length !== textChunks.length) {
-        throw new Error("Mismatch between chunks and returned embeddings.");
+    if (!allEmbeddings || allEmbeddings.length !== textChunks.length) {
+        throw new Error(`Mismatch: ${textChunks.length} chunks vs ${allEmbeddings.length} embeddings.`);
     }
 
     // 3. Prepare data for Prisma
-    const embeddingsToSave = embeddings.map((embedding, index) => ({
+    const embeddingsToSave = allEmbeddings.map((embedding, index) => ({
       user_id: userId,
       content_id: contentId,
       content_type: contentType,
@@ -76,7 +175,6 @@ export async function generateEmbeddingsForContent(
     }));
 
     // 4. Delete old embeddings and save new ones in a transaction
-    // Use supabaseAdmin's prisma client for background tasks
     await prisma.$transaction([
         // Delete any existing chunks for this content
         prisma.content_embeddings.deleteMany({
@@ -91,7 +189,7 @@ export async function generateEmbeddingsForContent(
         })
     ]);
 
-    console.log(`Successfully generated and saved ${embeddings.length} embeddings for ${contentType} ${contentId}.`);
+    console.log(`Successfully generated and saved ${allEmbeddings.length} embeddings for ${contentType} ${contentId}.`);
 
   } catch (error) {
     console.error(`Error in generateEmbeddingsForContent for ${contentType} ${contentId}:`, error);

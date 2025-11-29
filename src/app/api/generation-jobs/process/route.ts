@@ -3,90 +3,85 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { generateQueryEmbedding } from '@/lib/embedding';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Prisma } from '@prisma/client';
-import { Quiz, Note, FlashcardDeck, Question } from '@/types/database';
-// --- 1. IMPORT CENTRALIZED AI HELPERS ---
 import {
   callAIToGenerateQuiz,
   callAIToGenerateNote,
   callAIToGenerateFlashcards,
 } from '@/lib/aiGeneration';
-// ---
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; // Ensure this route is always dynamic
-
-// --- AI Configuration ---
-const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-const AI_MODEL_NAME = "gemini-2.5-flash-lite"; // This is a fallback, helpers use their own
-const genAI = new GoogleGenerativeAI(API_KEY); // This is a fallback, helpers use their own
-
-// --- 2. REMOVE ALL LOCAL AI HELPER FUNCTIONS ---
-// (Removed callAIToGenerateQuiz)
-// (Removed callAIToGenerateNote)
-// (Removed callAIToGenerateFlashcards)
-// ---
-
-// --- Main Job Processing Function ---
+export const dynamic = 'force-dynamic';
 
 async function processJob(job: any) {
     let outputId: string | null = null;
     try {
-        console.log(`Processing job ${job.id} for doc ${job.document_id}`);
+        console.log(`Processing job ${job.id} for doc ${job.document_id} (Smart RAG Mode)`);
         
-        // 1. Get Document and Insights
+        // 1. Get Document & Insights
         const document = await prisma.documents.findFirst({
             where: { id: job.document_id, user_id: job.user_id },
             select: { ai_insights: true, file_name: true }
         });
         if (!document) throw new Error("Document not found.");
 
+        // 2. Prepare Search Queries (Smart RAG)
+        // We use the AI-generated "Key Concepts" to find the best parts of the file.
+        let searchQueries: string[] = [];
         const insights = document.ai_insights as any;
-        const topics = insights?.keyConcepts || insights?.examQuestions;
-
-        if (!topics || topics.length === 0) {
-            throw new Error("No AI insights (key concepts or exam questions) found for this document. Cannot generate content.");
+        
+        if (insights && insights.keyConcepts && Array.isArray(insights.keyConcepts)) {
+            // Pick top 5 concepts to get a broad coverage of the document
+            searchQueries = insights.keyConcepts.slice(0, 5);
+        } else {
+            // Fallback if no insights exist yet
+            searchQueries = ["Summary", "Important Definitions", "Key Concepts", "Main Arguments", "Conclusion"];
         }
 
-        // 2. Smart RAG: Get embeddings for the top 5 topics
-        const searchQueries = topics.slice(0, 5); // Use max 5 topics as queries
-        const embeddingPromises = searchQueries.map((q: string) => generateQueryEmbedding(q));
+        console.log(`RAG Queries: ${JSON.stringify(searchQueries)}`);
+
+        // 3. Generate Embeddings for these Queries
+        const embeddingPromises = searchQueries.map(q => generateQueryEmbedding(q));
         const embeddings = await Promise.all(embeddingPromises);
 
-        // 3. Find relevant chunks for all topics
+        // 4. Find Relevant Chunks (Filtered by THIS Document)
+        // We ask for 3 chunks per query. 5 queries * 3 chunks = max 15 chunks (~30k chars).
         const chunkPromises = embeddings.map(emb =>
             supabaseAdmin.rpc('match_content_chunks', {
                 query_embedding: emb,
-                match_threshold: 0.7,
-                match_count: 2, // Get top 2 chunks for each topic
+                match_threshold: 0.5, 
+                match_count: 3, 
                 p_user_id: job.user_id,
-                p_content_id: job.document_id // Only search within this document
+                p_content_id: job.document_id // <--- CRITICAL: Only look in this file
             })
         );
         const chunkResults = await Promise.all(chunkPromises);
         
         const allChunks = chunkResults.flatMap(res => res.data || []);
-        if (allChunks.length === 0) throw new Error("No relevant text chunks found based on AI insights.");
+        
+        if (allChunks.length === 0) {
+             throw new Error("No content chunks found. The document might still be processing its embeddings. Please wait 1 minute and try again.");
+        }
 
-        // 4. De-duplicate chunks and create context
+        // 5. De-duplicate and Create Focused Context
         const uniqueChunks = [...new Map(allChunks.map(c => [c.content_chunk, c])).values()];
         const contextText = uniqueChunks.map(c => c.content_chunk).join("\n\n---\n\n");
 
-        if (contextText.length < 50) throw new Error("Context from RAG is too short.");
+        console.log(`Constructed RAG Context: ${contextText.length} chars from ${uniqueChunks.length} chunks.`);
 
-        // 5. Run the specific job type
+        if (contextText.length < 100) throw new Error("Context from RAG is too short to generate quality content.");
+
+        // 6. Run the specific job type using the Focused RAG Context
         switch (job.job_type) {
             case 'quiz':
-                // --- 3. CALL IMPORTED HELPER ---
-                const quizData = await callAIToGenerateQuiz(contextText, 10, 'medium', 'MIXED'); // Generate 10 questions
+                const quizData = await callAIToGenerateQuiz(contextText, 10, 'medium', 'MIXED');
                 const newQuiz = await prisma.quiz.create({
                     data: {
-                        title: quizData.title || `Quiz for ${document.file_name}`,
+                        title: quizData.title || `Quiz: ${document.file_name}`,
                         userId: job.user_id,
                         immediate_feedback: true,
                         questions: {
-                            create: quizData.questions.map((q: any) => ({ // Use 'any' as imported type is broader
+                            create: quizData.questions.map((q: any) => ({ 
                                 question_text: q.question_text,
                                 question_type: q.question_type,
                                 correct_answer: q.correct_answer,
@@ -101,12 +96,11 @@ async function processJob(job: any) {
                 break;
             
             case 'note':
-                 // --- 3. CALL IMPORTED HELPER ---
-                const noteData = await callAIToGenerateNote(contextText); // Returns { title, content }
+                const noteData = await callAIToGenerateNote(contextText);
                 const newNote = await prisma.notes.create({
                     data: {
                         user_id: job.user_id,
-                        title: noteData.title || `Notes for ${document.file_name}`,
+                        title: noteData.title || `Notes: ${document.file_name}`,
                         content: noteData.content,
                     },
                 });
@@ -114,12 +108,11 @@ async function processJob(job: any) {
                 break;
                 
             case 'flashcard':
-                 // --- 3. CALL IMPORTED HELPER ---
-                const cards = await callAIToGenerateFlashcards(contextText, 15); // Generate 15 cards
+                const cards = await callAIToGenerateFlashcards(contextText, 15);
                 const newDeck = await prisma.flashcard_decks.create({
                     data: {
                         user_id: job.user_id,
-                        title: `Flashcards for ${document.file_name}`,
+                        title: `Flashcards: ${document.file_name}`,
                         flashcards: {
                             create: cards.map(c => ({
                                 front_content: c.front_content,
@@ -135,15 +128,13 @@ async function processJob(job: any) {
                 throw new Error(`Unknown job type: ${job.job_type}`);
         }
 
-        // 6. Mark job as complete
         await prisma.generation_jobs.update({
             where: { id: job.id },
             data: { status: 'complete', output_id: outputId }
         });
-        console.log(`Job ${job.id} completed successfully. Output ID: ${outputId}`);
+        console.log(`Job ${job.id} completed. Output: ${outputId}`);
 
     } catch (error: any) {
-        // 7. Mark job as failed
         console.error(`Failed to process job ${job.id}:`, error.message);
         await prisma.generation_jobs.update({
             where: { id: job.id },
@@ -152,18 +143,17 @@ async function processJob(job: any) {
     }
 }
 
-/**
- * @route GET /api/generation-jobs/process
- * @description Processes pending generation jobs. Secured by CRON_SECRET.
- */
 export async function GET(request: NextRequest) {
-  // 1. Check Cron Secret
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    // Optional: Allow localhost to bypass for testing
+    if (process.env.NODE_ENV === 'development') {
+        console.log("Allowing dev bypass for cron");
+    } else {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  // 2. Fetch jobs to process (e.g., 3 at a time)
   const jobsToProcess = await prisma.generation_jobs.findMany({
     where: { status: 'pending' },
     take: 3,
@@ -174,25 +164,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, message: 'No pending jobs.' });
   }
 
-  // 3. Mark jobs as 'processing' first
   await prisma.generation_jobs.updateMany({
-    where: {
-      id: { in: jobsToProcess.map(j => j.id) }
-    },
-    data: {
-      status: 'processing',
-      updated_at: new Date()
-    }
+    where: { id: { in: jobsToProcess.map(j => j.id) } },
+    data: { status: 'processing', updated_at: new Date() }
   });
 
-  // 4. Process each job (fire-and-forget, but await to keep connection alive)
-  // We run them sequentially to avoid overwhelming the AI or DB
   for (const job of jobsToProcess) {
     await processJob(job);
   }
 
   return NextResponse.json({ 
     success: true, 
-    message: `Attempted to process ${jobsToProcess.length} jobs.` 
+    message: `Processed ${jobsToProcess.length} jobs.` 
   });
 }

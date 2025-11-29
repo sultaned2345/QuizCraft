@@ -4,91 +4,107 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse, Question } from '@/types/database';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { generateQueryEmbedding } from '@/lib/embedding';
 
 export const runtime = 'nodejs';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
-
-// --- UPDATED MODEL ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite";
 
 interface PopQuizResponse {
   questions: Omit<Question, 'id' | 'quiz_id' | 'created_at'>[];
 }
 
-function buildPopQuizPrompt(text: string, topics: string[]): string {
-  const topicList = topics.join(', ');
-  // Default to 5 questions
+function buildPopQuizPrompt(text: string): string {
   const numQuestions = 5;
 
-  const system = `You are an expert university professor creating a pop quiz. 
-  Based ONLY on the provided text, generate exactly ${numQuestions} questions.
-  The questions should be MULTIPLE_CHOICE or TRUE_FALSE.
-  Crucially, you MUST focus on the following topics/questions if possible: ${topicList}.
-  For each question, provide an explanation for the correct answer derived strictly from the text.`;
+  return `You are creating a quick pop quiz. 
+Based ONLY on the snippets below, generate exactly ${numQuestions} questions.
+The questions should be MULTIPLE_CHOICE or TRUE_FALSE.
+For each question, provide a short explanation.
 
-  const user = `Generate ${numQuestions} quiz questions based *only* on the content below.
-
-Content:
+Content Snippets:
 """
 ${text}
 """
 
-Return ONLY valid JSON with this exact shape:
+Return ONLY valid JSON:
 {
   "questions": [
     {
       "question_text": "string",
       "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE",
-      "options": ["A", "B", "C", "D"] | ["True", "False"],
+      "options": ["A", "B", "C", "D"], // or ["True", "False"]
       "correct_answer": "string",
       "explanation": "string"
     }
   ]
 }`;
-  return `${system}\n\n${user}`;
 }
 
 export async function POST(request: NextRequest) {
-  if (!API_KEY) {
-    return NextResponse.json<ApiResponse>({ success: false, error: 'AI is not configured.' }, { status: 500 });
-  }
+  if (!API_KEY) return NextResponse.json<ApiResponse>({ success: false, error: 'AI not configured.' }, { status: 500 });
 
   try {
     const user = await requireAuth(request);
     const { documentId } = await request.json();
 
-    if (!documentId) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Missing documentId' }, { status: 400 });
-    }
+    if (!documentId) return NextResponse.json<ApiResponse>({ success: false, error: 'Missing documentId' }, { status: 400 });
 
-    // 1. Fetch Document Text & Insights
     const doc = await prisma.documents.findFirst({
       where: { id: documentId, user_id: user.id },
-      select: { extracted_text: true, ai_insights: true }
+      select: { extracted_text: true, ai_insights: true, file_name: true }
     });
 
-    if (!doc || !doc.extracted_text) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Document text not found.' }, { status: 404 });
+    if (!doc) return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found.' }, { status: 404 });
+
+    // --- RAG STRATEGY ---
+    // 1. Determine what to search for
+    let searchQueries = ["Summary", "Key Points", "Important Facts"];
+    const insights = doc.ai_insights as any;
+    if (insights && insights.keyConcepts && Array.isArray(insights.keyConcepts)) {
+        searchQueries = insights.keyConcepts.slice(0, 3); // Top 3 concepts
     }
 
-    // Try to get topics from existing insights, otherwise empty array
-    const topics = (doc.ai_insights as any)?.examQuestions || [];
+    // 2. Generate Embeddings & Search
+    const embeddings = await Promise.all(searchQueries.map(q => generateQueryEmbedding(q)));
     
-    // 2. Call AI
+    const chunkPromises = embeddings.map(emb =>
+        supabaseAdmin.rpc('match_content_chunks', {
+            query_embedding: emb,
+            match_threshold: 0.5,
+            match_count: 2, // 2 chunks per concept -> ~6 chunks total
+            p_user_id: user.id,
+            p_content_id: documentId
+        })
+    );
+    const chunkResults = await Promise.all(chunkPromises);
+    const allChunks = chunkResults.flatMap(res => res.data || []);
+
+    // 3. Fallback to raw text if no chunks found (e.g. embeddings not ready yet)
+    let contextText = "";
+    if (allChunks.length > 0) {
+        const uniqueChunks = [...new Map(allChunks.map(c => [c.content_chunk, c])).values()];
+        contextText = uniqueChunks.map(c => c.content_chunk).join("\n\n---\n\n");
+    } else {
+        // Fallback: Just take the first 15k chars of the file if RAG fails
+        // This ensures the user still gets a quiz even if embeddings aren't ready.
+        if (doc.extracted_text) {
+             contextText = doc.extracted_text.substring(0, 15000);
+        } else {
+             throw new Error("No text content available.");
+        }
+    }
+
+    // 4. Generate
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
       model: AI_MODEL_NAME,
-      generationConfig: {
-        temperature: 0.4,
-        responseMimeType: 'application/json',
-      },
+      generationConfig: { temperature: 0.4, responseMimeType: 'application/json' },
     });
 
-    // Truncate to ~50k chars to be safe, though Flash can handle much more
-    const safeText = doc.extracted_text.substring(0, 50000);
-    const prompt = buildPopQuizPrompt(safeText, topics);
-    
+    const prompt = buildPopQuizPrompt(contextText);
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const content = response.text();
@@ -97,16 +113,11 @@ export async function POST(request: NextRequest) {
     try {
         parsed = JSON.parse(content);
     } catch (e) {
-        // Fallback cleanup if AI returns markdown code blocks
         const cleaned = content.replace(/```json|```/g, '');
         parsed = JSON.parse(cleaned);
     }
 
-    if (!parsed.questions || parsed.questions.length === 0) {
-      throw new Error("AI failed to generate pop quiz questions.");
-    }
-    
-    // 3. Format Response
+    // 5. Format & Return
     const questions: Question[] = parsed.questions.map((q, i) => ({
       ...q,
       id: `temp-${i}`,
@@ -124,7 +135,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     if (error instanceof Response) return error;
-    console.error('Error generating pop quiz:', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: error.message || 'Failed to generate pop quiz.' }, { status: 500 });
+    console.error('Pop Quiz Error:', error);
+    return NextResponse.json<ApiResponse>({ success: false, error: error.message || 'Failed to generate quiz.' }, { status: 500 });
   }
 }

@@ -1,16 +1,16 @@
 // src/lib/aiGeneration.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuestionType } from '@/types/database';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 
-// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
+// --- ENFORCED: Use gemini-2.5-flash-lite ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
 
-// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
-// The Flash model can handle up to 1M tokens, so this is safe.
-const MAX_INPUT_LENGTH = 100000; 
+// --- UPDATED: Increased to 4,000,000 characters (approx 4MB / 1M tokens) ---
+// This supports the 5MB upload limit (leaving buffer for prompts/overhead)
+const MAX_INPUT_LENGTH = 4000000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -23,14 +23,12 @@ const genAI = new GoogleGenerativeAI(API_KEY);
  */
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
-    // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
 
 // ---------------------------------------------------------------------------
-// 1. QUIZ GENERATION
+// 1. QUIZ GENERATION (Helper)
 // ---------------------------------------------------------------------------
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -52,16 +50,7 @@ function buildQuizPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  // --- UPDATED SYSTEM PROMPT FOR DISTRACTORS ---
-  const system = `You are an expert educational assessment creator. Your goal is to generate ${numQuestions} ${difficulty}-level questions based ONLY on the provided text.
-
-CRITICAL INSTRUCTIONS FOR GENERATING "DISTRACTORS" (WRONG ANSWERS):
-1. PLAUSIBILITY: Distractors must be plausible to a student who understands the general topic but misses specific details. Do NOT use obvious joke answers or impossibilities (e.g., "Mitochondria" vs "A Pizza").
-2. COMMON MISCONCEPTIONS: Base incorrect options on common confusions found in the domain (e.g., confusing "Effect" with "Cause", or similar-sounding terms).
-3. HOMOGENEITY: All options must be of similar length, grammatical structure, and complexity.
-4. INDEPENDENCE: The correct answer should not be guessable purely by logic (e.g., avoiding "All of the above" unless strictly necessary).
-
-Generate questions of type: ${questionTypes}. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
+  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
   const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
@@ -72,14 +61,14 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": "string", // a concise quiz title based on the content
+  "title": "string", 
   "questions": [
     {
       "question_text": "string",
       "question_type": "MULTIPLE_CHOICE",
-      "options": ["string", "string", "string", "string"], // 1 Correct, 3 Plausible Distractors
+      "options": ["string", "string", "string", "string"],
       "correct_answer": "string",
-      "explanation": "string" // Explain why the correct answer is right AND why the misconceptions are wrong.
+      "explanation": "string"
     },
     {
       "question_text": "string",
@@ -88,17 +77,17 @@ Return ONLY valid JSON with this exact shape:
       "explanation": "string"
     },
     {
-      "question_text": "string", // use "____" for the blank(s)
+      "question_text": "string", 
       "question_type": "FILL_IN_THE_BLANK",
-      "options": ["string"], // An array of one or more acceptable answers
-      "correct_answer": "N/A", // Not used, options array is used
+      "options": ["string"], 
+      "correct_answer": "N/A", 
       "explanation": "string"
     },
     {
       "question_text": "Match the following items:",
       "question_type": "MATCHING",
       "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
-      "options": ["Answer 1", "Answer 2", "Answer 3"], // Corresponding answers in order
+      "options": ["Answer 1", "Answer 2", "Answer 3"],
       "correct_answer": "N/A",
       "explanation": "Explanation of how the items are related."
     }
@@ -178,20 +167,19 @@ You MUST format the notes as clean, semantic HTML.
 - Use <p> for paragraphs.
 - Do NOT use any Markdown (like ##, **, or -).
 - Do NOT use <html>, <body>, or <head> tags.
-- The HTML content must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty.
 
 {
   "notes": [
     {
       "title": "Concise Title Reflecting Main Topic",
-      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
+      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p>..."
     }
   ]
 }`;
@@ -230,20 +218,10 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   }
 
   // Validations
-  if (
-    !parsed.notes || 
-    !Array.isArray(parsed.notes) || 
-    parsed.notes.length === 0 || 
-    !parsed.notes[0].title ||
-    typeof parsed.notes[0].content !== 'string'
-  ) {
-    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
+  if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0 || !parsed.notes[0].title || typeof parsed.notes[0].content !== 'string') {
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
-
-  // Check for meaningful content
   if (!isContentMeaningful(parsed.notes[0].content)) {
-     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
      throw new Error("AI failed to generate meaningful content for this note.");
   }
   
@@ -256,10 +234,6 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.
-
-For each flashcard:
-- 'front_content' should be a term, concept, or question.
-- 'back_content' should be its definition, explanation, or answer, derived directly from the text.
 
 Text Content:
 """
