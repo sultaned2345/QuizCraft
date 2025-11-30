@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
+import { callAIToGenerateInsights } from '@/lib/aiGeneration';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export interface AIDocumentInsights {
   mainArguments: string[];
 }
 
+// GET: Fetch existing insights
 export async function GET(
     request: NextRequest,
     { params }: { params: { documentId: string } }
@@ -47,13 +49,47 @@ export async function GET(
 
     } catch (error: any) {
         if (error instanceof Response) return error;
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2023') {
-             return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Document ID format.' }, { status: 400 });
+        console.error(`[API GET Insights] Error:`, error);
+        return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to fetch insights.' }, { status: 500 });
+    }
+}
+
+// POST: Generate new insights
+export async function POST(
+    request: NextRequest,
+    { params }: { params: { documentId: string } }
+) {
+    try {
+        const user = await requireAuth(request);
+        const { documentId } = params;
+
+        // 1. Fetch Document Text
+        const document = await prisma.documents.findFirst({
+            where: { id: documentId, user_id: user.id },
+            select: { id: true, extracted_text: true }
+        });
+
+        if (!document || !document.extracted_text) {
+             return NextResponse.json<ApiResponse>({ success: false, error: 'Document text not found.' }, { status: 404 });
         }
-        console.error(`[API /documents/${params.documentId}/insights] Error:`, error);
-        return NextResponse.json<ApiResponse>(
-          { success: false, error: 'Failed to fetch insights.' },
-          { status: 500 }
-        );
+
+        // 2. Call AI Service
+        const insights = await callAIToGenerateInsights(document.extracted_text);
+
+        // 3. Save to DB
+        await prisma.documents.update({
+            where: { id: documentId },
+            data: { ai_insights: insights as Prisma.JsonObject }
+        });
+
+        return NextResponse.json<ApiResponse<AIDocumentInsights>>({
+            success: true,
+            data: insights
+        });
+
+    } catch (error: any) {
+        if (error instanceof Response) return error;
+        console.error(`[API POST Insights] Error:`, error);
+        return NextResponse.json<ApiResponse>({ success: false, error: error.message || 'Failed to generate insights.' }, { status: 500 });
     }
 }

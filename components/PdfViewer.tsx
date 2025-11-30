@@ -3,22 +3,20 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Type } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
+  // Use a specific version matching package.json to avoid version mismatch errors
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
-const CHUNK_SIZE = 30; // Number of slides to show at once
-
 interface PdfViewerProps {
   url: string;
-  onTextSelect?: (e: React.MouseEvent) => void;
+  onTextSelect: (e: React.MouseEvent) => void;
   className?: string;
 }
 
@@ -26,246 +24,226 @@ interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy;
   pageNum: number;
   width: number;
-  scale: number;
-  enableText: boolean;
-  onTextSelect?: (e: React.MouseEvent) => void;
+  onTextSelect: (e: React.MouseEvent) => void;
 }
 
-// Individual Page Component (Lazy Loaded for Safety)
-function PdfPage({ doc, pageNum, width, scale, enableText, onTextSelect }: PdfPageProps) {
+function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = React.useState(false);
-  const [pageHeight, setPageHeight] = React.useState<number>(width * 1.41); // Default A4 ratio
+  // Ref to track the active render task for cancellation
+  const renderTaskRef = React.useRef<any>(null);
+  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
-  // 1. Lazy Load: Only render when scrolled into view
+  // 1. Load Page Data
   React.useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect(); // Keep it rendered once loaded
-        }
-      },
-      { rootMargin: '50% 0px' } // Pre-load when within 50% of viewport
-    );
+    let isMounted = true;
+    doc.getPage(pageNum).then((p) => {
+      if (isMounted) setPage(p);
+    }).catch((err) => {
+        console.error(`Error loading page ${pageNum}:`, err);
+    });
+    return () => { isMounted = false; };
+  }, [doc, pageNum]);
 
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  // 2. Render Content
+  // 2. Render Page Content
   React.useEffect(() => {
-    if (!isVisible || !canvasRef.current || !doc) return;
+    // Safety checks
+    if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
 
-    let renderTask: any = null;
+    // CANCEL previous render if it's still running (Crucial for preventing crashes)
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
+
+    // Calculate dimensions
+    const unscaledViewport = page.getViewport({ scale: 1 });
+    const scale = width / unscaledViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    // Set canvas dimensions
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
 
     const render = async () => {
       try {
-        const page = await doc.getPage(pageNum);
+        // A. Render Graphics (Canvas)
+        const renderContext = { canvasContext: context, viewport };
+        renderTaskRef.current = page.render(renderContext);
+        await renderTaskRef.current.promise;
         
-        // Calculate Viewport
-        const unscaledViewport = page.getViewport({ scale: 1 });
-        const fitScale = width / unscaledViewport.width;
-        const finalScale = fitScale * scale;
-        const viewport = page.getViewport({ scale: finalScale });
+        // B. Render Text Layer (Selectable text)
+        const textContent = await page.getTextContent();
+        
+        // Ensure component is still mounted before DOM updates
+        if (textLayerRef.current) {
+           textLayerRef.current.style.height = `${viewport.height}px`;
+           textLayerRef.current.style.width = `${viewport.width}px`;
+           textLayerRef.current.innerHTML = '';
+           // Custom highlight color
+           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-        setPageHeight(viewport.height);
-
-        const canvas = canvasRef.current;
-        const context = canvas?.getContext('2d');
-        if (!canvas || !context) return;
-
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        // Render Canvas
-        renderTask = page.render({ canvasContext: context, viewport });
-        await renderTask.promise;
-
-        // Render Text (Optional)
-        if (enableText && textLayerRef.current) {
-          textLayerRef.current.innerHTML = '';
-          textLayerRef.current.style.height = `${viewport.height}px`;
-          textLayerRef.current.style.width = `${viewport.width}px`;
-          textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
-
-          const textContent = await page.getTextContent();
-          pdfjs.renderTextLayer({
+           const textTask = pdfjs.renderTextLayer({
             textContentSource: textContent,
             container: textLayerRef.current,
             viewport: viewport,
             textDivs: [],
-          });
+           });
+           
+           await textTask.promise;
         }
       } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') console.error(err);
+        // Ignore "RenderingCancelled" errors (expected when resizing/scrolling fast)
+        if (err.name !== 'RenderingCancelledException') {
+            console.error("PDF Page Render Error:", err);
+        }
       }
     };
 
     render();
-    return () => { if (renderTask) renderTask.cancel(); };
-  }, [doc, pageNum, width, scale, isVisible, enableText]);
 
+    // Cleanup: Cancel render on unmount or re-render
+    return () => {
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+    };
+  }, [page, width]);
+
+  // Loading skeleton for individual page
+  if (!page) {
+    return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
+  }
+
+  // Calculate aspect ratio to reserve height and prevent layout shift
+  const aspectRatio = page.view[3] / page.view[2];
+  
   return (
-    <div 
-      ref={containerRef}
-      className="relative shadow-md bg-white mb-6 transition-all"
-      style={{ width, minHeight: pageHeight }}
+    <div
+      className="relative shadow-md mb-4 bg-white"
+      style={{ width: width, minHeight: width * aspectRatio }}
     >
-      {isVisible ? (
-        <>
-          <canvas ref={canvasRef} className="block" />
-          {enableText && (
-            <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
-          )}
-        </>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-100">
-          <span className="text-xs text-muted-foreground">Loading Page {pageNum}...</span>
-        </div>
-      )}
+      <canvas ref={canvasRef} className="block" />
+      <div 
+        ref={textLayerRef} 
+        className="textLayer absolute inset-0 mix-blend-multiply" 
+        onMouseUpCapture={onTextSelect} 
+      />
     </div>
   );
 }
 
 export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
-  const [chunkIndex, setChunkIndex] = React.useState(0); // 0 = pages 1-30, 1 = pages 31-60
-  const [scale, setScale] = React.useState(1.0);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [enableText, setEnableText] = React.useState(false);
   
+  // Responsive container width
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
-  // Measure Container
+  // 1. Handle Window Resize
   React.useEffect(() => {
     if (!containerRef.current) return;
-    const updateWidth = () => setContainerWidth(containerRef.current!.clientWidth - 48); // minus padding
+
+    const updateWidth = () => {
+      if (containerRef.current) {
+        // Subtract padding (e.g., 32px for py-8 px-4 + scrollbar safety)
+        setContainerWidth(containerRef.current.clientWidth - 48);
+      }
+    };
+
+    // Initial measure
     updateWidth();
+
     const observer = new ResizeObserver(updateWidth);
     observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [isLoading]);
 
-  // Load PDF
+    return () => observer.disconnect();
+  }, []); // Run once on mount
+
+  // 2. Load PDF Document
   React.useEffect(() => {
+    let isMounted = true;
+
     const loadPdf = async () => {
+      if (!url) return;
       setIsLoading(true);
+      setError(null);
+      
       try {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
-        setPdfDoc(doc);
-        setChunkIndex(0);
+        if (isMounted) {
+            setPdfDoc(doc);
+            setIsLoading(false);
+        }
       } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setIsLoading(false);
+        console.error("PDF Load Error:", e);
+        if (isMounted) {
+            setError(e.message || "Failed to load PDF");
+            setIsLoading(false);
+        }
       }
     };
-    if (url) loadPdf();
+
+    loadPdf();
+    
+    return () => { isMounted = false; };
   }, [url]);
 
-  if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
-  if (error) return <div className="p-4 text-red-500 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>;
+  // --- Loading State ---
+  if (isLoading) {
+    return (
+        <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-2 text-sm text-muted-foreground">Loading Document...</span>
+        </div>
+    );
+  }
+
+  // --- Error State ---
+  if (error) {
+    return (
+        <div className="p-8 flex flex-col items-center justify-center h-full text-destructive">
+            <Alert variant="destructive" className="max-w-md">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>
+                    Unable to load this document. It might be corrupted or password protected.
+                    <br/>
+                    <span className="text-xs opacity-70 mt-2 block">{error}</span>
+                </AlertDescription>
+            </Alert>
+        </div>
+    );
+  }
 
   const numPages = pdfDoc ? pdfDoc.numPages : 0;
-  const startPage = chunkIndex * CHUNK_SIZE + 1;
-  const endPage = Math.min((chunkIndex + 1) * CHUNK_SIZE, numPages);
-  
-  // Create array of page numbers for current chunk
-  const pages = Array.from(
-    { length: endPage - startPage + 1 }, 
-    (_, i) => startPage + i
-  );
+  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-zinc-900 border-b shrink-0 flex-wrap gap-2">
-        
-        {/* Pagination Controls */}
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setChunkIndex(prev => Math.max(0, prev - 1))}
-            disabled={chunkIndex === 0}
-            className="gap-1"
-          >
-            <ChevronLeft className="h-4 w-4" /> Prev {CHUNK_SIZE}
-          </Button>
-          
-          <span className="text-xs font-medium whitespace-nowrap min-w-[100px] text-center">
-            Pages {startPage} - {endPage} of {numPages}
-          </span>
-
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setChunkIndex(prev => prev + 1)}
-            disabled={endPage >= numPages}
-            className="gap-1"
-          >
-            Next {CHUNK_SIZE} <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* View Controls */}
-        <div className="flex items-center gap-2">
-           <Button 
-                size="sm" 
-                variant={enableText ? "secondary" : "ghost"} 
-                onClick={() => setEnableText(!enableText)}
-                className="h-8 text-xs gap-2"
-                title="Enable text selection (Uses more memory)"
-            >
-                <Type className="h-3 w-3" /> {enableText ? "Text On" : "Text Off"}
-            </Button>
-            <div className="h-4 w-px bg-border mx-1" />
-            <Button variant="ghost" size="icon" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}><ZoomOut className="h-4 w-4" /></Button>
-            <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(scale * 100)}%</span>
-            <Button variant="ghost" size="icon" onClick={() => setScale(s => Math.min(2.0, s + 0.25))}><ZoomIn className="h-4 w-4" /></Button>
-        </div>
-      </div>
-
-      {/* Scrollable Content Area */}
-      <ScrollArea className="flex-1 w-full" ref={containerRef}>
-        <div className="flex flex-col items-center py-8 px-4 min-h-full">
-            {containerWidth > 0 && pages.map((pageNum) => (
+        {/* We use a ref on this ScrollArea to measure available width */}
+        <ScrollArea className="flex-1 w-full" ref={containerRef}>
+            <div className="flex flex-col items-center py-8 px-4 min-h-full">
+                {/* Only render pages once we know the width to avoid flashes */}
+                {containerWidth > 0 && pages.map((pageNum) => (
                 <PdfPage 
-                    key={pageNum}
-                    doc={pdfDoc!}
-                    pageNum={pageNum}
-                    width={containerWidth}
-                    scale={scale}
-                    enableText={enableText}
-                    onTextSelect={onTextSelect}
+                    key={pageNum} 
+                    doc={pdfDoc!} 
+                    pageNum={pageNum} 
+                    width={containerWidth} 
+                    onTextSelect={onTextSelect} 
                 />
-            ))}
-            
-            {/* Bottom Navigation for convenience */}
-            <div className="flex items-center gap-4 py-8 opacity-50 hover:opacity-100 transition-opacity">
-                 <Button 
-                    variant="ghost" 
-                    onClick={() => setChunkIndex(prev => Math.max(0, prev - 1))}
-                    disabled={chunkIndex === 0}
-                 >
-                    Previous Set
-                 </Button>
-                 <Button 
-                    variant="ghost" 
-                    onClick={() => setChunkIndex(prev => prev + 1)}
-                    disabled={endPage >= numPages}
-                 >
-                    Next Set
-                 </Button>
+                ))}
             </div>
-        </div>
-      </ScrollArea>
+        </ScrollArea>
     </div>
   );
 }

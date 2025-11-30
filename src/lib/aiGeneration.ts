@@ -1,14 +1,16 @@
 // src/lib/aiGeneration.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 
+// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
 
-// Keep the high limit (approx 100 pages) to support 5MB files
-const MAX_INPUT_LENGTH = 500000; 
+// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
+// The Flash model can handle up to 1M tokens, so this is safe.
+const MAX_INPUT_LENGTH = 100000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -16,14 +18,19 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+/**
+ * Strips HTML tags and checks if the remaining text is meaningful.
+ */
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
+    // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
 
 // ---------------------------------------------------------------------------
-// 1. QUIZ GENERATION (Standard Prompt)
+// 1. QUIZ GENERATION
 // ---------------------------------------------------------------------------
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -45,7 +52,6 @@ function buildQuizPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  // --- REVERTED TO ORIGINAL SYSTEM PROMPT ---
   const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
   const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
@@ -57,7 +63,7 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": "string", 
+  "title": "string", // a concise quiz title based on the content
   "questions": [
     {
       "question_text": "string",
@@ -73,17 +79,17 @@ Return ONLY valid JSON with this exact shape:
       "explanation": "string"
     },
     {
-      "question_text": "string", 
+      "question_text": "string", // use "____" for the blank(s)
       "question_type": "FILL_IN_THE_BLANK",
-      "options": ["string"], 
-      "correct_answer": "N/A", 
+      "options": ["string"], // An array of one or more acceptable answers
+      "correct_answer": "N/A", // Not used, options array is used
       "explanation": "string"
     },
     {
       "question_text": "Match the following items:",
       "question_type": "MATCHING",
       "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
-      "options": ["Answer 1", "Answer 2", "Answer 3"],
+      "options": ["Answer 1", "Answer 2", "Answer 3"], // Corresponding answers in order
       "correct_answer": "N/A",
       "explanation": "Explanation of how the items are related."
     }
@@ -103,11 +109,12 @@ export async function callAIToGenerateQuiz(
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
     generationConfig: {
-      temperature: 0.4, // Reverted to standard temperature
+      temperature: 0.4,
       responseMimeType: 'application/json',
     },
   });
 
+  // Safety truncate
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
 
@@ -132,7 +139,7 @@ export async function callAIToGenerateQuiz(
   }
 
   if (!parsed || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    throw new Error('Gemini returned invalid or empty data structure.');
+    throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
   }
 
   const sanitizedQuestions = parsed.questions.map((q: any) => ({
@@ -162,19 +169,20 @@ You MUST format the notes as clean, semantic HTML.
 - Use <p> for paragraphs.
 - Do NOT use any Markdown (like ##, **, or -).
 - Do NOT use <html>, <body>, or <head> tags.
+- The HTML content must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty.
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
 
 {
   "notes": [
     {
       "title": "Concise Title Reflecting Main Topic",
-      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p>..."
+      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
     }
   ]
 }`;
@@ -212,10 +220,21 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0 || !parsed.notes[0].title || typeof parsed.notes[0].content !== 'string') {
+  // Validations
+  if (
+    !parsed.notes || 
+    !Array.isArray(parsed.notes) || 
+    parsed.notes.length === 0 || 
+    !parsed.notes[0].title ||
+    typeof parsed.notes[0].content !== 'string'
+  ) {
+    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
     throw new Error("AI failed to return a valid note structure with title and content.");
   }
+
+  // Check for meaningful content
   if (!isContentMeaningful(parsed.notes[0].content)) {
+     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
      throw new Error("AI failed to generate meaningful content for this note.");
   }
   
@@ -228,6 +247,10 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
 
 function buildFlashcardPrompt(text: string, numCards: number): string {
   return `Based strictly on the following text content, generate exactly ${numCards} flashcards. Focus on **key terms and their definitions**, **important concepts**, and **core principles** mentioned in the text.
+
+For each flashcard:
+- 'front_content' should be a term, concept, or question.
+- 'back_content' should be its definition, explanation, or answer, derived directly from the text.
 
 Text Content:
 """
@@ -278,4 +301,63 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
     throw new Error("AI failed to return valid flashcards.");
   }
   return parsed.flashcards;
+}
+
+// ---------------------------------------------------------------------------
+// 4. DOCUMENT INSIGHTS GENERATION (SMART ANALYSIS)
+// ---------------------------------------------------------------------------
+
+function buildInsightsPrompt(text: string): string {
+  return `You are an expert academic tutor. Analyze the following document text and provide a structured summary.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "mainArguments": ["string", "string", "string"], // 3-5 bullet points summarizing the document's core message or executive summary.
+  "keyConcepts": ["string", "string", "string", "string", "string"], // 5-10 distinct important keywords or concepts found in the text.
+  "examQuestions": ["string", "string", "string"] // 3 thought-provoking practice questions based on the text (just the question text).
+}
+
+Content:
+"""
+${text}
+"""`;
+}
+
+export async function callAIToGenerateInsights(text: string) {
+  if (!API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
+
+  const model = genAI.getGenerativeModel({
+    model: AI_MODEL_NAME,
+    generationConfig: {
+      temperature: 0.3, // Lower temperature for more factual analysis
+      responseMimeType: "application/json",
+    },
+  });
+
+  const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
+  const prompt = buildInsightsPrompt(textSnippet);
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const content = response.text();
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(content);
+  } catch (e) {
+    // Attempt to clean markdown if raw text is returned
+    const cleaned = content.replace(/```json|```/g, '');
+    try {
+        parsed = JSON.parse(cleaned);
+    } catch (finalError) {
+        throw new Error("Failed to parse AI response for insights.");
+    }
+  }
+
+  // Validate structure
+  if (!Array.isArray(parsed.mainArguments) || !Array.isArray(parsed.keyConcepts)) {
+    throw new Error("AI returned invalid insights structure (missing mainArguments or keyConcepts arrays).");
+  }
+
+  return parsed;
 }
