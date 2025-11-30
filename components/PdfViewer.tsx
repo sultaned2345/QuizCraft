@@ -3,6 +3,8 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
+// Import the specific worker setup to ensure types are correct if needed,
+// but usually global assignment works in v3.
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,8 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
-  // Use a specific version matching package.json to avoid version mismatch errors
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+  // Use the minified worker from the public folder (matches package.json script)
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 }
 
 interface PdfViewerProps {
@@ -30,33 +32,19 @@ interface PdfPageProps {
 function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
-  // Ref to track the active render task for cancellation
-  const renderTaskRef = React.useRef<any>(null);
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
-  // 1. Load Page Data
   React.useEffect(() => {
     let isMounted = true;
     doc.getPage(pageNum).then((p) => {
       if (isMounted) setPage(p);
-    }).catch((err) => {
-        console.error(`Error loading page ${pageNum}:`, err);
-    });
+    }).catch(console.error);
     return () => { isMounted = false; };
   }, [doc, pageNum]);
 
-  // 2. Render Page Content
   React.useEffect(() => {
-    // Safety checks
     if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
 
-    // CANCEL previous render if it's still running (Crucial for preventing crashes)
-    if (renderTaskRef.current) {
-      renderTaskRef.current.cancel();
-      renderTaskRef.current = null;
-    }
-
-    // Calculate dimensions
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = width / unscaledViewport.width;
     const viewport = page.getViewport({ scale });
@@ -65,62 +53,49 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    // Set canvas dimensions
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
+    let renderTask: any = null;
+
     const render = async () => {
       try {
-        // A. Render Graphics (Canvas)
-        const renderContext = { canvasContext: context, viewport };
-        renderTaskRef.current = page.render(renderContext);
-        await renderTaskRef.current.promise;
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
         
-        // B. Render Text Layer (Selectable text)
         const textContent = await page.getTextContent();
-        
-        // Ensure component is still mounted before DOM updates
         if (textLayerRef.current) {
            textLayerRef.current.style.height = `${viewport.height}px`;
            textLayerRef.current.style.width = `${viewport.width}px`;
            textLayerRef.current.innerHTML = '';
-           // Custom highlight color
            textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-           const textTask = pdfjs.renderTextLayer({
+           // renderTextLayer exists in v3.11.174
+           pdfjs.renderTextLayer({
             textContentSource: textContent,
             container: textLayerRef.current,
             viewport: viewport,
             textDivs: [],
            });
-           
-           await textTask.promise;
         }
       } catch (err: any) {
-        // Ignore "RenderingCancelled" errors (expected when resizing/scrolling fast)
         if (err.name !== 'RenderingCancelledException') {
-            console.error("PDF Page Render Error:", err);
+            console.error("Error rendering PDF page:", err);
         }
       }
     };
 
     render();
 
-    // Cleanup: Cancel render on unmount or re-render
     return () => {
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
-        renderTaskRef.current = null;
+      if (renderTask) {
+        renderTask.cancel();
       }
     };
   }, [page, width]);
 
-  // Loading skeleton for individual page
-  if (!page) {
-    return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
-  }
+  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
-  // Calculate aspect ratio to reserve height and prevent layout shift
   const aspectRatio = page.view[3] / page.view[2];
   
   return (
@@ -129,11 +104,7 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
       style={{ width: width, minHeight: width * aspectRatio }}
     >
       <canvas ref={canvasRef} className="block" />
-      <div 
-        ref={textLayerRef} 
-        className="textLayer absolute inset-0 mix-blend-multiply" 
-        onMouseUpCapture={onTextSelect} 
-      />
+      <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
     </div>
   );
 }
@@ -143,61 +114,44 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Responsive container width
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
-  // 1. Handle Window Resize
   React.useEffect(() => {
     if (!containerRef.current) return;
 
     const updateWidth = () => {
       if (containerRef.current) {
-        // Subtract padding (e.g., 32px for py-8 px-4 + scrollbar safety)
         setContainerWidth(containerRef.current.clientWidth - 48);
       }
     };
 
-    // Initial measure
     updateWidth();
 
     const observer = new ResizeObserver(updateWidth);
     observer.observe(containerRef.current);
 
     return () => observer.disconnect();
-  }, []); // Run once on mount
+  }, [isLoading]);
 
-  // 2. Load PDF Document
   React.useEffect(() => {
-    let isMounted = true;
-
     const loadPdf = async () => {
-      if (!url) return;
       setIsLoading(true);
       setError(null);
-      
       try {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
-        if (isMounted) {
-            setPdfDoc(doc);
-            setIsLoading(false);
-        }
+        setPdfDoc(doc);
       } catch (e: any) {
         console.error("PDF Load Error:", e);
-        if (isMounted) {
-            setError(e.message || "Failed to load PDF");
-            setIsLoading(false);
-        }
+        setError(e.message || "Failed to load PDF");
+      } finally {
+        setIsLoading(false);
       }
     };
-
-    loadPdf();
-    
-    return () => { isMounted = false; };
+    if (url) loadPdf();
   }, [url]);
 
-  // --- Loading State ---
   if (isLoading) {
     return (
         <div className="flex h-full items-center justify-center">
@@ -207,7 +161,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     );
   }
 
-  // --- Error State ---
   if (error) {
     return (
         <div className="p-8 flex flex-col items-center justify-center h-full text-destructive">
@@ -229,10 +182,8 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        {/* We use a ref on this ScrollArea to measure available width */}
         <ScrollArea className="flex-1 w-full" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
-                {/* Only render pages once we know the width to avoid flashes */}
                 {containerWidth > 0 && pages.map((pageNum) => (
                 <PdfPage 
                     key={pageNum} 
