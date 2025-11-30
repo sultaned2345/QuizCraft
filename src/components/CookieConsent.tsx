@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import Link from 'next/link';
 
-export function CookieConsent() {
+// CHANGED: "export default function" instead of "export function"
+export default function CookieConsent() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function CookieConsent() {
       <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-sm text-muted-foreground text-center sm:text-left">
           <p>
-            We use cookies to improve your experience and analyze usage. By using our site, you agree to our{' '}
+            We use cookies to improve your experience. By using our site, you agree to our{' '}
             <Link href="/legal/privacy" className="underline underline-offset-4 hover:text-primary">
               Privacy Policy
             </Link>.

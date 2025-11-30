@@ -7,7 +7,7 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "postinstall": "prisma generate && shx cp node_modules/pdfjs-dist/build/pdf.worker.min.js public/pdf.worker.min.js"
+    "postinstall": "prisma generate && shx cp node_modules/pdfjs-dist/build/pdf.worker.mjs public/pdf.worker.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -62,7 +62,7 @@
     "nprogress": "^0.2.0",
     "openai": "^4.67.3",
     "pdf-parse-fork": "^1.2.0",
-    "pdfjs-dist": "3.11.174",
+    "pdfjs-dist": "^4.5.136",
     "react": "^18",
     "react-day-picker": "9.8.0",
     "react-dom": "^18",

@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { generateQueryEmbedding } from '@/lib/embedding';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {

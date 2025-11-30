@@ -1,16 +1,16 @@
 // src/app/layout.tsx
 import type { Metadata } from "next"
-import type { ReactNode } from "react" 
+import type { ReactNode } from "react"
 import { Inter } from "next/font/google"
 import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { Footer } from "@/components/Footer"
 import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
-import { CookieConsent } from "@/components/CookieConsent" // <-- ADDED: Import CookieConsent
+// CHANGED: Remove curly braces for default import
+import CookieConsent from "@/components/CookieConsent" 
 import "./globals.css"
 
-// Main sans-serif font
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-geist-sans",
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: ReactNode 
+  children: ReactNode
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
@@ -37,7 +37,7 @@ export default function RootLayout({
                 <Suspense fallback={null}>{children}</Suspense>
               </div>
               <Footer />
-              <CookieConsent /> {/* <-- ADDED: Cookie Banner Component */}
+              <CookieConsent />
             </UpgradeModalProvider>
           </ThemeProvider>
         </AuthProvider>

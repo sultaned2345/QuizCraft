@@ -3,8 +3,6 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
-// Import the specific worker setup to ensure types are correct if needed,
-// but usually global assignment works in v3.
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,8 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
-  // Use the minified worker from the public folder (matches package.json script)
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+  // Use a specific version matching package.json to avoid version mismatch errors
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
 interface PdfViewerProps {
@@ -25,7 +23,7 @@ interface PdfViewerProps {
 interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy;
   pageNum: number;
-  width: number;
+  width: number; // Changed from scale to width
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
@@ -45,6 +43,7 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   React.useEffect(() => {
     if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
 
+    // Calculate scale based on desired width vs original viewport width
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = width / unscaledViewport.width;
     const viewport = page.getViewport({ scale });
@@ -63,14 +62,15 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         
+        // Render text layer
         const textContent = await page.getTextContent();
         if (textLayerRef.current) {
            textLayerRef.current.style.height = `${viewport.height}px`;
            textLayerRef.current.style.width = `${viewport.width}px`;
            textLayerRef.current.innerHTML = '';
+           // CSS custom property for text selection color if needed
            textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-           // renderTextLayer exists in v3.11.174
            pdfjs.renderTextLayer({
             textContentSource: textContent,
             container: textLayerRef.current,
@@ -96,6 +96,7 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
 
   if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
+  // Use calculated height for placeholder to prevent layout shift
   const aspectRatio = page.view[3] / page.view[2];
   
   return (
@@ -114,18 +115,22 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
+  // Responsive width state
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
+  // 1. Handle Window Resize
   React.useEffect(() => {
     if (!containerRef.current) return;
 
     const updateWidth = () => {
       if (containerRef.current) {
+        // Subtract padding (e.g., 32px for py-8 px-4)
         setContainerWidth(containerRef.current.clientWidth - 48);
       }
     };
 
+    // Initial measure
     updateWidth();
 
     const observer = new ResizeObserver(updateWidth);
@@ -134,6 +139,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     return () => observer.disconnect();
   }, [isLoading]);
 
+  // 2. Load PDF Document
   React.useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true);
@@ -182,6 +188,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
+        {/* We use a ref on this div to measure available width */}
         <ScrollArea className="flex-1 w-full" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
                 {containerWidth > 0 && pages.map((pageNum) => (
