@@ -10,7 +10,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
-  // Use a specific version matching package.json to avoid version mismatch errors
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
@@ -23,7 +22,7 @@ interface PdfViewerProps {
 interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy;
   pageNum: number;
-  width: number; // Changed from scale to width
+  width: number;
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
@@ -62,21 +61,24 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         
-        // Render text layer
-        const textContent = await page.getTextContent();
-        if (textLayerRef.current) {
-           textLayerRef.current.style.height = `${viewport.height}px`;
-           textLayerRef.current.style.width = `${viewport.width}px`;
-           textLayerRef.current.innerHTML = '';
-           // CSS custom property for text selection color if needed
-           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+        // --- FIX: Check if renderTextLayer exists (it was removed in pdfjs-dist v4) ---
+        // If it exists (v3 or customized v4), use it. Otherwise skip text layer to prevent crash.
+        const pdfJsAny = pdfjs as any;
+        if (typeof pdfJsAny.renderTextLayer === 'function') {
+            const textContent = await page.getTextContent();
+            if (textLayerRef.current) {
+                textLayerRef.current.style.height = `${viewport.height}px`;
+                textLayerRef.current.style.width = `${viewport.width}px`;
+                textLayerRef.current.innerHTML = '';
+                textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-           pdfjs.renderTextLayer({
-            textContentSource: textContent,
-            container: textLayerRef.current,
-            viewport: viewport,
-            textDivs: [],
-           });
+                await pdfJsAny.renderTextLayer({
+                    textContentSource: textContent,
+                    container: textLayerRef.current,
+                    viewport: viewport,
+                    textDivs: [],
+                }).promise;
+            }
         }
       } catch (err: any) {
         if (err.name !== 'RenderingCancelledException') {
@@ -96,7 +98,6 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
 
   if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
-  // Use calculated height for placeholder to prevent layout shift
   const aspectRatio = page.view[3] / page.view[2];
   
   return (
@@ -115,7 +116,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Responsive width state
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
 
@@ -125,14 +125,11 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
     const updateWidth = () => {
       if (containerRef.current) {
-        // Subtract padding (e.g., 32px for py-8 px-4)
         setContainerWidth(containerRef.current.clientWidth - 48);
       }
     };
 
-    // Initial measure
     updateWidth();
-
     const observer = new ResizeObserver(updateWidth);
     observer.observe(containerRef.current);
 
@@ -174,7 +171,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>
-                    Unable to load this document. It might be corrupted or password protected.
+                    Unable to load this document.
                     <br/>
                     <span className="text-xs opacity-70 mt-2 block">{error}</span>
                 </AlertDescription>
@@ -188,7 +185,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
 
   return (
     <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        {/* We use a ref on this div to measure available width */}
         <ScrollArea className="flex-1 w-full" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
                 {containerWidth > 0 && pages.map((pageNum) => (
