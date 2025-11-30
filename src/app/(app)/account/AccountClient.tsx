@@ -1,11 +1,9 @@
 // src/app/(app)/account/AccountClient.tsx
-// MODIFIED FILE
-
 'use client';
 
-import { useState } from 'react'; // <-- ADD
-import { useAuth } from '@/contexts/AuthContext'; // <-- ADD
-import { useRouter } from 'next/navigation'; // <-- ADD
+import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -17,13 +15,15 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { Check, Infinity, Zap, AlertCircle, Loader2 } from 'lucide-react'; // <-- ADD Loader2
+import { Check, Infinity, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import { USAGE_LIMITS, getUserUsage } from '@/lib/usage-limits';
 import { cn } from '@/lib/utils';
-import { Switch } from '@/components/ui/switch'; // <-- ADD
-import { Label } from '@/components/ui/label'; // <-- ADD
-import { useToast } from '@/hooks/use-toast'; // <-- ADD
-import { ApiResponse } from '@/types/database'; // <-- ADD
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { ApiResponse } from '@/types/database';
+// --- NEW IMPORT ---
+import { DeleteAccountSection } from '@/components/DeleteAccountSection';
 
 // Get the return type from our helper function
 type UsageData = Awaited<ReturnType<typeof getUserUsage>>;
@@ -32,7 +32,7 @@ interface AccountClientProps {
   initialData: UsageData;
 }
 
-// Helper component (unchanged)
+// Helper component
 function UsageBar({
   title,
   usage,
@@ -79,16 +79,15 @@ function UsageBar({
 // Main client component for rendering the UI
 export function AccountClient({ initialData }: AccountClientProps) {
   const { openModal } = useUpgradeModal();
-  const { session } = useAuth(); // <-- ADD
-  const { toast } = useToast(); // <-- ADD
-  const router = useRouter(); // <-- ADD
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
 
-  // --- ADDED STATE ---
+  // --- STATE ---
   const [plan, setPlan] = useState(initialData.plan);
   const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
   const { ...usageStats } = initialData;
-  const isPro = plan === 'pro'; // <-- MODIFIED: Use state
-  // ---
+  const isPro = plan === 'pro'; 
 
   const proFeatures = [
     'Unlimited Document Uploads',
@@ -99,7 +98,7 @@ export function AccountClient({ initialData }: AccountClientProps) {
     'AI Essay Grader Access',
   ];
 
-  // --- ADDED HANDLER ---
+  // --- PLAN TOGGLE HANDLER ---
   const handlePlanChange = async (isChecked: boolean) => {
     const newPlan = isChecked ? 'pro' : 'free';
     setIsUpdatingPlan(true);
@@ -128,14 +127,13 @@ export function AccountClient({ initialData }: AccountClientProps) {
       setIsUpdatingPlan(false);
     }
   };
-  // ---
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <h1 className="text-3xl font-bold">Usage & Plan</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Usage Card (unchanged) */}
+        {/* Usage Card */}
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Current Usage</CardTitle>
@@ -159,20 +157,14 @@ export function AccountClient({ initialData }: AccountClientProps) {
           </CardContent>
         </Card>
 
-        {/* Plan Card (modified to use 'isPro' from state) */}
+        {/* Plan Card */}
         {isPro ? (
           // --- PRO CARD ---
-          <Card
-            className="flex flex-col border-primary bg-primary/5"
-          >
+          <Card className="flex flex-col border-primary bg-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Your Plan
-                <span
-                  className="text-lg font-bold text-primary"
-                >
-                  Pro
-                </span>
+                <span className="text-lg font-bold text-primary">Pro</span>
               </CardTitle>
               <CardDescription>
                 You have unlimited access to all features.
@@ -180,37 +172,25 @@ export function AccountClient({ initialData }: AccountClientProps) {
             </CardHeader>
             <CardContent className="flex-1 space-y-4">
               {proFeatures.map((feature) => (
-                <div
-                  key={feature}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <Check
-                    className="h-4 w-4 text-green-500"
-                  />
+                <div key={feature} className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-green-500" />
                   <span className="text-foreground">{feature}</span>
                 </div>
               ))}
             </CardContent>
             <CardFooter>
               <Button variant="outline" className="w-full" disabled>
-                {/* This would link to Stripe billing portal */}
                 Manage Subscription
               </Button>
             </CardFooter>
           </Card>
         ) : (
           // --- FREE CARD ---
-          <Card
-            className="flex flex-col"
-          >
+          <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Your Plan
-                <span
-                  className="text-lg font-bold text-foreground"
-                >
-                  Free
-                </span>
+                <span className="text-lg font-bold text-foreground">Free</span>
               </CardTitle>
               <CardDescription>
                 Upgrade to Pro for unlimited access.
@@ -218,13 +198,8 @@ export function AccountClient({ initialData }: AccountClientProps) {
             </CardHeader>
             <CardContent className="flex-1 space-y-4">
               {proFeatures.map((feature) => (
-                <div
-                  key={feature}
-                  className="flex items-center gap-2 text-sm text-muted-foreground"
-                >
-                  <Check
-                    className="h-4 w-4 text-muted-foreground/50"
-                  />
+                <div key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Check className="h-4 w-4 text-muted-foreground/50" />
                   <span>{feature}</span>
                 </div>
               ))}
@@ -239,7 +214,7 @@ export function AccountClient({ initialData }: AccountClientProps) {
         )}
       </div>
 
-      {/* --- ADDED TOGGLER CARD --- */}
+      {/* Developer Plan Toggler */}
       <Card>
         <CardHeader>
           <CardTitle>Developer: Plan Toggler</CardTitle>
@@ -266,7 +241,9 @@ export function AccountClient({ initialData }: AccountClientProps) {
           </p>
         </CardContent>
       </Card>
-      {/* --- END ADDED CARD --- */}
+
+      {/* --- ADDED: Delete Account Section (Danger Zone) --- */}
+      <DeleteAccountSection />
     </div>
   );
 }

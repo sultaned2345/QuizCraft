@@ -1,14 +1,14 @@
 // src/app/layout.tsx
 import type { Metadata } from "next"
-import type { ReactNode } from "react" // <-- THIS IS THE FIX
+import type { ReactNode } from "react" 
 import { Inter } from "next/font/google"
 import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
-import "./globals.css"
 import { Footer } from "@/components/Footer"
-// --- 1. IMPORT FROM THE CORRECTED PATH ---
 import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
+import { CookieConsent } from "@/components/CookieConsent" // <-- ADDED: Import CookieConsent
+import "./globals.css"
 
 // Main sans-serif font
 const inter = Inter({
@@ -25,21 +25,20 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: ReactNode // <-- THIS IS THE FIX
+  children: ReactNode 
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="antialiased flex flex-col min-h-screen">
         <AuthProvider>
           <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
-            {/* 2. WRAP with Provider */}
             <UpgradeModalProvider>
               <div className="flex-1 flex flex-col">
                 <Suspense fallback={null}>{children}</Suspense>
               </div>
               <Footer />
+              <CookieConsent /> {/* <-- ADDED: Cookie Banner Component */}
             </UpgradeModalProvider>
-            {/* 3. END WRAP */}
           </ThemeProvider>
         </AuthProvider>
       </body>

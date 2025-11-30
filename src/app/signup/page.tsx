@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
 import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -13,7 +14,10 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // NEW: State for legal consent
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -25,16 +29,16 @@ export default function SignupPage() {
     setError('');
     setMessage('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
+    // VALIDATION: Check for consent
     if (!agreedToTerms) {
       setError('You must agree to the Terms of Service and Privacy Policy to create an account.');
       return;
     }
 
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -105,20 +109,26 @@ export default function SignupPage() {
               />
             </div>
 
-            <div className="flex items-start space-x-2 py-2">
-              <input
-                type="checkbox"
-                id="terms"
+            {/* NEW: Legal Consent Checkbox */}
+            <div className="flex items-start space-x-2 my-2">
+              <Checkbox 
+                id="terms" 
                 checked={agreedToTerms}
-                onChange={(e) => setAgreedToTerms(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
               />
               <div className="grid gap-1.5 leading-none">
                 <label
                   htmlFor="terms"
-                  className="text-sm font-medium leading-tight text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  I agree to the <Link href="/terms" className="underline hover:text-primary" target="_blank">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-primary" target="_blank">Privacy Policy</Link>.
+                  I agree to the{" "}
+                  <Link href="/legal/terms" target="_blank" className="text-primary hover:underline">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/legal/privacy" target="_blank" className="text-primary hover:underline">
+                    Privacy Policy
+                  </Link>
                 </label>
               </div>
             </div>

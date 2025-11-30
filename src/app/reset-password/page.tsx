@@ -3,13 +3,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient'; // We need the client to update the password
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient'; 
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -17,26 +16,32 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [isSessionCheckComplete, setIsSessionCheckComplete] = useState(false);
   
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  // This page handles the *actual* password update after the user clicks the email link.
-  // The token is in the URL fragment, not search params.
-  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // Supabase password reset link puts the token in the URL hash
-    // We need to parse it on the client
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.substring(1)); // remove '#'
-    const accessToken = params.get('access_token');
-    
-    if (accessToken) {
-      setToken(accessToken);
-    } else {
-      setError("Invalid or missing reset token. Please request a new link.");
-    }
+    // Determine if we have a valid session from the recovery link
+    const checkSession = async () => {
+      // 1. Check if session already exists (e.g. Implicit flow handled by supabase-js)
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setIsSessionCheckComplete(true);
+      } else {
+        // 2. If not, listen for the recovery event (PKCE flow or delayed processing)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'PASSWORD_RECOVERY' || session) {
+            setIsSessionCheckComplete(true);
+          }
+        });
+        
+        // Cleanup subscription on unmount
+        return () => subscription.unsubscribe();
+      }
+    };
+
+    checkSession();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,14 +53,10 @@ export default function ResetPasswordPage() {
       setError('Passwords do not match.');
       return;
     }
-    if (!token) {
-      setError('No reset token found. Please use the link from your email.');
-      return;
-    }
     
     setLoading(true);
 
-    // Use the Supabase client to update the user's password
+    // With the recovery session active, we can simply update the user
     const { error } = await supabase.auth.updateUser({ password: password });
 
     if (error) {
@@ -63,7 +64,8 @@ export default function ResetPasswordPage() {
     } else {
       setMessage('Password updated successfully! Redirecting to login...');
       setTimeout(() => {
-        router.push('/login');
+        // Sign out to force fresh login with new password, or just redirect
+        router.push('/login'); 
       }, 2000);
     }
     
@@ -123,7 +125,7 @@ export default function ResetPasswordPage() {
 
             <Button
               type="submit"
-              disabled={loading || message !== '' || !token}
+              disabled={loading || message !== ''}
               className="w-full"
             >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

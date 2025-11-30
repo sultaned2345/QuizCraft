@@ -3,50 +3,44 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
+import Link from 'next/link';
 
-export function CookieBanner() {
-  const [showBanner, setShowBanner] = useState(false);
+export function CookieConsent() {
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Check if user has already made a choice
-    const consent = localStorage.getItem('cookie-consent');
+    // Check if user has already consented
+    const consent = localStorage.getItem('quizcraft-cookie-consent');
     if (!consent) {
-      setShowBanner(true);
+      setIsVisible(true);
     }
   }, []);
 
   const acceptCookies = () => {
-    localStorage.setItem('cookie-consent', 'true');
-    setShowBanner(false);
-    // Here you would initialize Vercel Analytics if you were handling it manually
-    // window.va = ... 
+    localStorage.setItem('quizcraft-cookie-consent', 'true');
+    setIsVisible(false);
   };
 
-  const declineCookies = () => {
-    localStorage.setItem('cookie-consent', 'false');
-    setShowBanner(false);
-  };
-
-  if (!showBanner) return null;
+  if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-md">
-      <div className="rounded-lg border bg-background p-4 shadow-lg flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            We use cookies and analytics to improve your study experience. 
-            By continuing, you agree to our <a href="/privacy" className="underline hover:text-primary">Privacy Policy</a>.
+    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur border-t shadow-lg animate-in slide-in-from-bottom-5">
+      <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-sm text-muted-foreground text-center sm:text-left">
+          <p>
+            We use cookies to improve your experience and analyze usage. By using our site, you agree to our{' '}
+            <Link href="/legal/privacy" className="underline underline-offset-4 hover:text-primary">
+              Privacy Policy
+            </Link>.
           </p>
-          <button onClick={declineCookies} className="text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
         </div>
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={declineCookies}>
-            Decline
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsVisible(false)}>
+            <X className="w-4 h-4 mr-2" />
+            Close
           </Button>
           <Button size="sm" onClick={acceptCookies}>
-            Accept
+            Accept Cookies
           </Button>
         </div>
       </div>
