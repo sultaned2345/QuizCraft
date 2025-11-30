@@ -17,8 +17,7 @@ import {
   BrainCircuit,
   BookOpen,
   ListChecks,
-  AlertCircle,
-  Wand2 // Imported for the Generate button
+  EyeOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
@@ -36,6 +35,7 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
 import { PdfViewer } from '@/components/PdfViewer';
+import { FilePreviewFallback } from '@/components/FilePreviewFallback';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { Badge } from '@/components/ui/badge';
@@ -153,9 +153,7 @@ export default function DocumentViewPage() {
   const [isPopQuizOpen, setIsPopQuizOpen] = useState(false);
   const [popQuizQuestions, setPopQuizQuestions] = useState<Question[]>([]);
   const [isPopQuizLoading, setIsPopQuizLoading] = useState(false);
-  // State for on-demand generation
-  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
-  
+  const [showRawText, setShowRawText] = useState(false); // Toggle for Fallback vs Text
   const [menu, setMenu] = useState<MenuState>({
     visible: false,
     x: 0,
@@ -196,8 +194,7 @@ export default function DocumentViewPage() {
     swrOptions,
   );
 
-  // Added mutate to the return of useSWR to allow manual refresh
-  const { data: insightsData, isLoading: isInsightsLoading, mutate: mutateInsights } = useSWR<ApiResponse<AIDocumentInsights>>(
+  const { data: insightsData } = useSWR<ApiResponse<AIDocumentInsights>>(
     session ? `/api/documents/${documentId}/insights` : null,
     (url) => fetcher(url, session!.access_token),
     swrOptions,
@@ -206,8 +203,9 @@ export default function DocumentViewPage() {
   const isPdf =
     contentData?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
 
+  // Modified: Fetch URL for all file types to allow download, not just PDFs
   const { data: urlData } = useSWR<ApiResponse<{ signedUrl: string }>>(
-    session && isPdf ? `/api/documents/${documentId}/url` : null,
+    session ? `/api/documents/${documentId}/url` : null,
     (url) => fetcher(url, session!.access_token),
     swrOptions,
   );
@@ -239,35 +237,6 @@ export default function DocumentViewPage() {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally {
       setIsPopQuizLoading(false);
-    }
-  };
-
-  const handleGenerateInsights = async () => {
-    if (!session || isGeneratingInsights) return;
-    setIsGeneratingInsights(true);
-    toast({ title: 'Analyzing Document...', description: 'This may take a few seconds.' });
-    
-    try {
-        const res = await fetch(`/api/documents/${documentId}/insights`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session.access_token}`,
-            }
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-            // Re-fetch the data to update UI
-            await mutateInsights();
-            toast({ title: 'Analysis Complete', description: 'Insights have been generated.' });
-        } else {
-            throw new Error(data.error || 'Failed to generate insights');
-        }
-    } catch (e: any) {
-        toast({ title: 'Generation Failed', description: e.message, variant: 'destructive' });
-    } finally {
-        setIsGeneratingInsights(false);
     }
   };
 
@@ -314,15 +283,6 @@ export default function DocumentViewPage() {
       </div>
     );
   }
-
-  // Safe access to insights
-  const insights = insightsData?.data;
-  // Only show skeleton if explicitly loading AND we have no data
-  const showInsightsSkeleton = isInsightsLoading && !insights;
-  const hasInsights = !!insights && (
-    (insights.mainArguments && insights.mainArguments.length > 0) ||
-    (insights.keyConcepts && insights.keyConcepts.length > 0)
-  );
 
   return (
     <>
@@ -377,8 +337,14 @@ export default function DocumentViewPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <Download className="w-4 h-4 mr-2" /> Export PDF
+                <DropdownMenuItem onClick={() => {
+                   if (urlData?.data?.signedUrl) {
+                     window.open(urlData.data.signedUrl, '_blank');
+                   } else {
+                     toast({ title: "Download unavailable", description: "Could not generate download link." });
+                   }
+                }}>
+                  <Download className="w-4 h-4 mr-2" /> Download File
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Share2 className="w-4 h-4 mr-2" /> Share Document
@@ -422,8 +388,9 @@ export default function DocumentViewPage() {
                   value="document"
                   className="h-full m-0 border-0 data-[state=inactive]:hidden"
                 >
-                  {urlData?.data?.signedUrl ? (
-                    // PDF Viewer
+                  {/* Updated Render Logic: PDF -> Viewer; Other -> Fallback -> Text */}
+                  {urlData?.data?.signedUrl && isPdf ? (
+                    // Valid PDF Viewer
                     <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
                       <div className="h-full w-full overflow-hidden">
                         <PdfViewer
@@ -432,9 +399,19 @@ export default function DocumentViewPage() {
                         />
                       </div>
                     </div>
-                  ) : (
-                    // Markdown Viewer
+                  ) : showRawText ? (
+                    // Text View (Toggled from Fallback)
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
+                       <div className="sticky top-0 z-10 p-2 flex justify-center bg-transparent pointer-events-none">
+                            <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="shadow-md pointer-events-auto opacity-90 hover:opacity-100"
+                                onClick={() => setShowRawText(false)}
+                            >
+                                <EyeOff className="w-3 h-3 mr-2" /> Return to Summary
+                            </Button>
+                        </div>
                       <div
                         className="min-h-full py-8 px-4 flex justify-center"
                         onMouseUp={handleMouseUpCapture}
@@ -446,6 +423,13 @@ export default function DocumentViewPage() {
                         </div>
                       </div>
                     </ScrollArea>
+                  ) : (
+                    // Fallback / Metadata View
+                     <FilePreviewFallback 
+                        fileName={contentData?.data?.file_name || "Unknown File"}
+                        downloadUrl={urlData?.data?.signedUrl}
+                        onViewText={() => setShowRawText(true)}
+                    />
                   )}
                 </TabsContent>
 
@@ -465,7 +449,7 @@ export default function DocumentViewPage() {
                       </p>
                     </div>
 
-                    {showInsightsSkeleton ? (
+                    {!insightsData?.data ? (
                       /* Loading Skeleton */
                       <div className="grid gap-4">
                          <div className="h-32 w-full bg-muted/50 rounded-xl animate-pulse" />
@@ -474,105 +458,77 @@ export default function DocumentViewPage() {
                             <div className="h-24 w-full bg-muted/50 rounded-xl animate-pulse" />
                          </div>
                       </div>
-                    ) : !hasInsights ? (
-                      /* Empty State with Action Button */
-                      <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl bg-muted/50 text-center space-y-4">
-                        <div className="bg-background p-3 rounded-full shadow-sm">
-                            <AlertCircle className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <div className="max-w-sm space-y-1">
-                            <h3 className="font-semibold text-lg">No Analysis Available</h3>
-                            <p className="text-sm text-muted-foreground">
-                            This document hasn't been analyzed yet. Generate an AI summary and key concepts.
-                            </p>
-                        </div>
-                        <Button 
-                            onClick={handleGenerateInsights} 
-                            disabled={isGeneratingInsights}
-                            className="gap-2"
-                        >
-                            {isGeneratingInsights ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Wand2 className="w-4 h-4" />
-                            )}
-                            Generate Analysis
-                        </Button>
-                      </div>
                     ) : (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         
                         {/* 1. Executive Summary */}
-                        {Array.isArray(insights.mainArguments) && insights.mainArguments.length > 0 && (
-                          <Card className="border-none shadow-md bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-zinc-900">
-                            <CardHeader>
-                              <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                                <Target className="w-5 h-5" /> Executive Summary
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <ul className="space-y-3">
-                                {insights.mainArguments.map((arg: any, i: number) => (
-                                  <li key={i} className="flex gap-3 text-sm text-foreground/80">
-                                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                    <span className="leading-relaxed">{safeRender(arg)}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </CardContent>
-                          </Card>
-                        )}
+                        <Card className="border-none shadow-md bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-zinc-900">
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                              <Target className="w-5 h-5" /> Executive Summary
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="space-y-3">
+                              {(insightsData.data.mainArguments || []).map((arg, i) => (
+                                <li key={i} className="flex gap-3 text-sm text-foreground/80">
+                                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="leading-relaxed">{safeRender(arg)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
 
                         {/* 2. Key Concepts Cloud */}
-                        {Array.isArray(insights.keyConcepts) && insights.keyConcepts.length > 0 && (
-                          <div>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                              <Lightbulb className="w-5 h-5 text-yellow-500" /> Key Concepts
-                            </h3>
-                            <div className="flex flex-wrap gap-2 p-6 bg-white dark:bg-zinc-900 border rounded-xl shadow-sm">
-                              {insights.keyConcepts.map((c: any, i: number) => (
-                                <Badge
-                                  key={i}
-                                  variant="outline"
-                                  className="px-3 py-1.5 text-sm font-normal cursor-pointer hover:bg-primary hover:text-primary-foreground transition-all border-primary/20"
-                                  onClick={() => chatRef.current?.sendMessage(`Tell me more about "${safeRender(c)}" in the context of this document.`)}
-                                >
-                                  {safeRender(c)}
-                                </Badge>
-                              ))}
-                            </div>
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <Lightbulb className="w-5 h-5 text-yellow-500" /> Key Concepts
+                          </h3>
+                          <div className="flex flex-wrap gap-2 p-6 bg-white dark:bg-zinc-900 border rounded-xl shadow-sm">
+                            {(insightsData.data.keyConcepts || []).map((c, i) => (
+                              <Badge
+                                key={i}
+                                variant="outline"
+                                className="px-3 py-1.5 text-sm font-normal cursor-pointer hover:bg-primary hover:text-primary-foreground transition-all border-primary/20"
+                                onClick={() => chatRef.current?.sendMessage(`Tell me more about "${safeRender(c)}" in the context of this document.`)}
+                              >
+                                {safeRender(c)}
+                              </Badge>
+                            ))}
+                            {(!insightsData.data.keyConcepts || insightsData.data.keyConcepts.length === 0) && (
+                               <span className="text-muted-foreground text-sm">No concepts extracted.</span>
+                            )}
                           </div>
-                        )}
+                        </div>
 
                         {/* 3. Interactive Practice Questions */}
-                        {Array.isArray(insights.examQuestions) && insights.examQuestions.length > 0 && (
-                          <div>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                              <ListChecks className="w-5 h-5 text-blue-500" /> Practice Questions
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {insights.examQuestions.map((q: any, i: number) => (
-                                <div
-                                  key={i}
-                                  onClick={() => chatRef.current?.sendMessage(`I want to answer this question: "${safeRender(q)}". Please grade my answer.`)}
-                                  className="group relative p-5 rounded-xl border bg-card hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
-                                >
-                                  <div className="flex items-start justify-between gap-4">
-                                    <div className="space-y-1">
-                                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                        Question {i + 1}
-                                      </span>
-                                      <p className="text-sm font-medium leading-snug line-clamp-3 text-foreground/90">
-                                        {safeRender(q)}
-                                      </p>
-                                    </div>
-                                    <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <ListChecks className="w-5 h-5 text-blue-500" /> Practice Questions
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(insightsData.data.examQuestions || []).map((q, i) => (
+                              <div
+                                key={i}
+                                onClick={() => chatRef.current?.sendMessage(`I want to answer this question: "${safeRender(q)}". Please grade my answer.`)}
+                                className="group relative p-5 rounded-xl border bg-card hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                      Question {i + 1}
+                                    </span>
+                                    <p className="text-sm font-medium leading-snug line-clamp-3 text-foreground/90">
+                                      {safeRender(q)}
+                                    </p>
                                   </div>
+                                  <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                        )}
+                        </div>
 
                       </div>
                     )}

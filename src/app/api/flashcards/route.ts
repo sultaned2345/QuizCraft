@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
-import { validateFlashcardCreation } from '@/lib/usage-limits'; // Import validation for total card limit
+import { validateFlashcardCreation } from '@/lib/usage-limits'; 
 import { ApiResponse, CreateFlashcardData, Flashcard } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
@@ -11,19 +11,17 @@ export const runtime = 'nodejs';
 // --- POST Handler: Create a new flashcard in a specific deck ---
 export async function POST(request: NextRequest) {
     try {
-        const user = await requireAuth(request); // Ensure user is authenticated
+        const user = await requireAuth(request); 
 
         // 1. Validate total flashcard usage limit
         const limitValidation = await validateFlashcardCreation(user.id);
         if (!limitValidation.isValid) {
             console.log(`Flashcard creation blocked for user ${user.id}: ${limitValidation.error}`);
-            // --- MODIFICATION: Return standardized error ---
             return NextResponse.json<ApiResponse>({
                 success: false,
-                error: limitValidation.error, // This will be "limit_exceeded"
+                error: limitValidation.error, 
                 message: limitValidation.message
-            }, { status: 403 }); // Forbidden
-            // --- END MODIFICATION ---
+            }, { status: 403 }); 
         }
 
         // 2. Parse and validate request body
@@ -35,7 +33,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON in request body' }, { status: 400 });
         }
 
-        // Validate required fields: deck_id, front_content, back_content
+        // Validate required fields
         const validation = validateRequestBody(body, ['deck_id', 'front_content', 'back_content']);
         if (!validation.isValid || !body.deck_id || !body.front_content || !body.back_content) {
             console.error('Validation failed:', validation.error);
@@ -48,20 +46,18 @@ export async function POST(request: NextRequest) {
             const deckOwner = await prisma.flashcard_decks.findUnique({
                 where: {
                     id: body.deck_id,
-                    user_id: user.id, // Check ownership directly
+                    user_id: user.id, 
                 },
                 select: {
-                    id: true // Just need to know if it exists and belongs to the user
+                    id: true 
                 }
             });
 
             if (!deckOwner) {
-                // If the deck doesn't exist or doesn't belong to the user, deny creation
-                 console.warn(`User ${user.id} attempted to add flashcard to deck ${body.deck_id} they do not own or which does not exist.`);
+                console.warn(`User ${user.id} attempted to add flashcard to deck ${body.deck_id} they do not own or which does not exist.`);
                 return NextResponse.json<ApiResponse>({ success: false, error: 'Target deck not found or access denied.' }, { status: 404 });
             }
         } catch (deckCheckError: any) {
-             // Handle potential errors during the deck check (e.g., invalid deckId format)
              if (deckCheckError instanceof Prisma.PrismaClientKnownRequestError && deckCheckError.code === 'P2023') {
                  return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Deck ID format provided.' }, { status: 400 });
              }
@@ -69,14 +65,15 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to verify deck ownership.' }, { status: 500 });
         }
 
-
         // 4. Create the new flashcard using Prisma
         const newFlashcard = await prisma.flashcards.create({
             data: {
                 deck_id: body.deck_id,
                 front_content: body.front_content.trim(),
                 back_content: body.back_content.trim(),
-                // created_at and updated_at handled by Prisma/database
+                // --- FIX: Set review_at to NOW so it appears in study sessions immediately ---
+                review_at: new Date(),
+                // --- END FIX ---
             },
         });
 
@@ -84,17 +81,15 @@ export async function POST(request: NextRequest) {
             success: true,
             data: newFlashcard,
             message: 'Flashcard created successfully',
-        }, { status: 201 }); // 201 Created status
+        }, { status: 201 }); 
 
     } catch (error: any) {
-        // Handle errors from requireAuth, validation, Prisma, etc.
         if (error instanceof Response) {
             console.error('Authentication error caught in POST /api/flashcards:', error.status);
             return error;
         }
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
-             // Example: Handle foreign key constraint violation if deck_id somehow becomes invalid after check
-            if (error.code === 'P2003') { // Foreign key constraint failed
+            if (error.code === 'P2003') { 
                 console.error('Prisma Error creating flashcard (FK violation):', { code: error.code, meta: error.meta });
                 return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid target deck specified.' }, { status: 400 });
             }

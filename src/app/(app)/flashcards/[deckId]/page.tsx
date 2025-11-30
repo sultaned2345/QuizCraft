@@ -1,12 +1,11 @@
-// src/app/(app)/flashcards/[deckId]/page.tsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { useAuth } from '@/contexts/AuthContext';
 import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Card as Flashcard } from '@/types/database';
+import { Card as Flashcard, Deck, ApiResponse } from '@/types/database'; 
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,7 +21,7 @@ import {
   Check,
   X,
   AlertCircle,
-  BookOpen,
+  BookOpen, // Added for 'Review All' icon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
@@ -34,7 +33,7 @@ interface DeckData {
   title: string;
   created_at: string;
   updated_at: string;
-  flashcards: Flashcard[];
+  flashcards: Flashcard[]; 
   cardCount: number;
   cardLimit: number | typeof Infinity;
 }
@@ -43,14 +42,14 @@ interface StudyCard extends Flashcard {
   reviewStatus: 'correct' | 'incorrect' | 'pending';
 }
 
-type StudyMode = 'due' | 'new' | 'cram';
+type StudyMode = 'due' | 'new' | 'cram' | 'all'; // Added 'all' to type
 
 // Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; 
   }
   return newArray;
 }
@@ -65,11 +64,11 @@ export default function FlashcardStudyPage() {
 
   const router = useRouter();
   const params = useParams();
-  const searchParams = useSearchParams(); // Use the hook instead of window.location
   const deckId = params.deckId as string;
   const { session } = useAuth();
 
-  // Get mode from search params or default to 'due'
+  // FIX: Use Next.js hook for reactive search params
+  const searchParams = useSearchParams();
   const studyMode: StudyMode = (searchParams.get('mode') as StudyMode) || 'due';
 
   const { data, error, isLoading } = useSWR<DeckData>(
@@ -115,7 +114,7 @@ export default function FlashcardStudyPage() {
       )
     );
 
-    const isCramming = studyMode === 'cram';
+    const isCramming = studyMode === 'cram' || studyMode === 'all';
 
     fetch(`/api/flashcards/${currentCard.id}/review`, {
       method: 'POST',
@@ -163,10 +162,6 @@ export default function FlashcardStudyPage() {
     setIsFlipped(false);
   };
 
-  const handleSwitchToCram = () => {
-    router.push(`/flashcards/${deckId}?mode=cram`);
-  };
-
   const summary = useMemo(() => {
     if (!showSummary) return { correct: 0, incorrect: 0, total: 0, score: 0 };
     const correct = studyDeck.filter(
@@ -206,58 +201,55 @@ export default function FlashcardStudyPage() {
     );
   }
 
-  // LOGIC FIX: Check if total cards exist (cardCount) vs fetched cards (flashcards)
+  // --- FIX: Logic to handle Empty vs Caught Up ---
   if (!data || !data.flashcards || data.flashcards.length === 0) {
     const totalCards = data?.cardCount || 0;
-    const isDeckEmpty = totalCards === 0;
 
-    // Default message for a completely empty deck
-    let title = 'Empty Deck';
-    let message = 'This deck has no cards in it. Add some cards to start studying!';
-    let showCramButton = false;
-
-    if (!isDeckEmpty) {
-      // The deck has cards, but the current filter (due/new) returned 0
-      title = 'All Caught Up!';
-      showCramButton = true;
-      
-      if (studyMode === 'due') {
-        message = 'You have no cards due for review right now.';
-      } else if (studyMode === 'new') {
-        message = 'You have no new cards to learn in this deck.';
-      } else {
-         // Should rarely happen if mode is cram and cards exist
-        message = 'No cards match the current study criteria.';
-      }
+    // Case 1: Deck is truly empty (User has no cards)
+    if (totalCards === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <AlertCircle className="h-12 w-12 mb-4" />
+          <h2 className="text-2xl font-semibold">{data?.title || 'Flashcard Deck'}</h2>
+          <p className="text-center">This deck has no cards in it. Add some cards to start studying!</p>
+          <Button
+            onClick={() => router.push('/flashcards')}
+            variant="outline"
+            className="mt-4"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
+          </Button>
+        </div>
+      );
     }
 
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        {isDeckEmpty ? (
-          <AlertCircle className="h-12 w-12 mb-4" />
-        ) : (
-          <Check className="h-12 w-12 mb-4 text-green-500" />
-        )}
-        
-        <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
-        <p className="text-center mt-2 max-w-md">{message}</p>
-        
-        <div className="flex gap-4 mt-6">
-            <Button
-              onClick={() => router.push('/flashcards')}
-              variant="outline"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
-            </Button>
+    // Case 2: Cards exist, but none match the current filter (Caught Up)
+    let message = 'You are all caught up!';
+    if (studyMode === 'due') message = 'No cards due for review right now.';
+    if (studyMode === 'new') message = 'No new cards to learn at the moment.';
 
-            {showCramButton && (
-               <Button 
-                 onClick={handleSwitchToCram}
-                 variant="secondary"
-               >
-                 <BookOpen className="mr-2 h-4 w-4" /> Review All Cards
-               </Button>
-            )}
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+        <Check className="h-16 w-16 mb-4 text-green-500" />
+        <h2 className="text-2xl font-semibold mb-2">{data?.title}</h2>
+        <p className="text-center text-lg mb-6">{message}</p>
+        
+        <div className="flex flex-col w-full max-w-xs gap-3">
+          {/* Button to force review of all cards */}
+          <Button 
+            onClick={() => router.push(`/flashcards/${deckId}?mode=all`)}
+            className="w-full"
+          >
+            <BookOpen className="mr-2 h-4 w-4" /> Review All Cards
+          </Button>
+
+          <Button
+            onClick={() => router.push('/flashcards')}
+            variant="outline"
+            className="w-full"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
+          </Button>
         </div>
       </div>
     );
@@ -305,10 +297,8 @@ export default function FlashcardStudyPage() {
           </p>
         )}
 
-        {/* Progress Bar */}
         <Progress value={progress} className="w-full h-2 mb-6" />
 
-        {/* Main Content Area: Study or Summary */}
         <AnimatePresence mode="wait">
           {!showSummary ? (
             <motion.div
@@ -318,7 +308,6 @@ export default function FlashcardStudyPage() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center"
             >
-              {/* Flippable Card */}
               <div
                 className="w-full h-80 [perspective:1000px] cursor-pointer"
                 onClick={handleCardFlip}
