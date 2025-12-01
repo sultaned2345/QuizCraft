@@ -8,26 +8,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowRight, Sparkles, User, CheckCircle2, Download, Globe, Smartphone } from "lucide-react";
+import { ArrowRight, Sparkles, User, CheckCircle2, Download, Smartphone, Image as ImageIcon } from "lucide-react";
 
-// --- New Components ---
+// --- New Interactive Components ---
 import { BentoGrid } from "@/components/landing/BentoGrid";
 import { BrainToQuizSection } from "@/components/landing/BrainToQuizSection";
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 import { Typewriter } from "@/components/landing/Typewriter";
 
-// --- Aurora Background Component (Local) ---
+// --- Aurora Background (Increased Intensity) ---
 function AuroraBackground() {
   return (
-    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] animate-aurora-1 opacity-50" />
-      <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[100px] animate-aurora-2 opacity-40" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[120px] animate-aurora-3 opacity-40" />
+    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none bg-zinc-950">
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/30 blur-[120px] animate-aurora-1 opacity-80" />
+      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] rounded-full bg-blue-500/20 blur-[100px] animate-aurora-2 opacity-70" />
+      <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[50%] rounded-full bg-purple-500/25 blur-[120px] animate-aurora-3 opacity-70" />
     </div>
   );
 }
 
-// --- Sub-Components ---
 function TestimonialCard({ quote, name, title }: { quote: string; name: string; title: string }) {
   return (
     <Card className="h-full flex flex-col bg-card/40 backdrop-blur-sm border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 group hover:-translate-y-1">
@@ -49,7 +48,6 @@ function TestimonialCard({ quote, name, title }: { quote: string; name: string; 
   );
 }
 
-// --- Main Page Component ---
 export default function LandingPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -64,11 +62,9 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans relative selection:bg-primary/20">
-      {/* 1. Spotlight Effect */}
+    // Forces Dark Mode for the Landing Page to make Aurora pop
+    <div className="dark flex flex-col min-h-screen font-sans relative selection:bg-primary/20 bg-zinc-950 text-foreground">
       <SpotlightCursor />
-      
-      {/* 2. Sticky/Glass Header */}
       <LandingHeader />
 
       <main className="flex-1 relative">
@@ -84,16 +80,17 @@ export default function LandingPage() {
 
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
               Turn Notes into <br />
-              {/* 3. Typewriter Animation */}
+              {/* Typewriter Effect */}
               <Typewriter />
             </h1>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
               Stop highlighting endless PDFs. Transform your raw study materials into 
-              interactive quizzes and flashcards instantly.
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 font-bold px-1"> interactive quizzes </span> 
+              and flashcards instantly.
             </p>
 
-            {/* 4. Smart Form Pre-fill */}
+            {/* Smart Email Input */}
             <form onSubmit={handleSmartStart} className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
               <Input 
                 type="email" 
@@ -110,10 +107,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* 5. Interactive Brain-to-Quiz Animation */}
+        {/* Interactive Brain Animation */}
         <BrainToQuizSection />
 
-        {/* 6. Deep-Linked Bento Grid */}
+        {/* Deep-Linked Bento Grid */}
         <BentoGrid />
 
         {/* Testimonials */}
@@ -132,7 +129,7 @@ export default function LandingPage() {
         </section>
 
         {/* FAQ Section */}
-        <section className="py-24 bg-muted/20 backdrop-blur-sm">
+        <section className="py-24 bg-muted/10 backdrop-blur-sm border-t border-white/5">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
@@ -140,7 +137,7 @@ export default function LandingPage() {
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
                 <AccordionTrigger className="text-lg">Is QuizCraft free to use?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month. No credit card required.</AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-lg">Can I trust the AI answers?</AccordionTrigger>
@@ -150,13 +147,13 @@ export default function LandingPage() {
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Smartphone className="w-5 h-5 text-primary" /> Does it work on mobile?</AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground">Absolutely. QuizCraft is fully responsive.</AccordionContent>
               </AccordionItem>
-               <AccordionItem value="item-4">
-                 <AccordionTrigger className="text-lg flex gap-2 items-center"><Globe className="w-5 h-5 text-primary" /> What languages do you support?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Our AI understands over 50 languages. Upload in one, ask in another!</AccordionContent>
-              </AccordionItem>
                <AccordionItem value="item-5">
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Download className="w-5 h-5 text-primary" /> Can I export my quizzes?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes. Export as PDF or text file anytime.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes. Export as PDF, Text file, or CSV anytime.</AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-6">
+                 <AccordionTrigger className="text-lg flex gap-2 items-center"><ImageIcon className="w-5 h-5 text-primary" /> Can I upload handwritten notes?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground">Yes! Our OCR technology can read clear handwriting and convert it into digital quizzes.</AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>

@@ -1,15 +1,13 @@
-// src/app/signup/page.tsx
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 // --- Visual Effects ---
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
@@ -25,7 +23,6 @@ function AuroraBackground() {
   );
 }
 
-// --- Form Component ---
 function SignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +61,7 @@ function SignupForm() {
         setError(error.message || 'Failed to create an account. Please try again.');
       } else {
         if (data.session) {
-          router.push('/documents'); // Redirect immediately
+          router.push('/documents');
         } else {
           setMessage('Account created successfully! Redirecting...');
           setTimeout(() => router.push('/documents'), 2000);
@@ -145,7 +142,6 @@ function SignupForm() {
   );
 }
 
-// --- Main Page Layout ---
 export default function SignupPage() {
   return (
     <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans selection:bg-primary/20">
@@ -180,7 +176,7 @@ export default function SignupPage() {
 
       {/* RIGHT COLUMN: Brand & Aurora */}
       <div className="hidden lg:flex items-center justify-center relative overflow-hidden p-10 flex-col gap-6 text-white">
-        {/* Background Layer */}
+        {/* Background Layer with Aurora */}
         <div className="absolute inset-0 bg-zinc-900 z-0">
            <AuroraBackground />
         </div>

@@ -2,17 +2,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light Mode Theme - Clean & Bright */
 :root {
-  --background: oklch(100% 0 0); /* Pure White */
-  --foreground: oklch(29.23% 0.02 263.88); /* Dark Gray for Text */
-  --card: oklch(100% 0 0); /* Pure White */
+  --background: oklch(100% 0 0);
+  --foreground: oklch(29.23% 0.02 263.88);
+  --card: oklch(100% 0 0);
   --card-foreground: oklch(29.23% 0.02 263.88);
   --popover: oklch(100% 0 0);
   --popover-foreground: oklch(29.23% 0.02 263.88);
-  --primary: oklch(57.56% 0.16 270.38); /* A vibrant purple */
+  --primary: oklch(57.56% 0.16 270.38);
   --primary-foreground: oklch(98.83% 0.01 292.34);
-  --secondary: oklch(96.86% 0.01 263.88); /* Light Gray */
+  --secondary: oklch(96.86% 0.01 263.88);
   --secondary-foreground: oklch(29.23% 0.02 263.88);
   --muted: oklch(96.86% 0.01 263.88);
   --muted-foreground: oklch(56.88% 0.02 263.88);
@@ -26,17 +25,16 @@
   --radius: 0.75rem;
 }
 
-/* Dark Mode Theme - Inspired by YouLearn AI */
 .dark {
-  --background: oklch(15% 0 0); /* Dark Gray */
-  --foreground: oklch(98.83% 0.01 292.34); /* Light Gray for Text */
-  --card: oklch(20% 0 0); /* Slightly Lighter Gray */
+  --background: oklch(15% 0 0);
+  --foreground: oklch(98.83% 0.01 292.34);
+  --card: oklch(20% 0 0);
   --card-foreground: oklch(98.83% 0.01 292.34);
   --popover: oklch(15% 0 0);
   --popover-foreground: oklch(98.83% 0.01 292.34);
-  --primary: oklch(65.91% 0.17 270.38); /* Brighter Purple for Dark Mode */
+  --primary: oklch(65.91% 0.17 270.38);
   --primary-foreground: oklch(98.83% 0.01 292.34);
-  --secondary: oklch(25% 0 0); /* Medium Dark Gray */
+  --secondary: oklch(25% 0 0);
   --secondary-foreground: oklch(98.83% 0.01 292.34);
   --muted: oklch(25% 0 0);
   --muted-foreground: oklch(69.83% 0.01 292.34);
@@ -84,7 +82,7 @@
   }
 }
 
-/* --- ADDED: Aurora Animations --- */
+/* --- AURORA ANIMATIONS (Added) --- */
 @layer utilities {
   @keyframes aurora-1 {
     0%, 100% { transform: translate(0, 0) scale(1); }
@@ -107,11 +105,9 @@
   .animate-aurora-3 { animation: aurora-3 20s infinite alternate linear; }
 }
 
-/* --- NProgress Styles --- */
 #nprogress {
   pointer-events: none;
 }
-
 #nprogress .bar {
   background: oklch(var(--primary));
   position: fixed;
