@@ -81,16 +81,18 @@ export default function LandingPage() {
               <span>Now with AI Essay Grading</span>
             </div>
 
+            {/* UPDATED HEADLINE */}
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
-              Your Personal <br />
+              Master Any Subject in <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 animate-pulse">
-                AI Tutor
+                Minutes, Not Hours
               </span>
             </h1>
 
+            {/* UPDATED SUBHEADLINE */}
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
-              Upload any document, PDF, or note and instantly generate quizzes,
-              flashcards, and summaries.
+              Stop highlighting endless PDFs. Turn your raw notes into 
+              interactive quizzes and flashcards instantly.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -116,13 +118,13 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* NEW: Brain to Quiz Animation */}
+        {/* Brain to Quiz Animation */}
         <BrainToQuizSection />
 
-        {/* NEW: Bento Grid Features */}
+        {/* Bento Grid Features */}
         <BentoGrid />
 
-        {/* Testimonials Section */}
+        {/* Testimonials Section - UPDATED QUOTES */}
         <section className="py-24 bg-transparent">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
@@ -135,25 +137,25 @@ export default function LandingPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
               <TestimonialCard
-                quote="I uploaded a 40-page PDF on biology and had a practice quiz in 30 seconds. This is a game-changer."
+                quote="I used to spend 5 hours making flashcards for Biology. Yesterday I did it in 3 minutes. The time saved alone pays for the subscription."
                 name="Sarah J."
                 title="University Student"
               />
               <TestimonialCard
-                quote="The 'Chat with Document' feature is incredible. I can ask my textbook specific questions and get answers instantly."
+                quote="I was skeptical about AI summaries, but QuizCraft caught nuances in my History lectures that I completely missed. It’s like having a TA in my pocket."
                 name="Michael B."
                 title="Grad Student"
               />
               <TestimonialCard
-                quote="As a teacher, I use this to generate question banks from my lesson plans. Saved me hours."
+                quote="Works perfectly for technical Engineering PDFs. It handles formulas and diagrams better than any other tool I've tried."
                 name="David L."
-                title="High School Educator"
+                title="Engineering Major"
               />
             </div>
           </div>
         </section>
 
-        {/* FAQ Section */}
+        {/* FAQ Section - UPDATED ANSWERS */}
         <section className="py-24 bg-muted/20 backdrop-blur-sm">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
@@ -167,20 +169,15 @@ export default function LandingPage() {
                   Is QuizCraft free to use?
                 </AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  Yes! QuizCraft offers a generous free plan that includes access
-                  to all core features, including document uploads, quiz
-                  generation, and AI chat. We have fair usage limits on the free
-                  plan, with an option to upgrade to Pro for unlimited access.
+                  Yes! QuizCraft offers a generous free plan that includes Free forever for up to 3 documents a month.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-lg">
-                  What file types are supported?
+                  Can I trust the AI answers?
                 </AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  You can upload `.pdf`, `.docx` (Word), `.pptx` (PowerPoint),
-                  and `.txt` files. You can also paste text directly or provide a
-                  URL for our AI to summarize.
+                  We use advanced AI and always cite the page number from your document so you can verify facts instantly.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-3">
@@ -191,8 +188,7 @@ export default function LandingPage() {
                   Our AI Essay Grader analyzes your text based on standard
                   academic criteria like clarity, argumentation, and grammar. It
                   provides an estimated score (0-100) and detailed feedback with
-                  highlights, helping you understand your strengths and areas for
-                  improvement.
+                  highlights.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-4">
@@ -210,20 +206,20 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* CTA Section */}
+        {/* CTA Section - UPDATED BACKGROUND & TEXT */}
         <section className="py-32 relative overflow-hidden">
-          <div className="absolute inset-0 bg-primary/5 -z-10" />
-          <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-background to-transparent" />
-
+          {/* Solid BG with Gradient Bleed Overlay */}
+          <div className="absolute inset-0 bg-background" />
+          <div className="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent z-0" />
+          
           <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
             <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">
               Ready to upgrade your grades?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
               Join thousands of students using AI to study smarter, not harder.
-              Get started today for free.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex flex-col items-center justify-center gap-4">
               <Button
                 size="lg"
                 className="h-14 px-10 rounded-full text-xl shadow-2xl hover:scale-105 transition-transform"
@@ -233,14 +229,19 @@ export default function LandingPage() {
                   Get Started Now <ArrowRight className="ml-2 h-6 w-6" />
                 </Link>
               </Button>
+              <p className="text-sm font-medium text-muted-foreground mt-2">
+                No credit card required. Generate your first quiz in 30 seconds.
+              </p>
             </div>
-            <p className="mt-6 text-sm text-muted-foreground flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-500" /> No credit
-              card required
-              <span className="mx-2">•</span>
-              <CheckCircle2 className="w-4 h-4 text-green-500" /> Free plan
-              available
-            </p>
+            
+            <div className="mt-8 flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-500" /> Free Plan Available
+              </span>
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-500" /> Cancel Anytime
+              </span>
+            </div>
           </div>
         </section>
       </main>

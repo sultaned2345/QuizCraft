@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { FileText, ArrowRight, CheckCircle2, FileQuestion, BrainCircuit } from 'lucide-react';
+import { FileText, CheckCircle2, FileQuestion, BrainCircuit } from 'lucide-react';
 
 export function BrainToQuizSection() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,8 +40,12 @@ export function BrainToQuizSection() {
                 style={{ x: leftX }}
                 className="relative w-64 h-80"
             >
-                {/* Scattered papers */}
-                <div className="absolute top-0 left-0 w-48 h-64 bg-white dark:bg-zinc-800 border shadow-lg rounded-lg p-4 transform -rotate-6 z-10">
+                {/* Scattered papers with SHAKE animation */}
+                <motion.div 
+                    animate={{ rotate: [-6, -8, -4, -6] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                    className="absolute top-0 left-0 w-48 h-64 bg-white dark:bg-zinc-800 border shadow-lg rounded-lg p-4 z-10 opacity-90"
+                >
                     <FileText className="w-8 h-8 text-muted-foreground mb-4" />
                     <div className="space-y-2">
                         <div className="h-2 bg-muted rounded w-full" />
@@ -49,14 +53,17 @@ export function BrainToQuizSection() {
                         <div className="h-2 bg-muted rounded w-full" />
                         <div className="h-2 bg-muted rounded w-4/6" />
                     </div>
-                </div>
-                <div className="absolute top-4 left-8 w-48 h-64 bg-white dark:bg-zinc-800 border shadow-md rounded-lg p-4 transform rotate-12 z-0 opacity-80">
+                </motion.div>
+                
+                {/* More drastic rotation for the background paper */}
+                <div className="absolute top-4 left-8 w-48 h-64 bg-white dark:bg-zinc-800 border shadow-md rounded-lg p-4 transform rotate-[20deg] z-0 opacity-70">
                      <div className="space-y-2 mt-8">
                         <div className="h-2 bg-muted rounded w-full" />
                         <div className="h-2 bg-muted rounded w-3/4" />
                     </div>
                 </div>
-                 <div className="absolute -bottom-4 -left-4 bg-red-100 dark:bg-red-900/20 text-red-600 px-3 py-1 rounded-full text-sm font-bold transform -rotate-12 z-20 border border-red-200">
+                
+                 <div className="absolute -bottom-4 -left-4 bg-red-100 dark:bg-red-900/20 text-red-600 px-3 py-1 rounded-full text-sm font-bold transform -rotate-12 z-20 border border-red-200 shadow-sm">
                     Raw Notes
                 </div>
             </motion.div>
@@ -80,7 +87,11 @@ export function BrainToQuizSection() {
                 style={{ x: rightX }}
                 className="relative w-64 h-80"
             >
-                 <div className="w-56 h-auto bg-white dark:bg-zinc-900 border-2 border-primary/20 shadow-2xl shadow-primary/10 rounded-xl p-6 transform hover:scale-105 transition-transform duration-300">
+                 <div className="w-56 h-auto bg-white dark:bg-zinc-900 border-2 border-primary/20 shadow-2xl shadow-primary/10 rounded-xl p-6 transform hover:scale-105 transition-transform duration-300 overflow-hidden relative group">
+                    
+                    {/* SHINE EFFECT */}
+                    <div className="absolute top-0 left-[-150%] w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 animate-[shimmer_3s_infinite]" />
+
                     <div className="flex items-center gap-3 mb-6">
                         <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600">
                             <CheckCircle2 className="w-5 h-5" />
@@ -108,6 +119,15 @@ export function BrainToQuizSection() {
             </motion.div>
         </div>
       </div>
+      
+      {/* Add Shimmer Keyframe */}
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { left: -150%; }
+          50% { left: 150%; }
+          100% { left: 150%; }
+        }
+      `}</style>
     </section>
   );
 }

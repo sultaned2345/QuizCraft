@@ -1,8 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from "framer-motion";
-import { BrainCircuit, MessageSquare, Layers, Sparkles, TrendingUp, Calendar } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrainCircuit, MessageSquare, Layers, FileText, PenTool, FolderKanban, CheckCircle2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 const BentoCard = ({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) => (
   <motion.div
@@ -19,6 +20,17 @@ const BentoCard = ({ children, className, delay = 0 }: { children: React.ReactNo
 );
 
 export function BentoGrid() {
+  const [quizReady, setQuizReady] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
+
+  useEffect(() => {
+    // Simulate processing
+    const interval = setInterval(() => {
+        setQuizReady(prev => !prev);
+    }, 4000); 
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <section className="py-24 relative overflow-hidden">
         {/* Background Aura for this section */}
@@ -48,17 +60,33 @@ export function BentoGrid() {
                 <p className="text-muted-foreground">Upload any PDF, Doc, or Paste text. Our AI instantly analyzes the content and generates exam-ready questions.</p>
               </div>
               
-              {/* Mock UI Element */}
-              <div className="mt-8 bg-background/50 rounded-lg p-4 border border-border/50 backdrop-blur-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-xs font-mono text-muted-foreground">Processing...</span>
-                </div>
-                <div className="space-y-2">
-                    <div className="h-2 bg-primary/20 rounded w-3/4" />
-                    <div className="h-2 bg-primary/10 rounded w-1/2" />
-                    <div className="h-2 bg-primary/10 rounded w-5/6" />
-                </div>
+              {/* Mock UI Element - Processing to Complete Animation */}
+              <div className="mt-8 bg-background/50 rounded-lg p-4 border border-border/50 backdrop-blur-sm transition-all duration-500">
+                {!quizReady ? (
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+                            <span className="text-xs font-mono text-muted-foreground">Analyzing content...</span>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="h-2 bg-primary/20 rounded w-3/4 animate-pulse" />
+                            <div className="h-2 bg-primary/10 rounded w-1/2 animate-pulse" />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            <span className="text-xs font-mono text-green-600 font-bold">Quiz Generated!</span>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <span className="px-2 py-1 rounded bg-primary/10 text-[10px] font-bold text-primary">Multiple Choice</span>
+                                <span className="px-2 py-1 rounded bg-primary/10 text-[10px] font-bold text-primary">True/False</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
               </div>
             </CardContent>
           </BentoCard>
@@ -73,35 +101,41 @@ export function BentoGrid() {
               <p className="text-sm text-muted-foreground mb-4">Ask your textbooks questions directly.</p>
               
               <div className="mt-auto space-y-3">
-                <div className="bg-primary/10 p-2 rounded-lg rounded-tl-none text-xs">
+                <div className="bg-primary/10 p-3 rounded-lg rounded-tl-none text-xs leading-relaxed">
                     What is the mitochondria?
                 </div>
-                <div className="bg-muted p-2 rounded-lg rounded-tr-none text-xs ml-4 border border-border">
+                {/* Animated Answer Bubble */}
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1, duration: 0.4 }}
+                    className="bg-muted p-3 rounded-lg rounded-tr-none text-xs ml-4 border border-border leading-relaxed"
+                >
                     The powerhouse of the cell.
-                </div>
+                </motion.div>
               </div>
             </CardContent>
           </BentoCard>
 
-          {/* Stat: Analytics (Small) */}
+          {/* Stat: Project Org (Small) - REPLACED Grades */}
           <BentoCard className="md:col-span-1 md:row-span-1" delay={0.3}>
              <CardContent className="p-6 flex flex-col justify-center h-full">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-green-500/10 text-green-500 rounded-md"><TrendingUp className="w-4 h-4" /></div>
-                    <span className="font-bold text-xl">85%</span>
+                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 mb-3">
+                    <FolderKanban className="w-5 h-5" />
                 </div>
-                <p className="text-sm text-muted-foreground">Average Grade Improvement</p>
+                <h3 className="font-bold text-lg mb-1">Projects</h3>
+                <p className="text-xs text-muted-foreground">Organize your quizzes and notes by subject.</p>
              </CardContent>
           </BentoCard>
 
-          {/* Stat: Streak (Small) */}
+          {/* Stat: Summaries (Small) - REPLACED Streak */}
           <BentoCard className="md:col-span-1 md:row-span-1" delay={0.4}>
             <CardContent className="p-6 flex flex-col justify-center h-full">
-                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-orange-500/10 text-orange-500 rounded-md"><Sparkles className="w-4 h-4" /></div>
-                    <span className="font-bold text-xl">12 Days</span>
+                 <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500 mb-3">
+                    <FileText className="w-5 h-5" />
                 </div>
-                <p className="text-sm text-muted-foreground">Study Streak</p>
+                <h3 className="font-bold text-lg mb-1">Summaries</h3>
+                <p className="text-xs text-muted-foreground">Digest complex topics in seconds.</p>
             </CardContent>
           </BentoCard>
 
@@ -118,15 +152,15 @@ export function BentoGrid() {
             </CardContent>
           </BentoCard>
 
-           {/* Feature: Study Planner (Wide) */}
+           {/* Feature: Essay Grader (Wide) - REPLACED Auto-Scheduling */}
            <BentoCard className="md:col-span-2 md:row-span-1" delay={0.6}>
             <CardContent className="p-6 flex items-center gap-6 h-full">
                 <div className="w-12 h-12 shrink-0 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500">
-                    <Calendar className="w-6 h-6" />
+                    <PenTool className="w-6 h-6" />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold">Auto-Scheduling</h3>
-                    <p className="text-sm text-muted-foreground">We plan your study sessions for you based on your exam dates.</p>
+                    <h3 className="text-xl font-bold">AI Essay Grader</h3>
+                    <p className="text-sm text-muted-foreground">Get instant feedback, scoring, and suggestions to improve your writing.</p>
                 </div>
             </CardContent>
           </BentoCard>
