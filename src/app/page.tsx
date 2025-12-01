@@ -13,6 +13,9 @@ import {
   Sparkles,
   User,
   CheckCircle2,
+  Globe,
+  Smartphone,
+  Download
 } from "lucide-react";
 
 // --- New Components ---
@@ -81,17 +84,15 @@ export default function LandingPage() {
               <span>Now with AI Essay Grading</span>
             </div>
 
-            {/* UPDATED HEADLINE */}
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
-              Master Any Subject in <br />
+              Turn Notes into Knowledge in <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 animate-pulse">
                 Minutes, Not Hours
               </span>
             </h1>
 
-            {/* UPDATED SUBHEADLINE */}
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
-              Stop highlighting endless PDFs. Turn your raw notes into 
+              Stop highlighting endless PDFs. Transform your raw study materials into 
               interactive quizzes and flashcards instantly.
             </p>
 
@@ -118,13 +119,30 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* NEW: Logo Cloud / Trusted By */}
+        <section className="py-8 border-y border-white/5 bg-white/5 backdrop-blur-sm">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-sm font-semibold text-muted-foreground mb-6 uppercase tracking-wider">
+              Trusted by students from top universities
+            </p>
+            <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
+               {/* Placeholders for logos - simplified text for now */}
+               <span className="text-xl font-bold font-serif">Harvard</span>
+               <span className="text-xl font-bold font-serif">Stanford</span>
+               <span className="text-xl font-bold font-serif">MIT</span>
+               <span className="text-xl font-bold font-serif">Berkeley</span>
+               <span className="text-xl font-bold font-serif">Oxford</span>
+            </div>
+          </div>
+        </section>
+
         {/* Brain to Quiz Animation */}
         <BrainToQuizSection />
 
         {/* Bento Grid Features */}
         <BentoGrid />
 
-        {/* Testimonials Section - UPDATED QUOTES */}
+        {/* Testimonials Section */}
         <section className="py-24 bg-transparent">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
@@ -155,7 +173,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ Section - UPDATED ANSWERS */}
+        {/* FAQ Section - EXPANDED */}
         <section className="py-24 bg-muted/20 backdrop-blur-sm">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
@@ -187,8 +205,7 @@ export default function LandingPage() {
                 <AccordionContent className="text-base text-muted-foreground leading-relaxed">
                   Our AI Essay Grader analyzes your text based on standard
                   academic criteria like clarity, argumentation, and grammar. It
-                  provides an estimated score (0-100) and detailed feedback with
-                  highlights.
+                  provides an estimated score (0-100) and detailed feedback.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-4">
@@ -197,16 +214,39 @@ export default function LandingPage() {
                 </AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground leading-relaxed">
                   Yes. Your data is stored securely in your own private Supabase
-                  database. We do not share your documents or personal
-                  information with any third parties. All AI processing is done
-                  anonymously.
+                  database. We do not share your documents with any third parties.
+                </AccordionContent>
+              </AccordionItem>
+              {/* NEW QUESTIONS */}
+              <AccordionItem value="item-5">
+                <AccordionTrigger className="text-lg flex gap-2 items-center">
+                   <Smartphone className="w-5 h-5 text-primary" /> Does it work on mobile?
+                </AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Absolutely. QuizCraft is fully responsive, so you can review flashcards or take quizzes on your phone while commuting or between classes.
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-6">
+                <AccordionTrigger className="text-lg flex gap-2 items-center">
+                   <Globe className="w-5 h-5 text-primary" /> What languages do you support?
+                </AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Our AI understands over 50 languages, including Spanish, French, Mandarin, and German. You can upload a document in one language and ask questions in another!
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-7">
+                <AccordionTrigger className="text-lg flex gap-2 items-center">
+                   <Download className="w-5 h-5 text-primary" /> Can I export my quizzes?
+                </AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
+                  Yes. You can export any generated quiz or flashcard set as a PDF or text file to print out or use in other apps.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>
         </section>
 
-        {/* CTA Section - UPDATED BACKGROUND & TEXT */}
+        {/* CTA Section */}
         <section className="py-32 relative overflow-hidden">
           {/* Solid BG with Gradient Bleed Overlay */}
           <div className="absolute inset-0 bg-background" />
