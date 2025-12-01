@@ -10,23 +10,25 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ArrowRight, Sparkles, User, CheckCircle2, Download, Smartphone, Image as ImageIcon } from "lucide-react";
 
-// --- New Interactive Components ---
+// --- Components ---
 import { BentoGrid } from "@/components/landing/BentoGrid";
 import { BrainToQuizSection } from "@/components/landing/BrainToQuizSection";
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 import { Typewriter } from "@/components/landing/Typewriter";
 
-// --- Aurora Background (Increased Intensity) ---
+// --- Aurora Background (REVERTED TO PRETTY VALUES) ---
 function AuroraBackground() {
   return (
     <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none bg-zinc-950">
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/30 blur-[120px] animate-aurora-1 opacity-80" />
-      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] rounded-full bg-blue-500/20 blur-[100px] animate-aurora-2 opacity-70" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[50%] rounded-full bg-purple-500/25 blur-[120px] animate-aurora-3 opacity-70" />
+      {/* Restored opacity to 0.5/0.4 for depth and elegance */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] animate-aurora-1 opacity-50" />
+      <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[100px] animate-aurora-2 opacity-40" />
+      <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[120px] animate-aurora-3 opacity-40" />
     </div>
   );
 }
 
+// --- Sub-Components ---
 function TestimonialCard({ quote, name, title }: { quote: string; name: string; title: string }) {
   return (
     <Card className="h-full flex flex-col bg-card/40 backdrop-blur-sm border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 group hover:-translate-y-1">
@@ -48,6 +50,7 @@ function TestimonialCard({ quote, name, title }: { quote: string; name: string; 
   );
 }
 
+// --- Main Page Component ---
 export default function LandingPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -62,7 +65,7 @@ export default function LandingPage() {
   };
 
   return (
-    // Forces Dark Mode for the Landing Page to make Aurora pop
+    // Forces Dark Mode for the "Enchanted" look
     <div className="dark flex flex-col min-h-screen font-sans relative selection:bg-primary/20 bg-zinc-950 text-foreground">
       <SpotlightCursor />
       <LandingHeader />
@@ -80,17 +83,14 @@ export default function LandingPage() {
 
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
               Turn Notes into <br />
-              {/* Typewriter Effect */}
               <Typewriter />
             </h1>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
               Stop highlighting endless PDFs. Transform your raw study materials into 
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 font-bold px-1"> interactive quizzes </span> 
-              and flashcards instantly.
+              interactive quizzes and flashcards instantly.
             </p>
 
-            {/* Smart Email Input */}
             <form onSubmit={handleSmartStart} className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
               <Input 
                 type="email" 
@@ -107,10 +107,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Interactive Brain Animation */}
+        {/* Brain to Quiz Animation */}
         <BrainToQuizSection />
 
-        {/* Deep-Linked Bento Grid */}
+        {/* Bento Grid */}
         <BentoGrid />
 
         {/* Testimonials */}
@@ -128,7 +128,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ Section */}
+        {/* FAQ Section (Cleaned) */}
         <section className="py-24 bg-muted/10 backdrop-blur-sm border-t border-white/5">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
@@ -137,7 +137,7 @@ export default function LandingPage() {
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
                 <AccordionTrigger className="text-lg">Is QuizCraft free to use?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month. No credit card required.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month.</AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-lg">Can I trust the AI answers?</AccordionTrigger>
@@ -153,7 +153,7 @@ export default function LandingPage() {
               </AccordionItem>
               <AccordionItem value="item-6">
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><ImageIcon className="w-5 h-5 text-primary" /> Can I upload handwritten notes?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes! Our OCR technology can read clear handwriting and convert it into digital quizzes.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes! Our OCR technology can read clear handwriting.</AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>
