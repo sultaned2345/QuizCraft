@@ -8,19 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowRight, Sparkles, User, CheckCircle2, Download, Smartphone, Image as ImageIcon } from "lucide-react";
+import { ArrowRight, Sparkles, User, CheckCircle2, Download, Globe, Smartphone } from "lucide-react";
 
-// --- Components ---
+// --- New Components ---
 import { BentoGrid } from "@/components/landing/BentoGrid";
 import { BrainToQuizSection } from "@/components/landing/BrainToQuizSection";
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 import { Typewriter } from "@/components/landing/Typewriter";
 
-// --- Aurora Background (REVERTED TO PRETTY VALUES) ---
+// --- Aurora Background Component (Local) ---
 function AuroraBackground() {
   return (
-    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none bg-zinc-950">
-      {/* Restored opacity to 0.5/0.4 for depth and elegance */}
+    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] animate-aurora-1 opacity-50" />
       <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[100px] animate-aurora-2 opacity-40" />
       <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[120px] animate-aurora-3 opacity-40" />
@@ -65,9 +64,11 @@ export default function LandingPage() {
   };
 
   return (
-    // Forces Dark Mode for the "Enchanted" look
-    <div className="dark flex flex-col min-h-screen font-sans relative selection:bg-primary/20 bg-zinc-950 text-foreground">
+    <div className="flex flex-col min-h-screen font-sans relative selection:bg-primary/20">
+      {/* 1. Spotlight Effect */}
       <SpotlightCursor />
+      
+      {/* 2. Sticky/Glass Header */}
       <LandingHeader />
 
       <main className="flex-1 relative">
@@ -83,6 +84,7 @@ export default function LandingPage() {
 
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
               Turn Notes into <br />
+              {/* 3. Typewriter Animation */}
               <Typewriter />
             </h1>
 
@@ -91,6 +93,7 @@ export default function LandingPage() {
               interactive quizzes and flashcards instantly.
             </p>
 
+            {/* 4. Smart Form Pre-fill */}
             <form onSubmit={handleSmartStart} className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
               <Input 
                 type="email" 
@@ -107,10 +110,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Brain to Quiz Animation */}
+        {/* 5. Interactive Brain-to-Quiz Animation */}
         <BrainToQuizSection />
 
-        {/* Bento Grid */}
+        {/* 6. Deep-Linked Bento Grid */}
         <BentoGrid />
 
         {/* Testimonials */}
@@ -128,8 +131,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ Section (Cleaned) */}
-        <section className="py-24 bg-muted/10 backdrop-blur-sm border-t border-white/5">
+        {/* FAQ Section */}
+        <section className="py-24 bg-muted/20 backdrop-blur-sm">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
@@ -147,13 +150,13 @@ export default function LandingPage() {
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Smartphone className="w-5 h-5 text-primary" /> Does it work on mobile?</AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground">Absolutely. QuizCraft is fully responsive.</AccordionContent>
               </AccordionItem>
+               <AccordionItem value="item-4">
+                 <AccordionTrigger className="text-lg flex gap-2 items-center"><Globe className="w-5 h-5 text-primary" /> What languages do you support?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground">Our AI understands over 50 languages. Upload in one, ask in another!</AccordionContent>
+              </AccordionItem>
                <AccordionItem value="item-5">
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Download className="w-5 h-5 text-primary" /> Can I export my quizzes?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes. Export as PDF, Text file, or CSV anytime.</AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="item-6">
-                 <AccordionTrigger className="text-lg flex gap-2 items-center"><ImageIcon className="w-5 h-5 text-primary" /> Can I upload handwritten notes?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes! Our OCR technology can read clear handwriting.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes. Export as PDF or text file anytime.</AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>
