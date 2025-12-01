@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowRight, Sparkles, User, CheckCircle2, Download, Globe, Smartphone } from "lucide-react";
+import { ArrowRight, Sparkles, User, CheckCircle2, Download, Smartphone, Image as ImageIcon } from "lucide-react";
 
 // --- New Components ---
 import { BentoGrid } from "@/components/landing/BentoGrid";
@@ -19,10 +19,11 @@ import { Typewriter } from "@/components/landing/Typewriter";
 // --- Aurora Background Component (Local) ---
 function AuroraBackground() {
   return (
-    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] animate-aurora-1 opacity-50" />
-      <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[100px] animate-aurora-2 opacity-40" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[120px] animate-aurora-3 opacity-40" />
+    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none bg-zinc-950">
+      {/* Increased opacity and size for more color */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/30 blur-[120px] animate-aurora-1 opacity-80" />
+      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] rounded-full bg-blue-500/20 blur-[100px] animate-aurora-2 opacity-70" />
+      <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[50%] rounded-full bg-purple-500/25 blur-[120px] animate-aurora-3 opacity-70" />
     </div>
   );
 }
@@ -64,7 +65,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans relative selection:bg-primary/20">
+    <div className="dark flex flex-col min-h-screen font-sans relative selection:bg-primary/20 bg-zinc-950 text-foreground">
       {/* 1. Spotlight Effect */}
       <SpotlightCursor />
       
@@ -131,33 +132,43 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ Section */}
-        <section className="py-24 bg-muted/20 backdrop-blur-sm">
+        {/* IMPROVED FAQ Section (No Math) */}
+        <section className="py-24 bg-muted/10 backdrop-blur-sm border-t border-white/5">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
             </div>
+            
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
                 <AccordionTrigger className="text-lg">Is QuizCraft free to use?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Yes! Free forever for up to 3 documents a month. No credit card required to start.</AccordionContent>
               </AccordionItem>
+              
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-lg">Can I trust the AI answers?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">We always cite the page number from your document so you can verify facts instantly.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">We always cite the page number from your document so you can verify facts instantly. You are always in control of the source material.</AccordionContent>
               </AccordionItem>
+
               <AccordionItem value="item-3">
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Smartphone className="w-5 h-5 text-primary" /> Does it work on mobile?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Absolutely. QuizCraft is fully responsive.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">Absolutely. QuizCraft is fully responsive, so you can review flashcards on the go.</AccordionContent>
               </AccordionItem>
-               <AccordionItem value="item-4">
-                 <AccordionTrigger className="text-lg flex gap-2 items-center"><Globe className="w-5 h-5 text-primary" /> What languages do you support?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Our AI understands over 50 languages. Upload in one, ask in another!</AccordionContent>
-              </AccordionItem>
+
                <AccordionItem value="item-5">
                  <AccordionTrigger className="text-lg flex gap-2 items-center"><Download className="w-5 h-5 text-primary" /> Can I export my quizzes?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground">Yes. Export as PDF or text file anytime.</AccordionContent>
+                <AccordionContent className="text-base text-muted-foreground">
+                  Yes. You can export any generated quiz or flashcard set as a PDF, Text file, or CSV to use in other apps like Anki or Quizlet.
+                </AccordionContent>
               </AccordionItem>
+
+              <AccordionItem value="item-6">
+                 <AccordionTrigger className="text-lg flex gap-2 items-center"><ImageIcon className="w-5 h-5 text-primary" /> Can I upload handwritten notes?</AccordionTrigger>
+                <AccordionContent className="text-base text-muted-foreground">
+                  Yes! Our OCR technology can read clear handwriting and convert it into digital quizzes just like a typed PDF.
+                </AccordionContent>
+              </AccordionItem>
+
             </Accordion>
           </div>
         </section>
