@@ -2,11 +2,10 @@
 
 import * as React from 'react';
 import * as pdfjs from 'pdfjs-dist';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 
 // Initialize worker
 if (typeof window !== 'undefined') {
@@ -26,12 +25,35 @@ interface PdfPageProps {
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
-// --- 1. Sub-Component: Individual Page (Preserved from your original) ---
+// --- 1. Custom Hook for Visibility (The "Fix") ---
+function useInView(options: IntersectionObserverInit = {}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = React.useState(false);
+
+  React.useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsInView(entry.isIntersecting);
+    }, options);
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [options]);
+
+  return { ref, isInView };
+}
+
 function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const textLayerRef = React.useRef<HTMLDivElement>(null);
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
+  // Use the hook: Load content when within 200px of viewport
+  const { ref, isInView } = useInView({ rootMargin: '200px' });
+
+  // 1. Always fetch the page proxy (lightweight) to get dimensions/rotation
   React.useEffect(() => {
     let isMounted = true;
     doc.getPage(pageNum).then((p) => {
@@ -40,9 +62,11 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     return () => { isMounted = false; };
   }, [doc, pageNum]);
 
+  // 2. Only render the heavy Canvas/Text Layer when "isInView" is true
   React.useEffect(() => {
-    if (!page || !canvasRef.current || !textLayerRef.current || width === 0) return;
+    if (!page || !isInView || !canvasRef.current || width === 0) return;
 
+    // Calculate scale based on desired width vs original viewport width
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = width / unscaledViewport.width;
     const viewport = page.getViewport({ scale });
@@ -61,20 +85,26 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         
-        // Render text layer
-        const textContent = await page.getTextContent();
-        if (textLayerRef.current) {
-           textLayerRef.current.style.height = `${viewport.height}px`;
-           textLayerRef.current.style.width = `${viewport.width}px`;
-           textLayerRef.current.innerHTML = '';
-           textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
+        // Render Text Layer (if available)
+        // We check for the function because it was removed/changed in some pdfjs versions
+        const pdfJsAny = pdfjs as any;
+        if (typeof pdfJsAny.renderTextLayer === 'function' && textLayerRef.current) {
+            const textContent = await page.getTextContent();
+            
+            // Check ref again before modifying
+            if (textLayerRef.current) {
+                textLayerRef.current.style.height = `${viewport.height}px`;
+                textLayerRef.current.style.width = `${viewport.width}px`;
+                textLayerRef.current.innerHTML = '';
+                textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
 
-           pdfjs.renderTextLayer({
-            textContentSource: textContent,
-            container: textLayerRef.current,
-            viewport: viewport,
-            textDivs: [],
-           });
+                await pdfJsAny.renderTextLayer({
+                    textContentSource: textContent,
+                    container: textLayerRef.current,
+                    viewport: viewport,
+                    textDivs: [],
+                }).promise;
+            }
         }
       } catch (err: any) {
         if (err.name !== 'RenderingCancelledException') {
@@ -86,63 +116,73 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
     render();
 
     return () => {
-      if (renderTask) renderTask.cancel();
+      if (renderTask) {
+        renderTask.cancel();
+      }
+      // Optional: Clear canvas when scrolling away to save memory
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
     };
-  }, [page, width]);
+  }, [page, width, isInView]); // Re-run when it comes into view
 
+  // Loading State
   if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
   const aspectRatio = page.view[3] / page.view[2];
+  const calculatedHeight = width * aspectRatio;
   
   return (
     <div
+      ref={ref}
       className="relative shadow-md mb-4 bg-white"
-      style={{ width: width, minHeight: width * aspectRatio }}
+      style={{ width: width, minHeight: calculatedHeight }}
     >
-      <canvas ref={canvasRef} className="block" />
-      <div 
-        ref={textLayerRef} 
-        className="textLayer absolute inset-0 mix-blend-multiply" 
-        onMouseUpCapture={onTextSelect} 
-      />
+      {isInView ? (
+        <>
+          <canvas ref={canvasRef} className="block" />
+          <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
+        </>
+      ) : (
+        // Placeholder to maintain scroll height when off-screen
+        <div style={{ height: calculatedHeight, width: '100%' }} />
+      )}
     </div>
   );
 }
-
-// --- 2. Main Component (Added Chunking Logic) ---
-const PAGES_PER_CHUNK = 20;
 
 export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Chunk State
-  const [currentChunk, setCurrentChunk] = React.useState<number>(0);
-
-  // Responsive width
+  // Responsive Width
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
-  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
+  // 1. Handle Window Resize
   React.useEffect(() => {
     if (!containerRef.current) return;
+
     const updateWidth = () => {
       if (containerRef.current) {
         setContainerWidth(containerRef.current.clientWidth - 48);
       }
     };
+
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(containerRef.current);
+
     return () => observer.disconnect();
   }, [isLoading]);
 
+  // 2. Load PDF Document
   React.useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true);
       setError(null);
-      setCurrentChunk(0); // Reset chunk on new URL
       try {
         const loadingTask = pdfjs.getDocument(url);
         const doc = await loadingTask.promise;
@@ -156,37 +196,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     };
     if (url) loadPdf();
   }, [url]);
-
-  // --- Chunk Navigation Helpers ---
-  const numPages = pdfDoc ? pdfDoc.numPages : 0;
-  const startPage = currentChunk * PAGES_PER_CHUNK + 1;
-  const endPage = Math.min(startPage + PAGES_PER_CHUNK - 1, numPages);
-
-  const pagesToRender = React.useMemo(() => {
-    if (!pdfDoc) return [];
-    // Create array [startPage ... endPage]
-    return Array.from(
-      { length: (endPage - startPage) + 1 }, 
-      (_, i) => startPage + i
-    );
-  }, [startPage, endPage, pdfDoc]);
-
-  const scrollToTop = () => {
-    // Attempt to scroll the ScrollArea viewport to top
-    const viewport = containerRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-    if (viewport) viewport.scrollTo({ top: 0 });
-  };
-
-  const handlePrev = () => {
-    setCurrentChunk((prev) => Math.max(0, prev - 1));
-    scrollToTop();
-  };
-
-  const handleNext = () => {
-    const maxChunk = Math.ceil(numPages / PAGES_PER_CHUNK) - 1;
-    setCurrentChunk((prev) => Math.min(maxChunk, prev + 1));
-    scrollToTop();
-  };
 
   if (isLoading) {
     return (
@@ -204,7 +213,8 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>
-                    Unable to load this document. <br/>
+                    Unable to load this document.
+                    <br/>
                     <span className="text-xs opacity-70 mt-2 block">{error}</span>
                 </AlertDescription>
             </Alert>
@@ -212,46 +222,22 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     );
   }
 
-  return (
-    <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col relative", className)}>
-        
-        {/* Navigation Header (Sticky) */}
-        <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-zinc-800 border-b z-10 shadow-sm shrink-0">
-           <span className="text-sm font-medium text-muted-foreground">
-             Pages {startPage} - {endPage} of {numPages}
-           </span>
-           <div className="flex gap-2">
-             <Button variant="outline" size="sm" onClick={handlePrev} disabled={currentChunk === 0}>
-               <ChevronLeft className="h-4 w-4" />
-             </Button>
-             <Button variant="outline" size="sm" onClick={handleNext} disabled={endPage >= numPages}>
-               <ChevronRight className="h-4 w-4" />
-             </Button>
-           </div>
-        </div>
+  const numPages = pdfDoc ? pdfDoc.numPages : 0;
+  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
-        {/* Scrollable Content */}
+  return (
+    <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
         <ScrollArea className="flex-1 w-full" ref={containerRef}>
             <div className="flex flex-col items-center py-8 px-4 min-h-full">
-                {containerWidth > 0 && pagesToRender.map((pageNum) => (
-                    <PdfPage 
-                        key={pageNum} 
-                        doc={pdfDoc!} 
-                        pageNum={pageNum} 
-                        width={containerWidth} 
-                        onTextSelect={onTextSelect} 
-                    />
+                {containerWidth > 0 && pages.map((pageNum) => (
+                <PdfPage 
+                    key={pageNum} 
+                    doc={pdfDoc!} 
+                    pageNum={pageNum} 
+                    width={containerWidth} 
+                    onTextSelect={onTextSelect} 
+                />
                 ))}
-                
-                {/* Bottom Navigation for convenience */}
-                <div className="flex gap-4 mt-8 pb-8">
-                    <Button variant="outline" onClick={handlePrev} disabled={currentChunk === 0}>
-                        Previous 20 Pages
-                    </Button>
-                    <Button variant="default" onClick={handleNext} disabled={endPage >= numPages}>
-                        Next 20 Pages
-                    </Button>
-                </div>
             </div>
         </ScrollArea>
     </div>
