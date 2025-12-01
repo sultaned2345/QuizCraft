@@ -16,6 +16,9 @@ import { BrainToQuizSection } from "@/components/landing/BrainToQuizSection";
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 import { Typewriter } from "@/components/landing/Typewriter";
 
+// --- 1. THE MAGIC SAUCE: Reusable Aurora Text Class ---
+const AURORA_TEXT_CLASS = "text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 font-extrabold";
+
 // --- Aurora Background Component (Local) ---
 function AuroraBackground() {
   return (
@@ -83,7 +86,7 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-foreground mb-8 max-w-6xl mx-auto leading-[1.1] drop-shadow-sm">
-              Turn Notes into <br />
+              Turn <span className={AURORA_TEXT_CLASS}>Notes</span> into <br />
               {/* 3. Typewriter Animation */}
               <Typewriter />
             </h1>
@@ -120,7 +123,9 @@ export default function LandingPage() {
         <section className="py-24 bg-transparent">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">Don't just study. Understand.</h2>
+              <h2 className="text-3xl md:text-5xl font-bold mb-4">
+                Don't just study. <span className={AURORA_TEXT_CLASS}>Understand.</span>
+              </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">See what other learners are saying about QuizCraft.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
@@ -168,7 +173,9 @@ export default function LandingPage() {
           <div className="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent z-0" />
           
           <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
-            <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">Ready to upgrade your grades?</h2>
+            <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">
+              Ready to <span className={AURORA_TEXT_CLASS}>upgrade your grades</span>?
+            </h2>
             <div className="flex flex-col items-center justify-center gap-4">
               <Button size="lg" className="h-14 px-10 rounded-full text-xl shadow-2xl hover:scale-105 transition-transform" asChild>
                 <Link href="/signup">Get Started Now <ArrowRight className="ml-2 h-6 w-6" /></Link>
