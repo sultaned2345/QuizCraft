@@ -278,10 +278,9 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
     useImperativeHandle(ref, () => ({ sendMessage }), [sendMessage]);
 
     return (
-      // FIX 1: Changed bg-background to bg-transparent
       <div
         className={cn(
-          'flex flex-col h-full bg-transparent relative font-sans',
+          'flex flex-col h-full bg-background relative font-sans',
           className,
         )}
       >
@@ -292,10 +291,10 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
             {isLoadingHistory && messages.length === 0 && (
               <div className="space-y-6 px-2">
                 <div className="flex gap-3">
-                   <div className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 animate-pulse" />
+                   <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
                   <div className="space-y-2 flex-1">
-                    <div className="h-4 w-1/3 bg-black/5 dark:bg-white/10 animate-pulse rounded" />
-                    <div className="h-12 w-3/4 bg-black/5 dark:bg-white/10 animate-pulse rounded-xl" />
+                    <div className="h-4 w-1/3 bg-muted animate-pulse rounded" />
+                    <div className="h-12 w-3/4 bg-muted animate-pulse rounded-xl" />
                   </div>
                 </div>
               </div>
@@ -306,7 +305,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
               <div className="flex flex-col items-center justify-center min-h-[400px] text-center space-y-8 animate-in zoom-in-95 duration-300">
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
-                  <div className="bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm p-4 rounded-2xl border shadow-sm relative">
+                  <div className="bg-background p-4 rounded-2xl border shadow-sm relative">
                     <Sparkles className="w-8 h-8 text-primary fill-primary/20" />
                   </div>
                 </div>
@@ -324,7 +323,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                 <div className="grid grid-cols-3 gap-3 w-full max-w-sm px-4">
                   <Button
                     variant="outline"
-                    className="h-20 flex flex-col gap-2 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 dark:hover:bg-blue-950/30 dark:hover:border-blue-800 transition-all group border-border/50 shadow-sm"
+                    className="h-20 flex flex-col gap-2 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 dark:hover:bg-blue-950/30 dark:hover:border-blue-800 transition-all group"
                     onClick={handleGenerateQuizFromContext}
                     disabled={isActionLoading}
                   >
@@ -333,7 +332,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 flex flex-col gap-2 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm hover:bg-orange-50 hover:border-orange-200 hover:text-orange-600 dark:hover:bg-orange-950/30 dark:hover:border-orange-800 transition-all group border-border/50 shadow-sm"
+                    className="h-20 flex flex-col gap-2 hover:bg-orange-50 hover:border-orange-200 hover:text-orange-600 dark:hover:bg-orange-950/30 dark:hover:border-orange-800 transition-all group"
                     onClick={handleGenerateFlashcardsFromContext}
                     disabled={isActionLoading}
                   >
@@ -342,7 +341,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 flex flex-col gap-2 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm hover:bg-green-50 hover:border-green-200 hover:text-green-600 dark:hover:bg-green-950/30 dark:hover:border-green-800 transition-all group border-border/50 shadow-sm"
+                    className="h-20 flex flex-col gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-600 dark:hover:bg-green-950/30 dark:hover:border-green-800 transition-all group"
                     onClick={handleGenerateNotesFromContext}
                     disabled={isActionLoading}
                   >
@@ -360,7 +359,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                       <button
                         key={i}
                         onClick={() => sendMessage(q)}
-                        className="text-xs text-left px-4 py-2.5 rounded-lg bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm hover:bg-primary/10 hover:text-primary transition-all truncate border border-border/50 hover:border-primary/20 shadow-sm"
+                        className="text-xs text-left px-4 py-2.5 rounded-lg bg-muted/50 hover:bg-primary/10 hover:text-primary transition-all truncate border border-transparent hover:border-primary/20"
                       >
                         {q}
                       </button>
@@ -380,7 +379,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                 )}
               >
                 {msg.role === 'model' && (
-                  <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-800 shadow-sm flex items-center justify-center shrink-0 border border-border/50 mt-1">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20 mt-1">
                     <Bot className="w-4 h-4 text-primary" />
                   </div>
                 )}
@@ -390,16 +389,15 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                     'relative max-w-[85%] px-5 py-3.5 text-sm shadow-sm',
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
-                      : 'bg-white dark:bg-zinc-900 border border-border/50 text-foreground rounded-2xl rounded-tl-sm',
+                      : 'bg-muted/50 border text-foreground rounded-2xl rounded-tl-sm',
                   )}
                 >
                   {/* MARKDOWN RENDERING */}
                   <div className={cn(
-                    // FIX 2: Prose-slate and better contrast
-                    "prose prose-sm max-w-none dark:prose-invert leading-relaxed break-words prose-slate",
+                    "prose prose-sm max-w-none dark:prose-invert leading-relaxed break-words",
                     msg.role === 'user' 
-                      ? "prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground prose-code:text-primary-foreground prose-code:bg-primary-foreground/20" 
-                      : "prose-p:text-slate-700 dark:prose-p:text-slate-300"
+                      ? "prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground" 
+                      : "prose-p:text-foreground"
                   )}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.text}
@@ -407,14 +405,14 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                   </div>
 
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/10 flex flex-wrap gap-2">
+                    <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2">
                       {msg.sources.map((src) => (
                         <TooltipProvider key={src.citation}>
                           <Tooltip delayDuration={0}>
                             <TooltipTrigger asChild>
                               <Link
                                 href={getSourceHref(src)}
-                                className="inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-md bg-muted/50 border border-border/50 text-[10px] text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
+                                className="inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-md bg-background/50 border text-[10px] text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
                               >
                                 <span className="font-mono font-bold text-primary">[{src.citation}]</span>
                                 <span className="truncate max-w-[80px]">{src.content_title}</span>
@@ -431,7 +429,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                 </div>
 
                 {msg.role === 'user' && (
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-1">
                     <User className="w-4 h-4 text-muted-foreground" />
                   </div>
                 )}
@@ -441,10 +439,10 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
             {/* Thinking Indicator */}
             {isLoading && (
               <div className="flex w-full gap-3 justify-start animate-in fade-in">
-                 <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-800 shadow-sm flex items-center justify-center shrink-0 border border-border/50">
-                  <Zap className="w-4 h-4 text-primary fill-current" />
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
+                  <Zap className="w-4 h-4 text-primary fill-primary" />
                 </div>
-                <div className="bg-white dark:bg-zinc-900 px-4 py-3 rounded-2xl rounded-tl-sm border border-border/50 flex items-center gap-2 shadow-sm">
+                <div className="bg-muted/50 px-4 py-3 rounded-2xl rounded-tl-sm border flex items-center gap-2 shadow-sm">
                   <Loader2 className="w-3 h-3 animate-spin text-primary" />
                   <span className="text-xs text-muted-foreground font-medium">
                     Thinking...
@@ -456,9 +454,8 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
         </ScrollArea>
 
         {/* Input Area */}
-        {/* FIX 3: Added backdrop-blur to input area */}
-        <div className="p-4 pt-2 bg-background/0 z-20 sticky bottom-0">
-          <div className="relative shadow-xl rounded-3xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-border/50 ring-1 ring-black/5 transition-all focus-within:ring-primary/20 focus-within:border-primary/50">
+        <div className="p-4 pt-2 bg-transparent z-20">
+          <div className="relative shadow-lg rounded-2xl bg-background border ring-4 ring-muted/20 transition-all focus-within:ring-primary/20 focus-within:border-primary/50">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -484,7 +481,7 @@ export const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>
                 type="submit"
                 size="icon"
                 disabled={!input.trim() || isLoading}
-                className="h-8 w-8 shrink-0 rounded-full mb-1 mr-1 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                className="h-8 w-8 shrink-0 rounded-xl mb-1 mr-1 transition-all hover:scale-105 active:scale-95"
               >
                 <Send className="w-4 h-4" />
               </Button>

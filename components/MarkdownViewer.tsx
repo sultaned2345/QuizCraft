@@ -17,6 +17,7 @@ export function MarkdownViewer({
   onMouseUpCapture,
 }: MarkdownViewerProps) {
   // Check if content looks like HTML (legacy support for rich text notes)
+  // Simple regex to check for common block tags
   const isHtml = /<([a-z]+)([^<]+)*(?:>(.*)<\/\1>|\s+\/>)/i.test(content);
 
   if (isHtml) {
@@ -34,20 +35,18 @@ export function MarkdownViewer({
     );
   }
 
-  // Standard Markdown Rendering
+  // Standard Markdown Rendering (The default for imported PDFs and AI content)
   return (
     <div
       className={cn(
-        // UPGRADE: Changed from prose-zinc to prose-slate for better contrast
-        'prose prose-slate dark:prose-invert max-w-none break-words',
+        'prose prose-zinc dark:prose-invert max-w-none break-words',
         // Typography Overrides for "Paper" feel
         'prose-headings:font-semibold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl',
         'prose-headings:tracking-tight',
-        // UPGRADE: Increased line-height to leading-8 for better readability
-        'prose-p:leading-8 prose-p:text-slate-700 dark:prose-p:text-slate-300', 
-        'prose-li:marker:text-slate-400',
+        'prose-p:leading-8 prose-p:text-zinc-700 dark:prose-p:text-zinc-300', // Relaxed reading
+        'prose-li:marker:text-zinc-400',
         'prose-blockquote:border-l-4 prose-blockquote:border-primary/30 prose-blockquote:bg-muted/20 prose-blockquote:px-4 prose-blockquote:py-1 prose-blockquote:rounded-r prose-blockquote:font-normal prose-blockquote:not-italic',
-        'prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:text-slate-900 dark:prose-code:text-slate-100 prose-code:before:content-none prose-code:after:content-none',
+        'prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:bg-zinc-100 dark:prose-code:bg-zinc-800 prose-code:text-zinc-900 dark:prose-code:text-zinc-100 prose-code:before:content-none prose-code:after:content-none',
         className
       )}
       onMouseUpCapture={onMouseUpCapture}

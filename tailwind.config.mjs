@@ -1,6 +1,5 @@
 // tailwind.config.mjs
-// UPDATED FILE
-import typography from '@tailwindcss/typography'; // <-- IMPORT THIS
+import typography from '@tailwindcss/typography';
 
 /** @type {import('tailwindcss').Config} */
 const config = {
@@ -22,17 +21,32 @@ const config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        blob: {
+          "0%": { transform: "translate(0px, 0px) scale(1)" },
+          "33%": { transform: "translate(30px, -50px) scale(1.1)" },
+          "66%": { transform: "translate(-20px, 20px) scale(0.9)" },
+          "100%": { transform: "translate(0px, 0px) scale(1)" },
+        },
+        // --- ADDED: Aurora Text Flow Animation ---
+        'aurora-text': {
+          '0%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+          '100%': { backgroundPosition: '0% 50%' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        blob: "blob 7s infinite",
+        // --- ADDED: Text Animation ---
+        'aurora-text': 'aurora-text 5s ease-in-out infinite',
       },
-      // --- ADD TYPOGRAPHY STYLES ---
-      typography: ({ theme }: { theme: (key: string) => string }) => ({
+      typography: ({ theme }) => ({
         DEFAULT: {
           css: {
             '--tw-prose-body': theme('colors.foreground / 0.9'),
             '--tw-prose-headings': theme('colors.foreground'),
+            // ... (keep existing typography settings)
             '--tw-prose-lead': theme('colors.muted.foreground'),
             '--tw-prose-links': theme('colors.primary'),
             '--tw-prose-bold': theme('colors.foreground'),
@@ -67,11 +81,10 @@ const config = {
           },
         },
       }),
-      // --- END TYPOGRAPHY ---
     },
   },
   plugins: [
-    typography(), // <-- ADD THIS
+    typography(),
   ],
 };
 
