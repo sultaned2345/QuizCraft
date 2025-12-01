@@ -1,11 +1,13 @@
 'use client';
 
+import Link from "next/link"; // Added Link
 import { useState, useEffect } from 'react';
 import { motion } from "framer-motion";
-import { BrainCircuit, MessageSquare, Layers, FileText, PenTool, FolderKanban, CheckCircle2, Download, Globe, Smartphone, ChevronRight } from "lucide-react";
+import { BrainCircuit, MessageSquare, Layers, FileText, PenTool, FolderKanban, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
-const BentoCard = ({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) => (
+// Added href prop
+const BentoCard = ({ children, className, delay = 0, href }: { children: React.ReactNode; className?: string; delay?: number; href: string }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     whileInView={{ opacity: 1, y: 0 }}
@@ -13,9 +15,11 @@ const BentoCard = ({ children, className, delay = 0 }: { children: React.ReactNo
     transition={{ duration: 0.5, delay }}
     className={className}
   >
-    <Card className="h-full bg-card/40 backdrop-blur-md border-primary/10 hover:border-primary/30 transition-all duration-300 overflow-hidden group relative">
-      {children}
-    </Card>
+    <Link href={href} className="block h-full"> {/* Wrapped in Link */}
+      <Card className="h-full bg-card/40 backdrop-blur-md border-primary/10 hover:border-primary/40 hover:shadow-lg transition-all duration-300 overflow-hidden group relative cursor-pointer">
+        {children}
+      </Card>
+    </Link>
   </motion.div>
 );
 
@@ -30,7 +34,7 @@ export function BentoGrid() {
   }, []);
 
   return (
-    <section className="py-24 relative overflow-hidden">
+    <section id="features" className="py-24 relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[100px] -z-10" />
 
       <div className="container mx-auto px-4">
@@ -43,13 +47,13 @@ export function BentoGrid() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 md:grid-rows-3 gap-4 h-auto md:h-[900px]">
             
-          {/* 1. MAIN: Quiz Generation */}
-          <BentoCard className="md:col-span-2 md:row-span-2" delay={0.1}>
+          {/* 1. Quiz Generation -> /signup?intent=quiz */}
+          <BentoCard className="md:col-span-2 md:row-span-2" delay={0.1} href="/signup?intent=quiz">
             <CardContent className="p-8 h-full flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 opacity-5">
+               {/* ... (Keep existing content inside CardContent) ... */}
+               <div className="absolute -right-10 -top-10 opacity-5">
                 <BrainCircuit className="w-64 h-64" />
               </div>
-              
               <div className="relative z-10">
                 <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary mb-4">
                   <BrainCircuit className="w-6 h-6" />
@@ -57,8 +61,7 @@ export function BentoGrid() {
                 <h3 className="text-2xl font-bold mb-2">AI Quiz Generation</h3>
                 <p className="text-muted-foreground">Upload any PDF, Doc, or Paste text. Our AI instantly analyzes the content and generates exam-ready questions.</p>
               </div>
-              
-              <div className="mt-8 bg-background/50 rounded-xl p-4 border border-border/50 backdrop-blur-sm transition-all duration-500 shadow-sm">
+               <div className="mt-8 bg-background/50 rounded-xl p-4 border border-border/50 backdrop-blur-sm transition-all duration-500 shadow-sm">
                 {!quizReady ? (
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
@@ -90,11 +93,11 @@ export function BentoGrid() {
             </CardContent>
           </BentoCard>
 
-          {/* 2. CHAT: Interactive Bubble */}
-          <BentoCard className="md:col-span-1 md:row-span-2" delay={0.2}>
-            <CardContent className="p-6 h-full flex flex-col relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-blue-500/5 pointer-events-none" />
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 mb-4">
+          {/* 2. Chat -> /signup?intent=chat */}
+          <BentoCard className="md:col-span-1 md:row-span-2" delay={0.2} href="/signup?intent=chat">
+             <CardContent className="p-6 h-full flex flex-col relative overflow-hidden">
+               {/* ... (Keep existing content) ... */}
+               <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 mb-4">
                 <MessageSquare className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold mb-2">Doc Chat</h3>
@@ -116,28 +119,28 @@ export function BentoGrid() {
             </CardContent>
           </BentoCard>
 
-          {/* 3. PROJECTS: Folder Visualization */}
-          <BentoCard className="md:col-span-1 md:row-span-1" delay={0.3}>
+          {/* 3. Projects -> /signup?intent=projects */}
+          <BentoCard className="md:col-span-1 md:row-span-1" delay={0.3} href="/signup?intent=projects">
              <CardContent className="p-6 flex flex-col justify-between h-full relative overflow-hidden group">
-                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 mb-2">
+                 {/* ... (Keep existing content) ... */}
+                 <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 mb-2">
                     <FolderKanban className="w-5 h-5" />
                 </div>
                 <div>
                      <h3 className="font-bold text-lg">Smart Projects</h3>
                      <p className="text-xs text-muted-foreground mt-1">Organize by subject.</p>
                 </div>
-                
-                {/* Hover Effect: Files peeking out */}
-                <div className="absolute right-4 bottom-4 w-12 h-10 bg-green-500/10 rounded-lg border-2 border-green-500/20 flex items-end justify-center pb-1 group-hover:scale-110 transition-transform">
+                 <div className="absolute right-4 bottom-4 w-12 h-10 bg-green-500/10 rounded-lg border-2 border-green-500/20 flex items-end justify-center pb-1 group-hover:scale-110 transition-transform">
                     <div className="w-10 h-8 bg-background rounded-t-md border-2 border-green-500/20 absolute -top-2 left-1 z-0" />
                     <div className="w-8 h-1 bg-green-500/40 rounded-full z-10" />
                 </div>
              </CardContent>
           </BentoCard>
 
-          {/* 4. SUMMARIES: Text Shrink Animation */}
-          <BentoCard className="md:col-span-1 md:row-span-1" delay={0.4}>
+          {/* 4. Summaries -> /signup?intent=summaries */}
+          <BentoCard className="md:col-span-1 md:row-span-1" delay={0.4} href="/signup?intent=summaries">
             <CardContent className="p-6 flex flex-col justify-between h-full group">
+                 {/* ... (Keep existing content) ... */}
                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500 mb-2">
                     <FileText className="w-5 h-5" />
                 </div>
@@ -160,9 +163,10 @@ export function BentoGrid() {
             </CardContent>
           </BentoCard>
 
-          {/* 5. FLASHCARDS: 3D Flip Animation */}
-          <BentoCard className="md:col-span-2 md:row-span-1" delay={0.5}>
-            <CardContent className="p-6 flex items-center justify-between h-full relative group">
+          {/* 5. Flashcards -> /signup?intent=flashcards */}
+          <BentoCard className="md:col-span-2 md:row-span-1" delay={0.5} href="/signup?intent=flashcards">
+             <CardContent className="p-6 flex items-center justify-between h-full relative group">
+                {/* ... (Keep existing content) ... */}
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-12 shrink-0 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
                         <Layers className="w-6 h-6" />
@@ -172,9 +176,7 @@ export function BentoGrid() {
                         <p className="text-sm text-muted-foreground">Spaced repetition built-in.</p>
                     </div>
                 </div>
-
-                {/* The Flip Card */}
-                <div className="w-24 h-32 relative perspective-1000 hidden sm:block">
+                 <div className="w-24 h-32 relative perspective-1000 hidden sm:block">
                      <div className="relative w-full h-full transition-transform duration-700 transform-style-3d group-hover:rotate-y-180">
                         {/* Front */}
                         <div className="absolute inset-0 bg-background border border-purple-500/20 rounded-lg flex items-center justify-center shadow-sm backface-hidden">
@@ -189,9 +191,10 @@ export function BentoGrid() {
             </CardContent>
           </BentoCard>
 
-           {/* 6. ESSAY GRADER: Score Ring */}
-           <BentoCard className="md:col-span-2 md:row-span-1" delay={0.6}>
-            <CardContent className="p-6 flex items-center justify-between h-full relative">
+           {/* 6. Essay Grader -> /signup?intent=essay */}
+           <BentoCard className="md:col-span-2 md:row-span-1" delay={0.6} href="/signup?intent=essay">
+             <CardContent className="p-6 flex items-center justify-between h-full relative">
+                {/* ... (Keep existing content) ... */}
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-12 shrink-0 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500">
                         <PenTool className="w-6 h-6" />
@@ -201,9 +204,7 @@ export function BentoGrid() {
                         <p className="text-sm text-muted-foreground">Instant scoring & feedback.</p>
                     </div>
                 </div>
-
-                {/* Score Circle */}
-                <div className="relative w-16 h-16 flex items-center justify-center">
+                 <div className="relative w-16 h-16 flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90">
                         <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-muted/20" />
                         <motion.circle 
@@ -222,8 +223,7 @@ export function BentoGrid() {
         </div>
       </div>
       
-      {/* Utilities for 3D Transform */}
-      <style jsx global>{`
+       <style jsx global>{`
         .perspective-1000 { perspective: 1000px; }
         .transform-style-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
@@ -234,7 +234,6 @@ export function BentoGrid() {
   );
 }
 
-// Icon for the summary card arrow
 function ArrowRight({ className }: { className?: string }) {
     return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
 }

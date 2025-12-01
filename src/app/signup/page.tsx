@@ -1,26 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
 import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function SignupPage() {
-  const [email, setEmail] = useState('');
+function SignupContent() {
+  const searchParams = useSearchParams();
+  // Get 'email' from URL query params (e.g. /signup?email=john@doe.com)
+  const defaultEmail = searchParams.get('email') || '';
+
+  const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
-  // NEW: State for legal consent
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  
   const { signUp } = useAuth();
   const router = useRouter();
 
@@ -28,17 +28,12 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
     setMessage('');
-
-    // VALIDATION: Check for consent
-    if (!agreedToTerms) {
-      setError('You must agree to the Terms of Service and Privacy Policy to create an account.');
-      return;
-    }
-
+    
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
+    
     setLoading(true);
 
     try {
@@ -47,7 +42,7 @@ export default function SignupPage() {
         setError(error.message || 'Failed to create an account. Please try again.');
       } else {
         if (data.session) {
-          router.push('/documents'); // Redirect immediately
+          router.push('/documents'); 
         } else {
           setMessage('Account created successfully! Redirecting...');
           setTimeout(() => router.push('/documents'), 2000);
@@ -109,30 +104,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* NEW: Legal Consent Checkbox */}
-            <div className="flex items-start space-x-2 my-2">
-              <Checkbox 
-                id="terms" 
-                checked={agreedToTerms}
-                onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <label
-                  htmlFor="terms"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  I agree to the{" "}
-                  <Link href="/legal/terms" target="_blank" className="text-primary hover:underline">
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="/legal/privacy" target="_blank" className="text-primary hover:underline">
-                    Privacy Policy
-                  </Link>
-                </label>
-              </div>
-            </div>
-
             {error && (
               <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -181,5 +152,17 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   );
 }
