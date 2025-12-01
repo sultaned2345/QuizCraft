@@ -1,28 +1,31 @@
+// src/app/signup/page.tsx
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // --- Visual Effects ---
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 
-// --- Aurora Background (REVERTED TO PRETTY VALUES) ---
+// --- Aurora Background (Local) ---
 function AuroraBackground() {
   return (
     <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-zinc-950">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] animate-aurora-1 opacity-50" />
-      <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[100px] animate-aurora-2 opacity-40" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[120px] animate-aurora-3 opacity-40" />
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/30 blur-[120px] animate-aurora-1 opacity-80" />
+      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] rounded-full bg-blue-500/20 blur-[100px] animate-aurora-2 opacity-70" />
+      <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[50%] rounded-full bg-purple-500/25 blur-[120px] animate-aurora-3 opacity-70" />
     </div>
   );
 }
 
+// --- Form Component ---
 function SignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +38,7 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Smart Pre-fill Logic
   useEffect(() => {
     const emailParam = searchParams.get('email');
     if (emailParam) {
@@ -60,7 +64,7 @@ function SignupForm() {
         setError(error.message || 'Failed to create an account. Please try again.');
       } else {
         if (data.session) {
-          router.push('/documents');
+          router.push('/documents'); // Redirect immediately
         } else {
           setMessage('Account created successfully! Redirecting...');
           setTimeout(() => router.push('/documents'), 2000);
@@ -141,13 +145,14 @@ function SignupForm() {
   );
 }
 
+// --- Main Page Layout ---
 export default function SignupPage() {
   return (
-    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans selection:bg-primary/20 bg-background text-foreground">
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans selection:bg-primary/20">
        <SpotlightCursor />
 
        {/* LEFT COLUMN: Form */}
-       <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+       <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative bg-background">
         <Link href="/" className="absolute top-8 left-8 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors z-20">
            <ArrowLeft className="w-4 h-4" /> Back to Home
         </Link>
@@ -173,10 +178,14 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Brand & Aurora (Clean & Elegant) */}
-      <div className="hidden lg:flex items-center justify-center relative overflow-hidden p-10 flex-col gap-6 text-white bg-zinc-900">
-        <AuroraBackground />
+      {/* RIGHT COLUMN: Brand & Aurora */}
+      <div className="hidden lg:flex items-center justify-center relative overflow-hidden p-10 flex-col gap-6 text-white">
+        {/* Background Layer */}
+        <div className="absolute inset-0 bg-zinc-900 z-0">
+           <AuroraBackground />
+        </div>
         
+        {/* Glass Overlay for Text */}
         <div className="relative z-10 flex flex-col items-center justify-center max-w-lg text-center">
             <Link href="/" className="flex items-center gap-3 mb-8 group">
                 <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white p-3 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-xl">
