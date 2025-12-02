@@ -1,11 +1,9 @@
 // src/app/legal/privacy/page.tsx
 import { MarkdownViewer } from '@/components/MarkdownViewer';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 const PRIVACY_POLICY_CONTENT = `
-# Privacy Policy
-
-**Last Updated:** ${new Date().toLocaleDateString()}
-
 **IMPORTANT NOTICE: BY USING QUIZCRAFT, YOU AGREE TO THE PRACTICES DESCRIBED IN THIS POLICY. IF YOU DO NOT AGREE, PLEASE DO NOT USE THE SERVICES.**
 
 This Privacy Policy describes the personal information collected by **QuizCraft** (“we,” “us,” or “our”), a service operating out of **Ras Al-Khaimah, United Arab Emirates**, through our website and application (“Services”).
@@ -89,17 +87,19 @@ For privacy concerns or to exercise your rights:
 
 export default function PrivacyPage() {
   return (
-    <div className="container mx-auto py-12 px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Legal & Privacy</h1>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Privacy Policy</h1>
         <p className="text-muted-foreground">
-          Your rights, our obligations, and terms of use.
+          Last Updated: {new Date().toLocaleDateString()}
         </p>
       </div>
-      
-      <div className="bg-card border rounded-lg p-6 md:p-10 shadow-sm">
-        <MarkdownViewer content={PRIVACY_POLICY_CONTENT} />
-      </div>
+      <Separator />
+      <Card className="shadow-sm border-muted">
+        <CardContent className="p-8">
+          <MarkdownViewer content={PRIVACY_POLICY_CONTENT} className="prose-zinc dark:prose-invert" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

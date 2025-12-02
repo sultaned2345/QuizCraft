@@ -1,11 +1,9 @@
 // src/app/legal/terms/page.tsx
 import { MarkdownViewer } from '@/components/MarkdownViewer';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 const TERMS_CONTENT = `
-# Terms of Service
-
-**Last Updated:** ${new Date().toLocaleDateString()}
-
 **PLEASE READ CAREFULLY. THESE TERMS CONTAIN A MANDATORY ARBITRATION PROVISION AND CLASS ACTION WAIVER.**
 
 By accessing or using the QuizCraft website and application ("Services"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, you must immediately cease using the Services.
@@ -100,17 +98,19 @@ We may modify these Terms at any time. If we make material changes, we will prov
 
 export default function TermsPage() {
   return (
-    <div className="container mx-auto py-12 px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Terms of Service</h1>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Terms of Service</h1>
         <p className="text-muted-foreground">
           Last Updated: {new Date().toLocaleDateString()}
         </p>
       </div>
-      
-      <div className="bg-card border rounded-lg p-6 md:p-10 shadow-sm">
-        <MarkdownViewer content={TERMS_CONTENT} />
-      </div>
+      <Separator />
+      <Card className="shadow-sm border-muted">
+        <CardContent className="p-8">
+          <MarkdownViewer content={TERMS_CONTENT} className="prose-zinc dark:prose-invert" />
+        </CardContent>
+      </Card>
     </div>
   );
 }
