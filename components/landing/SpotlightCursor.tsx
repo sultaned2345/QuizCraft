@@ -1,25 +1,33 @@
 'use client';
-
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function SpotlightCursor() {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const cursorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({ x: e.clientX, y: e.clientY });
+    // Optimization: Don't run this logic on touch devices (phones/tablets)
+    // because they don't have a "hover" state usually.
+    if (window.matchMedia("(pointer: coarse)").matches) return;
+
+    const moveCursor = (e: MouseEvent) => {
+      if (cursorRef.current) {
+        // Direct DOM manipulation avoids React re-renders entirely
+        cursorRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+      }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', moveCursor, { passive: true });
+    return () => window.removeEventListener('mousemove', moveCursor);
   }, []);
 
   return (
-    <div
-      className="pointer-events-none fixed inset-0 z-50 transition-opacity duration-300"
-      style={{
-        background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(255,255,255,0.06), transparent 40%)`,
-      }}
-    />
+    <div 
+      ref={cursorRef}
+      className="fixed top-0 left-0 pointer-events-none z-50 -translate-x-1/2 -translate-y-1/2 hidden md:block"
+      style={{ willChange: 'transform' }} // Hint to browser to optimize
+    >
+      {/* The Glow Effect */}
+      <div className="w-[300px] h-[300px] bg-primary/20 rounded-full blur-[100px]" />
+    </div>
   );
 }
