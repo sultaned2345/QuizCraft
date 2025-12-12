@@ -2,17 +2,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light Mode Theme - Clean & Bright */
+/* --- 1. THEME VARIABLES (Preserved) --- */
 :root {
   --background: oklch(100% 0 0); /* Pure White */
   --foreground: oklch(29.23% 0.02 263.88); /* Dark Gray for Text */
-  --card: oklch(100% 0 0); /* Pure White */
+  --card: oklch(100% 0 0);
   --card-foreground: oklch(29.23% 0.02 263.88);
   --popover: oklch(100% 0 0);
   --popover-foreground: oklch(29.23% 0.02 263.88);
   --primary: oklch(57.56% 0.16 270.38); /* A vibrant purple */
   --primary-foreground: oklch(98.83% 0.01 292.34);
-  --secondary: oklch(96.86% 0.01 263.88); /* Light Gray */
+  --secondary: oklch(96.86% 0.01 263.88);
   --secondary-foreground: oklch(29.23% 0.02 263.88);
   --muted: oklch(96.86% 0.01 263.88);
   --muted-foreground: oklch(56.88% 0.02 263.88);
@@ -26,17 +26,16 @@
   --radius: 0.75rem;
 }
 
-/* Dark Mode Theme - Inspired by YouLearn AI */
 .dark {
   --background: oklch(15% 0 0); /* Dark Gray */
-  --foreground: oklch(98.83% 0.01 292.34); /* Light Gray for Text */
-  --card: oklch(20% 0 0); /* Slightly Lighter Gray */
+  --foreground: oklch(98.83% 0.01 292.34);
+  --card: oklch(20% 0 0);
   --card-foreground: oklch(98.83% 0.01 292.34);
   --popover: oklch(15% 0 0);
   --popover-foreground: oklch(98.83% 0.01 292.34);
-  --primary: oklch(65.91% 0.17 270.38); /* Brighter Purple for Dark Mode */
+  --primary: oklch(65.91% 0.17 270.38);
   --primary-foreground: oklch(98.83% 0.01 292.34);
-  --secondary: oklch(25% 0 0); /* Medium Dark Gray */
+  --secondary: oklch(25% 0 0);
   --secondary-foreground: oklch(98.83% 0.01 292.34);
   --muted: oklch(25% 0 0);
   --muted-foreground: oklch(69.83% 0.01 292.34);
@@ -84,30 +83,53 @@
   }
 }
 
-/* --- ADDED: Aurora Animations --- */
-@layer utilities {
-  @keyframes aurora-1 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(30px, -50px) scale(1.1); }
-    66% { transform: translate(-20px, 20px) scale(0.9); }
-  }
-  @keyframes aurora-2 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(-30px, 40px) scale(1.1); }
-    66% { transform: translate(25px, -30px) scale(0.95); }
-  }
-  @keyframes aurora-3 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(20px, 30px) scale(1.05); }
-    66% { transform: translate(-15px, -25px) scale(0.9); }
-  }
+/* --- 2. LIGHTWEIGHT ANIMATIONS (New) --- */
+/* Simple CSS animations to replace heavy JS libraries */
 
-  .animate-aurora-1 { animation: aurora-1 15s infinite alternate linear; }
-  .animate-aurora-2 { animation: aurora-2 18s infinite alternate linear; }
-  .animate-aurora-3 { animation: aurora-3 20s infinite alternate linear; }
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* --- NProgress Styles --- */
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+  opacity: 0; /* Ensures elements don't flicker before animating */
+}
+
+/* Stagger delays for sequential animations */
+.delay-0 { animation-delay: 0ms; }
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* --- 3. PERFORMANCE UTILITIES (New) --- */
+
+/* Forces GPU acceleration for smoother transforms */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Respect user motion preferences (Accessibility + Performance) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- 4. PROGRESS BAR STYLES (Preserved) --- */
 #nprogress {
   pointer-events: none;
 }
