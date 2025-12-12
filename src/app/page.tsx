@@ -3,82 +3,47 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic"; // 1. IMPORT DYNAMIC
 import { LandingHeader } from "@/components/LandingHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowRight, Sparkles, User, CheckCircle2, Download, Globe, Smartphone } from "lucide-react";
+import { ArrowRight, Sparkles, User, CheckCircle2, Smartphone } from "lucide-react";
+import { AuroraBackground } from "@/components/landing/AuroraBackground";
+import { TestimonialCard } from "@/components/landing/TestimonialCard";
 
-// --- Restore Your Custom Components ---
-import { BentoGrid } from "@/components/landing/BentoGrid";
-import { BrainToQuizSection } from "@/components/landing/BrainToQuizSection";
-import { Typewriter } from "@/components/landing/Typewriter";
+// --- 2. LAZY LOAD HEAVY COMPONENTS ---
+// This splits the code. The browser won't download these massive files 
+// until the user actually sees the page, saving huge amounts of bandwidth and CPU.
 
-// --- 1. OPTIMIZED AURORA (Hybrid: Static on Mobile, Animated on Desktop) ---
-function AuroraBackground() {
-  return (
-    <div className="absolute inset-0 -z-20 overflow-hidden pointer-events-none">
-      {/* Mobile: Static Gradient (Zero Lag) */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(124,58,237,0.15),transparent_80%)] md:hidden" />
-      
-      {/* Desktop: GPU Accelerated Animation */}
-      <div className="hidden md:block">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[100px] animate-aurora-1 opacity-50 will-change-transform translate-z-0" />
-        <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-blue-500/10 blur-[80px] animate-aurora-2 opacity-40 will-change-transform translate-z-0" />
-        <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] rounded-full bg-purple-500/15 blur-[100px] animate-aurora-3 opacity-40 will-change-transform translate-z-0" />
-      </div>
-    </div>
-  );
-}
+const BentoGrid = dynamic(
+  () => import("@/components/landing/BentoGrid").then((mod) => mod.BentoGrid),
+  { 
+    loading: () => <div className="h-[600px] w-full bg-muted/5 animate-pulse rounded-3xl" />,
+    ssr: false // Disable SSR for smoother initial load
+  }
+);
 
-// --- 2. OPTIMIZED SPOTLIGHT (No Re-renders) ---
-function SpotlightCursor() {
-  const cursorRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    // Disable on touch devices to save resources
-    if (window.matchMedia("(pointer: coarse)").matches) return;
+const BrainToQuizSection = dynamic(
+  () => import("@/components/landing/BrainToQuizSection").then((mod) => mod.BrainToQuizSection),
+  { 
+    loading: () => <div className="h-[400px] w-full bg-muted/5 animate-pulse rounded-3xl" />,
+    ssr: false 
+  }
+);
 
-    const moveCursor = (e: MouseEvent) => {
-      if (cursorRef.current) {
-        // Direct DOM update = 60FPS smoothness
-        cursorRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
-      }
-    };
-    window.addEventListener('mousemove', moveCursor, { passive: true });
-    return () => window.removeEventListener('mousemove', moveCursor);
-  }, []);
+const Typewriter = dynamic(
+  () => import("@/components/landing/Typewriter").then((mod) => mod.Typewriter),
+  { ssr: false }
+);
 
-  return (
-    <div ref={cursorRef} className="fixed top-0 left-0 pointer-events-none z-50 -translate-x-1/2 -translate-y-1/2 hidden md:block">
-      <div className="w-8 h-8 bg-primary/30 rounded-full blur-lg" />
-    </div>
-  );
-}
+const SpotlightCursor = dynamic(
+  () => import("@/components/landing/SpotlightCursor").then((mod) => mod.SpotlightCursor),
+  { ssr: false }
+);
 
-// --- 3. LIGHTWEIGHT TESTIMONIAL CARD (No heavy backdrop-blur) ---
-function TestimonialCard({ quote, name, title }: { quote: string; name: string; title: string }) {
-  return (
-    <Card className="h-full flex flex-col bg-card/60 border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-      <CardContent className="pt-6 flex-1">
-        <blockquote className="text-lg leading-relaxed text-foreground/90">"{quote}"</blockquote>
-      </CardContent>
-      <CardFooter>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-            <User className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="font-semibold">{name}</p>
-            <p className="text-sm text-muted-foreground">{title}</p>
-          </div>
-        </div>
-      </CardFooter>
-    </Card>
-  );
-}
-
+// --- CONSTANTS ---
 const AURORA_TEXT_CLASS = "text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-600 font-extrabold";
 
 export default function LandingPage() {
@@ -92,17 +57,17 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans relative selection:bg-primary/20">
+    <div className="flex flex-col min-h-screen font-sans relative selection:bg-primary/20 overflow-x-hidden">
       <SpotlightCursor />
       <LandingHeader />
 
       <main className="flex-1 relative">
         <AuroraBackground />
 
-        {/* Hero Section */}
-        <section className="relative py-20 md:py-32 overflow-hidden">
+        {/* Hero Section - Optimized with 'will-change' hint */}
+        <section className="relative py-20 md:py-32 overflow-hidden will-change-transform">
           <div className="container mx-auto px-4 md:px-6 text-center z-10 relative">
-            <div className="inline-flex items-center rounded-full border border-primary/20 bg-background/80 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
+            <div className="inline-flex items-center rounded-full border border-primary/20 bg-background/80 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm backdrop-blur-sm">
               <Sparkles className="mr-2 h-3.5 w-3.5" />
               <span>Now with AI Essay Grading</span>
             </div>
@@ -132,11 +97,11 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Interactive Sections */}
+        {/* Heavy Sections are now Lazy Loaded */}
         <BrainToQuizSection />
         <BentoGrid />
 
-        {/* Testimonials */}
+        {/* Testimonials - Simplified rendering */}
         <section className="py-24">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
@@ -152,7 +117,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ */}
+        {/* FAQ Section */}
         <section className="py-24 bg-muted/20">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
             <div className="text-center mb-12">
@@ -175,7 +140,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* CTA */}
+        {/* CTA Section */}
         <section className="py-32 relative overflow-hidden">
           <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
             <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">
