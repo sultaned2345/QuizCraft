@@ -3,11 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mic, Square, Loader2, FileText, Brain, Layers, FileQuestion, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ApiResponse } from '@/types/database';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter } from 'next/navigation';
 
@@ -20,7 +18,7 @@ export function RecordingsClient() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [generatingId, setGeneratingId] = useState<string | null>(null); // Track which item is generating content
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -29,12 +27,15 @@ export function RecordingsClient() {
 
   const fetchRecordings = async () => {
     if (!session) return;
-    const res = await fetch('/api/recordings', { headers: { Authorization: `Bearer ${session.access_token}`}});
-    const data = await res.json();
-    if (data.success) setRecordings(data.data);
+    try {
+        const res = await fetch('/api/recordings', { headers: { Authorization: `Bearer ${session.access_token}`}});
+        const data = await res.json();
+        if (data.success) setRecordings(data.data);
+    } catch (e) {
+        console.error(e);
+    }
   };
 
-  // --- Recording Logic ---
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -83,7 +84,6 @@ export function RecordingsClient() {
       fetchRecordings();
   }
 
-  // --- Generation Logic ---
   const generateContent = async (type: 'quiz' | 'note' | 'flashcards', recording: any) => {
       if(!recording.transcript) return;
       setGeneratingId(recording.id);
@@ -117,10 +117,9 @@ export function RecordingsClient() {
 
           toast({ title: "Success!", description: `${type.toUpperCase()} generated successfully.` });
           
-          // Redirect to the new content
           if (type === 'quiz' && data.id) router.push(`/quiz/${data.id}`);
           if (type === 'flashcards' && data.data?.id) router.push(`/flashcards/${data.data.id}`);
-          if (type === 'note' && data.data?.count) router.push(`/notes`); // Notes API doesn't return ID immediately in all versions, checking count
+          if (type === 'note' && data.data?.count) router.push(`/notes`);
 
       } catch (e: any) {
           toast({ title: "Generation Failed", description: e.message, variant: "destructive" });

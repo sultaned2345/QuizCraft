@@ -18,8 +18,9 @@ import {
   User,
   CreditCard,
   FolderKanban,
+  Mic, // <-- IMPORT THIS
 } from 'lucide-react';
-import { useState, Suspense } from 'react'; // Import Suspense
+import { useState, Suspense } from 'react';
 import { PageProvider } from '@/contexts/PageContext';
 import {
   Tooltip,
@@ -37,7 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import dynamic from 'next/dynamic';
 import { ChatToggleButton } from '@/components/ChatToggleButton';
-import { PageProgressBar } from '@/components/PageProgressBar'; // <-- 1. IMPORT
+import { PageProgressBar } from '@/components/PageProgressBar';
 
 const ChatWidgetContainer = dynamic(
   () =>
@@ -111,7 +112,7 @@ const AppHeader = () => {
   );
 };
 
-// --- SidebarNav (Client Component, needs usePathname) ---
+// --- SidebarNav (Client Component) ---
 const SidebarNav = () => {
   const pathname = usePathname();
 
@@ -120,6 +121,7 @@ const SidebarNav = () => {
     { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
+    { href: '/recordings', label: 'Voice Notes', icon: Mic }, // <-- ADDED THIS
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
     { href: '/account', label: 'Account', icon: CreditCard, isLast: true },
@@ -203,7 +205,6 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <PageProvider>
-      {/* 2. WRAP in Suspense to make router events trigger */}
       <Suspense fallback={null}>
         <PageProgressBar />
       </Suspense>
@@ -219,19 +220,15 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-4">
-            {/* The SidebarNav is a client component, so it's fine here */}
             <SidebarNav /> 
           </div>
         </aside>
 
         <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-20">
-          {/* The AppHeader is a client component, so it's fine here */}
           <AppHeader /> 
-          {/* --- THIS IS THE FIX --- */}
           <main className="flex-1 p-4 sm:px-6 sm:py-0 flex flex-col overflow-hidden">
-            {children} {/* This children prop will be the Server Component page */}
+            {children} 
           </main>
-          {/* --- END FIX --- */}
         </div>
 
         {!isDocumentPage && (
