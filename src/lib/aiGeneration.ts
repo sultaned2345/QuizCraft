@@ -1,30 +1,38 @@
 // src/lib/aiGeneration.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuestionType } from '@/types/database'; // Adjust path if needed
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
+import Groq from "groq-sdk"; // Requires: npm install groq-sdk
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-// --- CONFIGURATION ---
-// User-specified model
+// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
 
-// Flash models support 1M+ tokens, so 100k chars is very safe
+// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
+// The Flash model can handle up to 1M tokens, so this is safe.
 const MAX_INPUT_LENGTH = 100000; 
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
 }
 
+if (!GROQ_API_KEY) {
+    console.warn("Missing GROQ_API_KEY environment variable. Voice notes will fail.");
+}
+
 const genAI = new GoogleGenerativeAI(API_KEY);
+const groq = new Groq({ apiKey: GROQ_API_KEY });
 
 /**
  * Strips HTML tags and checks if the remaining text is meaningful.
- * Crucial for validating AI responses.
  */
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
+    // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
 
@@ -51,7 +59,7 @@ function buildQuizPrompt({
       ? 'MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_THE_BLANK, and MATCHING'
       : questionType;
 
-  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts.`;
+  const system = `You are an expert quiz creator. Based ONLY on the provided text, generate exactly ${numQuestions} ${difficulty} difficulty ${questionTypes} questions. Focus on the most important concepts and information in the text. For each question, provide a brief explanation for the correct answer derived strictly from the text.`;
 
   const user = `Generate ${numQuestions} ${difficulty} difficulty quiz questions of the following type(s): ${questionTypes}, based *only* on the content below.
 
@@ -62,7 +70,7 @@ ${text}
 
 Return ONLY valid JSON with this exact shape:
 {
-  "title": "string", // a concise quiz title
+  "title": "string", // a concise quiz title based on the content
   "questions": [
     {
       "question_text": "string",
@@ -78,11 +86,19 @@ Return ONLY valid JSON with this exact shape:
       "explanation": "string"
     },
     {
-      "question_text": "string", // use "____" for the blank
+      "question_text": "string", // use "____" for the blank(s)
       "question_type": "FILL_IN_THE_BLANK",
-      "options": ["string"], 
-      "correct_answer": "N/A", 
+      "options": ["string"], // An array of one or more acceptable answers
+      "correct_answer": "N/A", // Not used, options array is used
       "explanation": "string"
+    },
+    {
+      "question_text": "Match the following items:",
+      "question_type": "MATCHING",
+      "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
+      "options": ["Answer 1", "Answer 2", "Answer 3"], // Corresponding answers in order
+      "correct_answer": "N/A",
+      "explanation": "Explanation of how the items are related."
     }
   ]
 }`;
@@ -95,7 +111,7 @@ export async function callAIToGenerateQuiz(
   difficulty: Difficulty = 'medium',
   questionType: QuestionTypeOption = 'MIXED'
 ): Promise<{ title: string; questions: any[] }> {
-  if (!API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY');
+  if (!API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
 
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
@@ -105,6 +121,7 @@ export async function callAIToGenerateQuiz(
     },
   });
 
+  // Safety truncate
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
 
@@ -118,18 +135,18 @@ export async function callAIToGenerateQuiz(
   try {
     parsed = JSON.parse(content);
   } catch (parseError) {
-    console.error("Failed to parse AI response, trying regex fallback...");
+    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (e) { throw new Error(`Invalid JSON structure.`); }
+      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
     } else {
-      throw new Error(`Invalid JSON structure.`);
+      throw new Error(`Invalid JSON structure. No JSON object found.`);
     }
   }
 
-  if (!parsed || !parsed.questions || !Array.isArray(parsed.questions)) {
-     throw new Error("Invalid quiz format returned by AI");
+  if (!parsed || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+    throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
   }
 
   const sanitizedQuestions = parsed.questions.map((q: any) => ({
@@ -145,38 +162,34 @@ export async function callAIToGenerateQuiz(
 }
 
 // ---------------------------------------------------------------------------
-// 2. NOTE GENERATION (Updated for Audio Transcripts)
+// 2. NOTE GENERATION
 // ---------------------------------------------------------------------------
 
 function buildNotePrompt({ text }: { text: string }): string {
-  // --- UPDATED PROMPT FOR LECTURE HANDLING ---
-  return `You are an expert academic note-taker. The content below may be a **raw transcript of a spoken lecture**, which might contain conversational filler (um, uh, like), tangents, or messy grammar.
+  return `You are an expert note-taker. Based on the following content, generate structured summary notes.
 
-Your goal is to convert this text into clean, structured, and professional study notes.
+You MUST format the notes as clean, semantic HTML.
+- Use <h2> for main topics.
+- Use <h3> for sub-topics.
+- Use <ul> and <li> for bullet points.
+- Use <strong> for key terms.
+- Use <p> for paragraphs.
+- Do NOT use any Markdown (like ##, **, or -).
+- Do NOT use <html>, <body>, or <head> tags.
+- The HTML content must be detailed and capture the essential information.
 
-Guidelines:
-1. **Clean Up:** Ignore filler words, repetitions, and irrelevant tangents.
-2. **Structure:** Organize by clear logical topics and sub-topics.
-3. **Format (HTML):**
-   - Use <h2> for main topics.
-   - Use <h3> for sub-topics.
-   - Use <ul> and <li> for bullet points (crucial for readability).
-   - Use <strong> for key terms and definitions.
-   - Use <p> for detailed explanations.
-   - Do NOT use Markdown symbols (like ## or **). Return pure HTML string.
-   - Do NOT use <html>, <body>, or <head> tags.
-
-Content to summarize:
+Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape:
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
+
 {
   "notes": [
     {
-      "title": "Concise Lecture Title",
-      "content": "<h2>Main Topic</h2><p>Explanation...</p><ul><li>Point 1</li></ul>..."
+      "title": "Concise Title Reflecting Main Topic",
+      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
     }
   ]
 }`;
@@ -188,7 +201,7 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
     generationConfig: {
-      temperature: 0.5, // Slightly higher for smoother writing
+      temperature: 0.5,
       responseMimeType: "application/json",
     },
   });
@@ -204,17 +217,17 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   try {
     parsed = JSON.parse(content);
   } catch (parseError) {
-    console.warn("Failed to parse AI response, trying fallback...", content.substring(0, 100));
+    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (e) { throw new Error(`Invalid JSON structure.`); }
+      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
     } else {
-      throw new Error(`Invalid JSON structure.`);
+      throw new Error(`Invalid JSON structure. No JSON object found.`);
     }
   }
 
-  // --- ROBUST VALIDATION ---
+  // Validations
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
@@ -222,15 +235,16 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     !parsed.notes[0].title ||
     typeof parsed.notes[0].content !== 'string'
   ) {
-    console.error("Invalid note structure:", parsed);
-    throw new Error("AI failed to return valid note structure with title/content.");
+    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
+    throw new Error("AI failed to return a valid note structure with title and content.");
   }
 
+  // Check for meaningful content
   if (!isContentMeaningful(parsed.notes[0].content)) {
-     console.error("Meaningless content generated:", parsed.notes[0]);
+     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
      throw new Error("AI failed to generate meaningful content for this note.");
   }
-
+  
   return parsed.notes[0];
 }
 
@@ -253,13 +267,13 @@ ${text}
 Return ONLY valid JSON in this exact shape:
 {
   "flashcards": [
-    { "front_content": "Term/Question", "back_content": "Definition/Answer" }
+    { "front_content": "...", "back_content": "..." }
   ]
 }`;
 }
 
 export async function callAIToGenerateFlashcards(text: string, numCards: number): Promise<{ front_content: string; back_content: string; }[]> {
-  if (!API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY');
+  if (!API_KEY) throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
 
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
@@ -280,13 +294,13 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
   try {
     parsed = JSON.parse(content);
   } catch (parseError) {
-    console.warn("Failed to parse AI response, trying fallback...");
+    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (e) { throw new Error(`Invalid JSON structure.`); }
+      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
     } else {
-      throw new Error(`Invalid JSON structure.`);
+      throw new Error(`Invalid JSON structure. No JSON object found.`);
     }
   }
 
@@ -294,4 +308,66 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
     throw new Error("AI failed to return valid flashcards.");
   }
   return parsed.flashcards;
+}
+
+// ---------------------------------------------------------------------------
+// 4. AUDIO PROCESSING (VOICE NOTES - GROQ)
+// ---------------------------------------------------------------------------
+
+/**
+ * Processes an audio file using Groq:
+ * 1. Transcribes using Whisper (distil-whisper-large-v3-en).
+ * 2. Generates Title, Summary, and Suggestions using Llama3.
+ */
+export async function callAIToProcessAudio(audioFile: File): Promise<{ title: string; transcript: string; summary: string; suggestions: string[] }> {
+  if (!GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY environment variable");
+
+  // 1. Transcribe (Whisper)
+  // Note: Groq SDK accepts File/Blob/Buffer directly in node depending on version, 
+  // but for Next.js Route Handlers receiving FormData, 'audioFile' (File) works well.
+  const transcription = await groq.audio.transcriptions.create({
+    file: audioFile,
+    model: "distil-whisper-large-v3-en",
+    response_format: "json",
+    language: "en",
+    temperature: 0.0,
+  });
+
+  const transcriptText = transcription.text;
+  if (!transcriptText) throw new Error("Transcription failed or returned empty text.");
+
+  // 2. Analyze (Llama 3)
+  const systemPrompt = `You are an expert study assistant. Analyze the following transcript.
+  
+  Return a valid JSON object with:
+  - "title": A concise, descriptive title.
+  - "summary": A brief summary of key points (max 3 sentences).
+  - "suggestions": An array of 3-5 specific study action items or follow-up questions.`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: transcriptText }
+    ],
+    model: "llama3-70b-8192",
+    temperature: 0.5,
+    response_format: { type: "json_object" },
+  });
+
+  const analysisContent = completion.choices[0]?.message?.content;
+  if (!analysisContent) throw new Error("Analysis failed or returned empty content.");
+
+  let analysis: any;
+  try {
+    analysis = JSON.parse(analysisContent);
+  } catch (e) {
+    throw new Error("Failed to parse AI analysis JSON.");
+  }
+
+  return {
+    title: analysis.title || "Untitled Recording",
+    transcript: transcriptText,
+    summary: analysis.summary || "No summary available.",
+    suggestions: Array.isArray(analysis.suggestions) ? analysis.suggestions : []
+  };
 }
