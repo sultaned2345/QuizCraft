@@ -131,7 +131,7 @@ export function RecordingsClient() {
   return (
     <div className="container max-w-4xl py-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Voice Notes</h1>
+        <h1 className="text-3xl font-bold">Recordings</h1>
         <div className="flex gap-2">
             {!isRecording ? (
                 <Button onClick={startRecording} disabled={isProcessing} className="bg-red-600 hover:bg-red-700">

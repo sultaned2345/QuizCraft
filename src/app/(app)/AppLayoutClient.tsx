@@ -18,7 +18,7 @@ import {
   User,
   CreditCard,
   FolderKanban,
-  Mic, // <-- IMPORT THIS
+  Mic, // <-- IMPORTED
 } from 'lucide-react';
 import { useState, Suspense } from 'react';
 import { PageProvider } from '@/contexts/PageContext';
@@ -121,7 +121,9 @@ const SidebarNav = () => {
     { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
-    { href: '/recordings', label: 'Voice Notes', icon: Mic }, // <-- ADDED THIS
+    // --- ADDED RECORDINGS HERE ---
+    { href: '/recordings', label: 'Recordings', icon: Mic },
+    // ---------------------------
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
     { href: '/account', label: 'Account', icon: CreditCard, isLast: true },
@@ -220,14 +222,14 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="flex-1 overflow-auto py-4">
-            <SidebarNav /> 
+            <SidebarNav />
           </div>
         </aside>
 
         <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-20">
-          <AppHeader /> 
+          <AppHeader />
           <main className="flex-1 p-4 sm:px-6 sm:py-0 flex flex-col overflow-hidden">
-            {children} 
+            {children}
           </main>
         </div>
 
