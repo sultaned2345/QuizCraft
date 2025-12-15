@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient'; // Import for Google Auth
+import { useToast } from '@/hooks/use-toast';
 
 // --- Visual Effects ---
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
@@ -31,12 +33,14 @@ function SignupForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   
   const { signUp } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
 
   // Smart Pre-fill Logic
   useEffect(() => {
@@ -77,71 +81,124 @@ function SignupForm() {
     }
   };
 
+  // --- NEW: Google Login Handler ---
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+      // No need to redirect manually; Supabase handles the redirect to Google
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to initiate Google login.',
+        variant: 'destructive',
+      });
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 relative z-10">
-      <div className="grid gap-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-          required
-          className="bg-background/50 backdrop-blur-sm"
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          type="password"
-          placeholder="6+ characters"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-          required
-          className="bg-background/50 backdrop-blur-sm"
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="confirmPassword">Confirm Password</Label>
-        <Input
-          id="confirmPassword"
-          type="password"
-          placeholder="Re-enter password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          disabled={loading}
-          required
-          className="bg-background/50 backdrop-blur-sm"
-        />
-      </div>
-
-      {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <span>{error}</span>
+    <div className="grid gap-4 relative z-10">
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading || googleLoading}
+            required
+            className="bg-background/50 backdrop-blur-sm"
+          />
         </div>
-      )}
-
-      {message && (
-        <div className="flex items-start gap-3 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
-          <CheckCircle className="h-5 w-5 flex-shrink-0" />
-          <span>{message}</span>
+        <div className="grid gap-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="6+ characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading || googleLoading}
+            required
+            className="bg-background/50 backdrop-blur-sm"
+          />
         </div>
-      )}
+        <div className="grid gap-2">
+          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            placeholder="Re-enter password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            disabled={loading || googleLoading}
+            required
+            className="bg-background/50 backdrop-blur-sm"
+          />
+        </div>
 
-      <Button
-        type="submit"
-        className="w-full shadow-lg hover:shadow-primary/20 transition-all"
-        disabled={loading || message !== ''}
+        {error && (
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {message && (
+          <div className="flex items-start gap-3 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+            <CheckCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{message}</span>
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          className="w-full shadow-lg hover:shadow-primary/20 transition-all"
+          disabled={loading || googleLoading || message !== ''}
+        >
+          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          Create Account
+        </Button>
+      </form>
+
+      {/* --- DIVIDER --- */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Or continue with
+          </span>
+        </div>
+      </div>
+
+      {/* --- GOOGLE BUTTON --- */}
+      <Button 
+        variant="outline" 
+        className="w-full bg-background/50 backdrop-blur-sm" 
+        onClick={handleGoogleLogin} 
+        disabled={loading || googleLoading}
       >
-        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-        Create Account
+        {googleLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+            <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+          </svg>
+        )}
+        Google
       </Button>
-    </form>
+    </div>
   );
 }
 

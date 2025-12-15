@@ -1,5 +1,4 @@
 // src/app/(app)/account/page.tsx
-// NEW FILE
 
 import { getServerSession } from '@/lib/getServerSession';
 import { getUserUsage } from '@/lib/usage-limits';
@@ -8,16 +7,13 @@ import { AccountClient } from './AccountClient';
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 
-// This is the new React Server Component (RSC) for the account page.
-// Its only job is to fetch data and pass it to the client component.
-
 export default async function AccountPage() {
   const session = await getServerSession();
   if (!session?.user) {
     redirect('/login');
   }
 
-  // Fetch all usage data on the server using our existing helper
+  // Fetch all usage data on the server
   const usageData = await getUserUsage(session.user.id);
 
   return (
@@ -28,7 +24,13 @@ export default async function AccountPage() {
         </div>
       }
     >
-      <AccountClient initialData={usageData} />
+      <AccountClient 
+        initialData={usageData} 
+        user={{
+          id: session.user.id,
+          email: session.user.email || '',
+        }} 
+      />
     </Suspense>
   );
 }

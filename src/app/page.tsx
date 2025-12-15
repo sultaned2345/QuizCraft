@@ -1,10 +1,10 @@
 // src/app/page.tsx
 import Link from "next/link";
 import { LandingHeader } from "@/components/LandingHeader";
-import { Footer } from "@/components/Footer";
+import { Footer } from "@/components/Footer"; // Assuming you have this, or keep it if it was there
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge"; // Ensure you have this component or remove if not
+import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
   AccordionContent,
@@ -27,7 +27,11 @@ import {
   User,
   Briefcase,
   Check,
-  Zap,
+  Mic,
+  Youtube,
+  Link as LinkIcon,
+  CalendarDays,
+  BarChart3,
 } from "lucide-react";
 
 // --- Sub-Components for the Page (Server Components) ---
@@ -42,7 +46,7 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <Card className="border-muted bg-card/50 transition-all duration-300 ease-in-out hover:scale-[1.03] hover:shadow-lg">
+    <Card className="border-muted bg-card/50 transition-all duration-300 ease-in-out hover:scale-[1.03] hover:shadow-lg h-full">
       <CardHeader>
         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4">
           {icon}
@@ -226,16 +230,16 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 md:px-6 text-center">
             <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Sparkles className="mr-2 h-3.5 w-3.5" />
-              <span>Now with AI Essay Grading</span>
+              <span>Now with AI Lecture Analysis</span>
             </div>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-foreground mb-6 max-w-5xl mx-auto leading-[1.1]">
-              Your Personal <span className="text-primary">AI Tutor</span> & <br className="hidden sm:block" /> Study Partner
+              Your Personal <span className="text-primary">AI Tutor</span> & <br className="hidden sm:block" /> Second Brain
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              Upload any document, PDF, or note and instantly generate quizzes, 
-              flashcards, and summaries. Save hours of study time today.
+              Upload documents, record lectures, or paste YouTube links. 
+              Instantly generate quizzes, flashcards, and study plans to ace your exams.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -258,42 +262,57 @@ export default function LandingPage() {
         <section className="py-24 bg-muted/30">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need to ace exams</h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need to master any subject</h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                QuizCraft transforms your raw study materials into interactive learning tools automatically.
+                QuizCraft transforms raw content into a comprehensive active learning system.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
               <FeatureCard
                 icon={<MessageSquare className="w-6 h-6" />}
-                title="Chat with Documents"
-                description="Upload PDFs or docs and ask questions. Get instant, cited answers directly from your study materials."
+                title="Chat with Data (RAG)"
+                description="Upload PDFs or docs and ask questions. Get instant, hallucination-free answers cited directly from your source material."
               />
               <FeatureCard
                 icon={<FileQuestion className="w-6 h-6" />}
-                title="Instant Quizzes"
-                description="Generate multiple-choice, true/false, and fill-in-the-blank quizzes from any text in seconds."
+                title="Intelligent Quizzes"
+                description="Generate multiple-choice, true/false, and fill-in-the-blank quizzes. Includes immediate feedback and detailed AI explanations."
               />
               <FeatureCard
                 icon={<Layers className="w-6 h-6" />}
-                title="Smart Flashcards"
-                description="Convert notes into flashcard decks. Use our spaced-repetition mode to memorize facts faster."
+                title="Spaced Repetition"
+                description="Flashcards that know when you're about to forget. Our Anki-style algorithm optimizes your review schedule for long-term retention."
               />
               <FeatureCard
-                icon={<FileText className="w-6 h-6" />}
-                title="AI Summarizer"
-                description="Paste complex text or URLs to get concise, structured notes on the key concepts and definitions."
+                icon={<Mic className="w-6 h-6" />}
+                title="Audio & Lecture Notes"
+                description="Record live lectures or upload audio files. We transcribe, summarize, and turn spoken words into study materials automatically."
+              />
+              <FeatureCard
+                icon={<Youtube className="w-6 h-6" />}
+                title="YouTube to Quiz"
+                description="Paste a video link and instantly get a summary and test questions. Perfect for visual learners and tutorials."
               />
               <FeatureCard
                 icon={<PenTool className="w-6 h-6" />}
-                title="Essay Grader"
-                description="Get instant feedback on your writing. Our AI provides scores, highlights, and actionable advice."
+                title="AI Essay Grader"
+                description="Get instant scoring and feedback on your essays. Our AI critiques your argument, structure, and grammar based on academic rubrics."
+              />
+              <FeatureCard
+                icon={<LinkIcon className="w-6 h-6" />}
+                title="Connected Notes"
+                description="Build a 'Second Brain'. Create notes with bi-directional links to connect concepts across different topics and documents."
+              />
+              <FeatureCard
+                icon={<CalendarDays className="w-6 h-6" />}
+                title="Personalized Plans"
+                description="Not sure what to study? Let AI generate a daily study schedule based on your weak areas and upcoming exam dates."
               />
               <FeatureCard
                 icon={<FolderKanban className="w-6 h-6" />}
-                title="Project Organization"
-                description="Group related documents, quizzes, and decks into projects to keep your courses organized."
+                title="Project Management"
+                description="Organize disparate notes, quizzes, and decks into structured Projects to keep your entire curriculum in one place."
               />
             </div>
           </div>
@@ -303,8 +322,8 @@ export default function LandingPage() {
         <section className="py-24 bg-background">
           <div className="container mx-auto px-4 md:px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">From notes to knowledge in minutes</h2>
-              <p className="text-lg text-muted-foreground">Three simple steps to master any subject.</p>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">From raw input to mastery in minutes</h2>
+              <p className="text-lg text-muted-foreground">Three simple steps to supercharge your learning.</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto relative">
@@ -312,20 +331,20 @@ export default function LandingPage() {
               
               <StepCard 
                 number="1"
-                title="Upload Material"
-                description="Drag & drop your PDFs, documents, or paste text directly into the app."
+                title="Capture Content"
+                description="Upload PDFs, record audio, paste links, or write notes directly in the app."
                 icon={<Upload className="w-8 h-8" />}
               />
               <StepCard 
                 number="2"
-                title="AI Generation"
-                description="Our AI analyzes your content to create quizzes, notes, and study aids."
+                title="AI Synthesis"
+                description="Our engine extracts key concepts to build quizzes, flashcards, and summaries."
                 icon={<BrainCircuit className="w-8 h-8" />}
               />
               <StepCard 
                 number="3"
-                title="Master It"
-                description="Test yourself, track your progress, and improve with instant feedback."
+                title="Active Recall"
+                description="Test yourself with quizzes and spaced repetition to lock information into long-term memory."
                 icon={<GraduationCap className="w-8 h-8" />}
               />
             </div>
@@ -338,7 +357,7 @@ export default function LandingPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">For Every Kind of Learner</h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Whether you're a student or a professional, QuizCraft adapts to your needs.
+                Whether you're a student or a professional, QuizCraft adapts to your workflow.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -356,11 +375,11 @@ export default function LandingPage() {
                   <ul className="space-y-2">
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Instantly create study guides from notes.</span>
+                      <span>Instantly create study guides from PDFs.</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Chat with your syllabus or readings.</span>
+                      <span>Record lectures and get auto-summaries.</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -429,7 +448,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing Section (Added) */}
+        {/* Pricing Section */}
         <PricingSection />
 
         {/* FAQ Section */}
@@ -448,7 +467,7 @@ export default function LandingPage() {
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-lg">What file types are supported?</AccordionTrigger>
                 <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  You can upload `.pdf`, `.docx` (Word), `.pptx` (PowerPoint), and `.txt` files. You can also paste text directly or provide a URL for our AI to summarize.
+                  You can upload `.pdf`, `.docx`, `.pptx`, and text files. We also support **Audio files** (mp3, wav) for transcription and **YouTube links** for video learning.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-3">
