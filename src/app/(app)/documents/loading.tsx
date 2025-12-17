@@ -6,7 +6,7 @@ export default function DocumentsLoading() {
   return (
     <div className="space-y-8 pb-10">
       {/* Header Skeleton */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b pb-6">
         <div className="space-y-2">
           <Skeleton className="h-9 w-48" /> {/* Title */}
           <Skeleton className="h-4 w-32" /> {/* Usage Text */}
@@ -21,9 +21,9 @@ export default function DocumentsLoading() {
         </div>
       </div>
 
-      {/* Grid Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[...Array(6)].map((_, i) => (
+      {/* Grid Skeleton - Matches 2 col layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[...Array(4)].map((_, i) => (
           <DocumentCardSkeleton key={i} />
         ))}
       </div>

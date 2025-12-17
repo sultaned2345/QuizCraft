@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Loader2, Upload, FileText, Trash2, Eye, HelpCircle, Layers, 
   AlertCircle, CheckCircle, MoreVertical, Search, File as FileIcon,
-  Calendar, HardDrive
+  Calendar, HardDrive, Sparkles
 } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-parser';
 import { motion } from 'framer-motion';
@@ -98,7 +98,6 @@ export function DocumentsClientComponent() {
     }
   }, [swrData]);
 
-  // Client-side search filtering
   const filteredDocuments = useMemo(() => {
     if (!searchTerm) return documents;
     return documents.filter(doc => 
@@ -172,9 +171,7 @@ export function DocumentsClientComponent() {
       toast({ title: 'Uploaded!', description: `"${result.data.file_name}" added.` }); 
       setSelectedFile(null); 
       if(fileInputRef.current) fileInputRef.current.value = ''; 
-      
       await refreshFirstPage(); 
-      
       router.push(`/documents/${result.data.id}`); 
     } catch (error: any) { 
       if (!error.message.includes('limit reached')) { 
@@ -191,7 +188,6 @@ export function DocumentsClientComponent() {
     setDocuments(prevDocs => prevDocs.filter(d => d.id !== docId)); 
     setUsage(prev => ({ ...prev, count: (prev.count ?? 1) - 1 })); 
     setIsDeleting(true); 
-    
     try { 
       const response = await fetch(`/api/documents/${docId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } }); 
       const result: ApiResponse = await response.json(); 
@@ -213,38 +209,23 @@ export function DocumentsClientComponent() {
       toast({ title: "Processing", description: `A ${jobName} is already being generated.` });
       return;
     }
-
     setIsGenerating({ type: jobType, docId });
     toast({ title: "Started", description: `Generating ${jobName}...` });
-
     try {
       const response = await fetch('/api/generation-jobs/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({ documentId: docId, jobType: jobType })
       });
-
       const result: ApiResponse = await response.json();
-
-      if (response.status === 403) { 
-        openModal();
-        throw new Error(result.message || 'AI generation limit reached.');
-      } else if (response.status === 400) { 
-        throw new Error(result.error || 'Job already in progress.');
-      } else if (!response.ok || !result.success) {
-        throw new Error(result.error || `Failed to start ${jobName} job.`);
-      }
+      if (response.status === 403) { openModal(); throw new Error(result.message || 'AI generation limit reached.'); } 
+      else if (response.status === 400) { throw new Error(result.error || 'Job already in progress.'); } 
+      else if (!response.ok || !result.success) { throw new Error(result.error || `Failed to start ${jobName} job.`); }
 
       setRecentlyQueued(prev => new Set(prev).add(jobKey));
       toast({ title: "Success", description: `${jobName} queued successfully.`, icon: <CheckCircle className="w-5 h-5 text-green-500" /> });
-
     } catch (e: any) {
-      if (!e.message.includes('limit reached')) {
-        toast({ title: "Failed", description: e.message, variant: 'destructive' });
-      }
+      if (!e.message.includes('limit reached')) { toast({ title: "Failed", description: e.message, variant: 'destructive' }); }
     } finally {
       setIsGenerating(null);
     }
@@ -257,11 +238,11 @@ export function DocumentsClientComponent() {
   const getFileVisuals = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase();
     switch(ext) {
-      case 'pdf': return { color: 'text-red-600 dark:text-red-400', border: 'border-l-red-500', bg: 'bg-red-50 dark:bg-red-900/10', label: 'PDF', icon: FileText };
-      case 'docx': return { color: 'text-blue-600 dark:text-blue-400', border: 'border-l-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/10', label: 'DOCX', icon: FileIcon }; 
-      case 'pptx': return { color: 'text-orange-600 dark:text-orange-400', border: 'border-l-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/10', label: 'PPTX', icon: Layers };
-      case 'txt': return { color: 'text-slate-600 dark:text-slate-400', border: 'border-l-slate-500', bg: 'bg-slate-50 dark:bg-slate-900/10', label: 'TXT', icon: FileText };
-      default: return { color: 'text-gray-600 dark:text-gray-400', border: 'border-l-gray-500', bg: 'bg-gray-50 dark:bg-gray-900/10', label: ext?.toUpperCase() || 'FILE', icon: FileText };
+      case 'pdf': return { color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/20', border: 'border-red-100 dark:border-red-900/20', icon: FileText };
+      case 'docx': return { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/20', border: 'border-blue-100 dark:border-blue-900/20', icon: FileIcon }; 
+      case 'pptx': return { color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/20', border: 'border-orange-100 dark:border-orange-900/20', icon: Layers };
+      case 'txt': return { color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-950/20', border: 'border-slate-100 dark:border-slate-900/20', icon: FileText };
+      default: return { color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-950/20', border: 'border-gray-100 dark:border-gray-900/20', icon: FileText };
     }
   };
 
@@ -275,8 +256,8 @@ export function DocumentsClientComponent() {
              <div className="h-10 w-32 bg-muted animate-pulse rounded" />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => <DocumentCardSkeleton key={i} />)}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[...Array(4)].map((_, i) => <DocumentCardSkeleton key={i} />)}
         </div>
       </div>
     );
@@ -288,9 +269,7 @@ export function DocumentsClientComponent() {
         <AlertCircle className="h-10 w-10 text-destructive mb-4" />
         <h3 className="text-lg font-semibold text-destructive">Error Loading Documents</h3>
         <p className="text-sm text-muted-foreground mb-6">{swrError.message}</p>
-        <Button variant="outline" onClick={() => refreshFirstPage(undefined, { revalidate: true })}>
-          Try Again
-        </Button>
+        <Button variant="outline" onClick={() => refreshFirstPage(undefined, { revalidate: true })}>Try Again</Button>
       </div>
     );
   }
@@ -300,10 +279,9 @@ export function DocumentsClientComponent() {
       <div className="space-y-8 pb-10">
         
         {/* --- Header Section --- */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b pb-6">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">My Documents</h1>
-            {/* Reverted Usage Vis: Simple Text */}
             <p className="text-sm text-muted-foreground">
               {typeof usage.limit === 'number' && usage.limit !== Infinity 
                 ? `${usage.count} of ${usage.limit} documents used` 
@@ -313,18 +291,16 @@ export function DocumentsClientComponent() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-             {/* Search */}
              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Filter documents..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
+                  className="pl-9 bg-background/50 border-slate-200 dark:border-slate-800"
                 />
              </div>
              
-             {/* Standard Input & Upload Button */}
              <div className="flex gap-2 w-full sm:w-auto">
                  <div className="relative flex-1 sm:w-auto">
                    <Input 
@@ -336,7 +312,7 @@ export function DocumentsClientComponent() {
                       className="cursor-pointer file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                    />
                  </div>
-                 <Button onClick={handleUpload} disabled={!selectedFile || isUploading} className="shrink-0">
+                 <Button onClick={handleUpload} disabled={!selectedFile || isUploading} className="shrink-0 shadow-sm">
                     {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                  </Button>
              </div>
@@ -346,18 +322,18 @@ export function DocumentsClientComponent() {
 
         {/* --- Document Grid --- */}
         {filteredDocuments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 border border-dashed rounded-xl bg-muted/20">
+          <div className="flex flex-col items-center justify-center py-24 border border-dashed rounded-xl bg-slate-50/50 dark:bg-slate-900/50">
              <div className="bg-background p-4 rounded-full shadow-sm mb-4">
-                <FileText className="h-8 w-8 text-muted-foreground/50" />
+                <FileText className="h-10 w-10 text-muted-foreground/40" />
              </div>
-             <h3 className="text-lg font-semibold text-foreground">No documents found</h3>
-             <p className="text-sm text-muted-foreground">
+             <h3 className="text-xl font-semibold text-foreground">No documents found</h3>
+             <p className="text-sm text-muted-foreground mt-1">
                {searchTerm ? "No files match your search." : "Upload a file to generate quizzes and notes."}
              </p>
           </div>
         ) : (
           <motion.div 
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -371,48 +347,56 @@ export function DocumentsClientComponent() {
 
               return (
                 <motion.div key={doc.id} variants={itemVariants}>
-                  <Card className={cn("flex flex-col h-full overflow-hidden hover:shadow-lg transition-shadow duration-300 group border-l-4", visuals.border)}>
+                  <Card className={cn(
+                      "flex flex-col h-full border hover:border-primary/50 hover:shadow-lg transition-all duration-300 group overflow-hidden bg-card/50",
+                      visuals.border
+                  )}>
                     
                     {/* --- HEADER --- */}
-                    <CardHeader className="pb-3 pt-5">
-                       <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 overflow-hidden">
-                             <div className={cn("p-2 rounded-lg shrink-0", visuals.bg)}>
-                                <Icon className={cn("w-5 h-5", visuals.color)} />
+                    <CardHeader className="pb-3 pt-6 px-6">
+                       <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-4 overflow-hidden w-full">
+                             {/* Styled Icon Container */}
+                             <div className={cn("p-3.5 rounded-xl shrink-0 shadow-sm border border-black/5 dark:border-white/5", visuals.bg)}>
+                                <Icon className={cn("w-6 h-6", visuals.color)} />
                              </div>
-                             <div className="min-w-0">
-                                <h4 className="font-semibold text-sm truncate leading-tight" title={doc.file_name}>
+                             
+                             <div className="min-w-0 flex-1 pt-0.5">
+                                <h4 className="font-bold text-lg text-foreground truncate leading-tight mb-2" title={doc.file_name}>
                                   {doc.file_name}
                                 </h4>
-                                <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
-                                   <span className="flex items-center gap-1"><HardDrive className="w-3 h-3" /> {formatFileSize(doc.file_size)}</span>
-                                   <span>•</span>
-                                   <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(doc.created_at).toLocaleDateString()}</span>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                   <Badge variant="secondary" className="px-1.5 py-0 h-5 font-normal bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-0">
+                                     {doc.file_name.split('.').pop()?.toUpperCase() || 'FILE'}
+                                   </Badge>
+                                   <span className="flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5 opacity-70" /> {formatFileSize(doc.file_size)}</span>
+                                   <span className="text-border">|</span>
+                                   <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 opacity-70" /> {new Date(doc.created_at).toLocaleDateString()}</span>
                                 </div>
                              </div>
                           </div>
 
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 text-muted-foreground">
-                                <MoreVertical className="h-4 w-4" />
+                              <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 text-muted-foreground hover:bg-muted/80">
+                                <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="end" className="w-48">
                               <DropdownMenuItem onClick={() => router.push(`/documents/${doc.id}`)}>
-                                <Eye className="w-4 h-4 mr-2" /> Open
+                                <Eye className="w-4 h-4 mr-2" /> Open Document
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <AlertDialog>
                                   <AlertDialogTrigger asChild>
-                                      <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
-                                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={(e) => e.preventDefault()}>
+                                          <Trash2 className="w-4 h-4 mr-2" /> Delete File
                                       </DropdownMenuItem>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                       <AlertDialogHeader>
-                                          <AlertDialogTitle>Delete file?</AlertDialogTitle>
-                                          <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                          <AlertDialogTitle>Delete "{doc.file_name}"?</AlertDialogTitle>
+                                          <AlertDialogDescription>This will permanently remove the file and all generated quizzes.</AlertDialogDescription>
                                       </AlertDialogHeader>
                                       <AlertDialogFooter>
                                           <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
@@ -431,44 +415,72 @@ export function DocumentsClientComponent() {
                        </div>
                     </CardHeader>
 
-                    {/* --- BODY --- */}
-                    <CardContent className="flex-grow pb-3">
-                        <div className="text-xs text-muted-foreground line-clamp-3 bg-muted/30 p-3 rounded-md border border-border/40 italic h-full">
-                            {doc.ai_summary ? `"${doc.ai_summary}"` : "No summary generated yet."}
+                    {/* --- SUMMARY BODY --- */}
+                    <CardContent className="flex-grow pb-4 px-6">
+                        <div className="relative bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/50 dark:to-slate-900/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800 h-full group-hover:border-slate-200 dark:group-hover:border-slate-700 transition-colors">
+                            {doc.ai_summary ? (
+                              <>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                                  <span className="text-xs font-semibold text-primary/80 uppercase tracking-wider">AI Insight</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                                  {doc.ai_summary}
+                                </p>
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-20 text-center gap-1 opacity-60">
+                                <Sparkles className="w-5 h-5 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">No insight available</span>
+                              </div>
+                            )}
                         </div>
                     </CardContent>
 
-                    {/* --- FOOTER ACTIONS --- */}
-                    <CardFooter className="bg-muted/10 border-t pt-3 pb-3 px-4 flex items-center justify-between gap-2">
+                    {/* --- ACTIONS FOOTER --- */}
+                    <CardFooter className="bg-muted/10 border-t py-3 px-6 flex items-center justify-between gap-4">
                         <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex-1 text-xs h-8 bg-background hover:bg-muted/50"
+                            className="flex-1 font-medium shadow-sm transition-all active:scale-[0.98]"
                             onClick={() => router.push(`/documents/${doc.id}`)}
                         >
-                            View
+                            View & Chat
                         </Button>
+                        
                         <div className="flex items-center gap-1">
                              <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleGenerateQuiz(doc.id)} disabled={isQuizQueued}>
-                                      {isQuizQueued ? <CheckCircle className="w-4 h-4 text-green-500" /> : <HelpCircle className="w-4 h-4 text-purple-500" />}
+                                  <Button 
+                                    variant="ghost" size="icon" 
+                                    className="h-9 w-9 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/20 hover:text-purple-600 transition-colors"
+                                    onClick={() => handleGenerateQuiz(doc.id)} disabled={isQuizQueued}
+                                  >
+                                      {isQuizQueued ? <CheckCircle className="w-5 h-5 text-green-500" /> : <HelpCircle className="w-5 h-5 text-muted-foreground group-hover:text-purple-500" />}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Generate Quiz</TooltipContent>
                              </Tooltip>
+
                              <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleGenerateNotes(doc.id)} disabled={isNoteQueued}>
-                                      {isNoteQueued ? <CheckCircle className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4 text-amber-500" />}
+                                  <Button 
+                                    variant="ghost" size="icon" 
+                                    className="h-9 w-9 rounded-full hover:bg-amber-100 dark:hover:bg-amber-900/20 hover:text-amber-600 transition-colors"
+                                    onClick={() => handleGenerateNotes(doc.id)} disabled={isNoteQueued}
+                                  >
+                                      {isNoteQueued ? <CheckCircle className="w-5 h-5 text-green-500" /> : <FileText className="w-5 h-5 text-muted-foreground group-hover:text-amber-500" />}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Generate Notes</TooltipContent>
                              </Tooltip>
+
                              <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleGenerateFlashcards(doc.id)} disabled={isCardQueued}>
-                                      {isCardQueued ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Layers className="w-4 h-4 text-blue-500" />}
+                                  <Button 
+                                    variant="ghost" size="icon" 
+                                    className="h-9 w-9 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/20 hover:text-blue-600 transition-colors"
+                                    onClick={() => handleGenerateFlashcards(doc.id)} disabled={isCardQueued}
+                                  >
+                                      {isCardQueued ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Layers className="w-5 h-5 text-muted-foreground group-hover:text-blue-500" />}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Generate Flashcards</TooltipContent>
@@ -483,8 +495,8 @@ export function DocumentsClientComponent() {
         )}
         
         {totalPages > currentPage && (
-          <div className="flex justify-center pt-6">
-             <Button variant="ghost" onClick={handleLoadMore} disabled={isLoadingMore}>
+          <div className="flex justify-center pt-8">
+             <Button variant="outline" size="lg" onClick={handleLoadMore} disabled={isLoadingMore} className="min-w-[200px]">
                 {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Load More
              </Button>
           </div>
