@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-// Removed unused supabase import
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -40,17 +39,15 @@ import {
   Sparkles,
   LogOut,
   ArrowLeft,
+  Youtube, // <-- IMPORTED
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-// --- MODIFIED: Import new function ---
 import {
   formatFileSize,
-  validateFileType,
   extractTextFromFile,
 } from '@/lib/file-parser';
-// ---
-import { QuestionType, ApiResponse, DocumentMetadata } from '@/types/database';
-import { useUpgradeModal } from '@/components/UpgradeModalContext'; // <-- 1. IMPORT HOOK (FIXED PATH)
+import { QuestionType, ApiResponse } from '@/types/database';
+import { useUpgradeModal } from '@/components/UpgradeModalContext';
 
 interface QuizSettings {
   questionCount: number;
@@ -59,7 +56,6 @@ interface QuizSettings {
   immediateFeedback: boolean;
 }
 
-// Header component
 const DashboardHeader = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -72,8 +68,6 @@ const DashboardHeader = () => {
   return (
     <header className="py-4 px-6 md:px-12 flex justify-between items-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
       <Link href="/quizzes" className="flex items-center gap-2">
-        {' '}
-        {/* <-- MODIFIED */}
         <Sparkles className="w-6 h-6 text-primary" />
         <span className="text-xl font-bold">QuizCraft</span>
       </Link>
@@ -92,9 +86,11 @@ const DashboardHeader = () => {
 
 export default function CreatePage() {
   const [textContent, setTextContent] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState(''); // <-- NEW STATE
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingDoc, setIsFetchingDoc] = useState(false); // State for fetching doc content
+  const [isFetchingDoc, setIsFetchingDoc] = useState(false);
   const [error, setError] = useState('');
   const [quizSettings, setQuizSettings] = useState<QuizSettings>({
     questionCount: 10,
@@ -103,25 +99,21 @@ export default function CreatePage() {
     immediateFeedback: true,
   });
 
-  // Use the session directly from the context
   const { user, session, loading } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook to read query params
+  const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { openModal } = useUpgradeModal(); // <-- 2. GET MODAL FUNCTION
+  const { openModal } = useUpgradeModal();
 
-  // Effect to handle initial login state
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
   }, [user, loading, router]);
 
-  // Effect to fetch document content if docId is present
   useEffect(() => {
     const docId = searchParams.get('docId');
     if (docId && session && !textContent && !selectedFile) {
-      // Only fetch if fields are empty
       const fetchDocumentContent = async () => {
         setIsFetchingDoc(true);
         setError('');
@@ -154,191 +146,157 @@ export default function CreatePage() {
       };
       fetchDocumentContent();
     }
-  }, [searchParams, session, toast, textContent, selectedFile]); // Add dependencies
+  }, [searchParams, session, toast, textContent, selectedFile]);
 
-  // --- MODIFIED: handleFileChange ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const maxSize = 3 * 1024 * 1024; // 3MB
-
-      // Updated validation
-      const isValidType = [
-        '.pdf',
-        '.txt',
-        '.docx',
-        '.pptx',
-      ].some((ext) => file.name.toLowerCase().endsWith(ext));
+      const isValidType = ['.pdf', '.txt', '.docx', '.pptx'].some((ext) =>
+        file.name.toLowerCase().endsWith(ext)
+      );
 
       if (!isValidType) {
-        setError('Unsupported file. Please upload PDF, TXT, DOCX, or PPTX.'); // Updated message
+        setError('Unsupported file. Please upload PDF, TXT, DOCX, or PPTX.');
         setSelectedFile(null);
         if (e.target) e.target.value = '';
         return;
       }
-      // ---
 
       if (file.size > maxSize) {
-        setError(
-          `File size exceeds 3MB. Max size is ${formatFileSize(maxSize)}.`
-        );
+        setError(`File size exceeds 3MB. Max size is ${formatFileSize(maxSize)}.`);
         setSelectedFile(null);
         if (e.target) e.target.value = '';
         return;
       }
 
-      setTextContent(''); // Clear text content when a file is selected
+      setTextContent('');
+      setYoutubeUrl(''); // Clear other inputs
       setSelectedFile(file);
       setError('');
-      // Don't clear e.target.value here immediately, let browser handle display
     }
   };
-  // ---
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setTextContent(e.target.value);
-    if (selectedFile) {
-      setSelectedFile(null); // Clear file when text is entered
-    }
-    setError(''); // Clear error on text change
+    if (selectedFile) setSelectedFile(null);
+    if (youtubeUrl) setYoutubeUrl('');
+    setError('');
+  };
+
+  // --- NEW: Handle YouTube Input ---
+  const handleYoutubeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setYoutubeUrl(e.target.value);
+    if (selectedFile) setSelectedFile(null);
+    if (textContent) setTextContent('');
+    setError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // --- User ID Log ---
-    console.log('--- Create Page User ID (from useAuth):', user?.id);
-    console.log(
-      '--- Create Page Session Token Snippet:',
-      session?.access_token?.substring(0, 10)
-    );
-    // --- End Log ---
     if (!user || !session) {
       setError('Auth session missing.');
-      toast({ title: 'Auth Error', variant: 'destructive' });
       return;
     }
-    if (!textContent.trim() && !selectedFile) {
-      setError('Provide text or upload file.');
+
+    // Validation
+    if (!textContent.trim() && !selectedFile && !youtubeUrl.trim()) {
+      setError('Provide text, upload a file, or enter a YouTube URL.');
       return;
     }
+
     setIsLoading(true);
     setError('');
 
-    let response; // Declare response outside try block
     try {
-      let finalTextContent = textContent.trim();
-      // --- MODIFIED: Pass the session token ---
-      if (selectedFile) {
-        toast({
-          title: 'Processing file...',
-          description: 'Extracting text from your document.',
+      let response;
+
+      // ---------------------------------------------------------
+      // SCENARIO A: YOUTUBE GENERATION
+      // ---------------------------------------------------------
+      if (youtubeUrl.trim()) {
+        toast({ title: 'Processing Video', description: 'Fetching transcript/audio...' });
+        
+        response = await fetch('/api/generate-from-youtube', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ videoUrl: youtubeUrl }),
         });
-        finalTextContent = await extractTextFromFile(
-          selectedFile,
-          session.access_token // <-- PASS TOKEN HERE
-        );
-        toast({ title: 'Text extracted!', description: 'Now generating quiz...' });
+
+      } 
+      // ---------------------------------------------------------
+      // SCENARIO B: TEXT / FILE GENERATION
+      // ---------------------------------------------------------
+      else {
+        let finalTextContent = textContent.trim();
+        
+        if (selectedFile) {
+          toast({ title: 'Processing File', description: 'Extracting text...' });
+          finalTextContent = await extractTextFromFile(
+            selectedFile,
+            session.access_token
+          );
+        }
+
+        if (finalTextContent.length < 100) {
+           throw new Error('Content too short (min 100 chars).');
+        }
+
+        const queryParams = new URLSearchParams({
+          numQuestions: quizSettings.questionCount.toString(),
+          difficulty: quizSettings.difficulty,
+          questionType: quizSettings.questionType,
+          immediateFeedback: String(quizSettings.immediateFeedback),
+        });
+
+        toast({ title: 'Generating Quiz', description: 'AI is working its magic...' });
+        
+        response = await fetch(`/api/generate-quiz?${queryParams}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'text/plain',
+          },
+          body: finalTextContent,
+        });
       }
-      // ---
-      if (finalTextContent.length < 100)
-        throw new Error('Content too short (min 100 chars).');
 
-      const queryParams = new URLSearchParams({
-        numQuestions: quizSettings.questionCount.toString(),
-        difficulty: quizSettings.difficulty,
-        questionType: quizSettings.questionType,
-        immediateFeedback: String(quizSettings.immediateFeedback),
-      });
-
-      console.log('--- Sending request to /api/generate-quiz ---'); // Log before fetch
-      response = await fetch(`/api/generate-quiz?${queryParams}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'text/plain',
-        },
-        body: finalTextContent,
-      });
-      console.log('--- Received response from /api/generate-quiz ---', {
-        status: response.status,
-        ok: response.ok,
-      }); // Log after fetch
-
-      // More robust response check
+      // ---------------------------------------------------------
+      // HANDLE RESPONSE (Common for both)
+      // ---------------------------------------------------------
       if (!response.ok) {
-        let errorBody: any = 'Failed to parse error response.'; // Use 'any' for flexibility
-        try {
-          errorBody = await response.json(); // Try to get JSON error details
-        } catch {
-          try {
-            // Add another try-catch for text()
-            errorBody = await response.text(); // Fallback to text
-          } catch (textError) {
-            console.error(
-              'Failed to even get text from error response:',
-              textError
-            );
-            errorBody = response.statusText; // Ultimate fallback
-          }
-        }
-        console.error('API Error Response Body:', errorBody);
+        let errorBody: any;
+        try { errorBody = await response.json(); } 
+        catch { errorBody = { error: response.statusText }; }
 
-        // --- 3. CATCH LIMIT ERROR ---
-        if (
-          typeof errorBody === 'object' &&
-          errorBody.error === 'limit_exceeded'
-        ) {
+        // Check for limit exceeded
+        if (errorBody?.error === 'limit_exceeded') {
           openModal();
-          throw new Error(errorBody.message || 'AI generation limit reached.');
+          throw new Error(errorBody.message || 'AI limit reached.');
         }
-        // ---
 
-        // Try to access errorBody.error if it's an object, otherwise use the string/statusText
-        const specificError =
-          typeof errorBody === 'object' && errorBody !== null && errorBody.error
-            ? errorBody.error
-            : errorBody;
-        throw new Error(`API Error (${response.status}): ${specificError}`);
+        throw new Error(errorBody?.message || errorBody?.error || 'Generation failed.');
       }
 
-      // If response.ok, *then* parse JSON
-      const result: {
-        success?: boolean;
-        error?: string;
-        id?: string;
-        title?: string;
-      } = await response.json();
-
-      // Check for success flag specifically if present, otherwise rely on response.ok and ID presence
-      if (result.success === false || !result.id) {
-        console.error('API Success=false or missing ID:', result);
-        throw new Error(
-          result.error || 'API indicated failure but provided no error message.'
-        );
+      const result = await response.json();
+      if (!result.success || !result.data?.id) { // Note: generate-from-youtube returns { success: true, data: { ... } }
+         // Handle inconsistent API responses (some return result.id directly, some result.data.id)
+         const quizId = result.id || result.data?.id;
+         if (!quizId) throw new Error('API returned success but no Quiz ID.');
       }
 
-      // If we reach here, it means success
-      toast({
-        title: 'Quiz Generated!',
-        description: `"${result.title}" created.`,
-      }); // Access title directly
-      window.location.href = '/quizzes'; // <-- MODIFIED: Force full reload to /quizzes
-    } catch (err) {
-      // Catch errors from fetch itself, parsing, or thrown checks
-      const errorMessage =
-        err instanceof Error ? err.message : 'Something went wrong.';
+      toast({ title: 'Success!', description: 'Quiz created successfully.' });
+      window.location.href = '/quizzes';
 
-      // --- 4. AVOID DOUBLE-TOASTING LIMIT ERRORS ---
-      if (!errorMessage.includes('limit reached')) {
-        console.error('--- Error in handleSubmit ---', err); // Log the full error
-        setError(errorMessage); // Show error in UI
-        toast({
-          title: 'Generation Failed',
-          description: errorMessage,
-          variant: 'destructive',
-        });
+    } catch (err: any) {
+      console.error('Generation Error:', err);
+      if (!err.message.includes('limit reached')) {
+        setError(err.message);
+        toast({ title: 'Error', description: err.message, variant: 'destructive' });
       }
-      // ---
     } finally {
       setIsLoading(false);
     }
@@ -350,7 +308,9 @@ export default function CreatePage() {
   ) => {
     setQuizSettings((prev) => ({ ...prev, [key]: value }));
   };
+  
   const isProcessing = isLoading || isFetchingDoc;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -377,22 +337,23 @@ export default function CreatePage() {
               Create a New Quiz
             </CardTitle>
             <CardDescription>
-              Provide content and configure settings.
+              Provide content via Text, File, or YouTube URL.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Text Input */}
+              
+              {/* Option 1: Text Input */}
               <div className="space-y-2 relative">
                 <Label htmlFor="content" className="text-base font-semibold">
-                  Option 1: Paste Content
+                  Option 1: Paste Text
                 </Label>
                 <Textarea
                   id="content"
-                  placeholder="Paste text here..."
+                  placeholder="Paste article, notes, or essay here..."
                   value={textContent}
                   onChange={handleTextChange}
-                  className="min-h-48 text-base"
+                  className="min-h-32 text-base"
                   disabled={isProcessing}
                 />
                 {isFetchingDoc && (
@@ -401,16 +362,14 @@ export default function CreatePage() {
                   </div>
                 )}
               </div>
-              {/* OR Separator */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-card px-2 text-muted-foreground">OR</span>
-                </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs uppercase font-bold">OR</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
               </div>
-              {/* File Input */}
+
+              {/* Option 2: File Input */}
               <div className="space-y-3">
                 <Label htmlFor="file-upload" className="text-base font-semibold">
                   Option 2: Upload File
@@ -420,45 +379,65 @@ export default function CreatePage() {
                     error && !selectedFile
                       ? 'border-destructive'
                       : 'border-slate-300 dark:border-slate-700'
-                  } rounded-lg p-6 text-center`}
+                  } rounded-lg p-6 text-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors`}
                 >
-                  <FileText className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
-                  <p className="mt-2 font-semibold">
-                    {selectedFile ? selectedFile.name : 'Drag & drop or click'}
+                  <FileText className="mx-auto h-8 w-8 text-slate-400" />
+                  <p className="mt-2 text-sm font-medium">
+                    {selectedFile ? selectedFile.name : 'Click to Upload PDF/DOCX/PPTX'}
                   </p>
-                  {/* --- THIS IS THE FIX --- */}
                   <p className="mt-1 text-xs text-muted-foreground">
-                    PDF, TXT, DOCX, PPTX (max 3MB).
-                    {selectedFile && ` (${formatFileSize(selectedFile.size)})`}
+                    Max 3MB. {selectedFile && `(${formatFileSize(selectedFile.size)})`}
                   </p>
-                  {/* --- END FIX --- */}
-                  {/* --- MODIFIED: accept attribute --- */}
                   <Input
                     id="file-upload"
                     type="file"
-                    accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    accept=".pdf,.txt,.docx,.pptx"
                     onChange={handleFileChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     disabled={isProcessing}
                     onClick={(e) => (e.currentTarget.value = '')}
                   />
-                  {/* --- */}
                 </div>
               </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs uppercase font-bold">OR</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+              </div>
+
+              {/* Option 3: YouTube Input */}
+              <div className="space-y-3">
+                 <Label htmlFor="youtube-url" className="text-base font-semibold flex items-center gap-2">
+                    Option 3: YouTube Video <span className="text-xs font-normal text-muted-foreground">(Beta)</span>
+                 </Label>
+                 <div className="relative">
+                    <Youtube className="absolute left-3 top-3 h-5 w-5 text-red-500" />
+                    <Input 
+                        id="youtube-url"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={youtubeUrl}
+                        onChange={handleYoutubeChange}
+                        className="pl-10"
+                        disabled={isProcessing}
+                    />
+                 </div>
+              </div>
+
               {/* Settings */}
               <Collapsible>
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full"
+                    className="w-full mt-4"
                     disabled={isProcessing}
                   >
                     <Settings className="w-4 h-4 mr-2" />
                     Quiz Settings
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-4 space-y-4">
+                <CollapsibleContent className="mt-4 space-y-4 p-4 border rounded-md bg-slate-50 dark:bg-slate-800/50">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="question-count">Questions</Label>
@@ -473,9 +452,9 @@ export default function CreatePage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="5">5</SelectItem>
-                          <SelectItem value="10">10</SelectItem>
-                          <SelectItem value="15">15</SelectItem>
+                          <SelectItem value="5">5 Questions</SelectItem>
+                          <SelectItem value="10">10 Questions</SelectItem>
+                          <SelectItem value="15">15 Questions</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -512,32 +491,17 @@ export default function CreatePage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="MIXED">Mixed</SelectItem>
-                        <SelectItem value="MULTIPLE_CHOICE">
-                          Multiple Choice
-                        </SelectItem>
+                        <SelectItem value="MIXED">Mixed Types</SelectItem>
+                        <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
                         <SelectItem value="TRUE_FALSE">True/False</SelectItem>
-                        <SelectItem value="FILL_IN_THE_BLANK">
-                          Fill in the Blank
-                        </SelectItem>
-                        {/* Note: Matching is not fully supported yet */}
+                        <SelectItem value="FILL_IN_THE_BLANK">Fill in the Blank</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                    <div className="space-y-0.5">
-                      <Label
-                        htmlFor="immediate-feedback"
-                        className={`${isProcessing ? 'opacity-50' : ''}`}
-                      >
+                  <div className="flex items-center justify-between pt-2">
+                    <Label htmlFor="immediate-feedback" className="cursor-pointer">
                         Immediate Feedback
-                      </Label>
-                      <CardDescription
-                        className={`${isProcessing ? 'opacity-50' : ''}`}
-                      >
-                        Show answer after each question.
-                      </CardDescription>
-                    </div>
+                    </Label>
                     <Switch
                       id="immediate-feedback"
                       checked={quizSettings.immediateFeedback}
@@ -549,30 +513,33 @@ export default function CreatePage() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+
               {/* Error Display */}
               {error && (
-                <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive animate-in fade-in slide-in-from-top-1">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <div>{error}</div>
                 </div>
               )}
+
               {/* Submit Button */}
               <Button
                 type="submit"
                 size="lg"
-                className="w-full text-base"
+                className="w-full text-base font-semibold shadow-lg hover:shadow-xl transition-all"
                 disabled={
-                  isProcessing || (!textContent.trim() && !selectedFile)
+                  isProcessing || (!textContent.trim() && !selectedFile && !youtubeUrl.trim())
                 }
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />{' '}
-                    {isFetchingDoc ? 'Loading...' : 'Generating...'}
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    {isFetchingDoc ? 'Loading Document...' : 'Generating Quiz...'}
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5 mr-2" /> Generate Quiz
+                    <Sparkles className="w-5 h-5 mr-2" /> 
+                    {youtubeUrl ? 'Generate from Video' : 'Generate Quiz'}
                   </>
                 )}
               </Button>
