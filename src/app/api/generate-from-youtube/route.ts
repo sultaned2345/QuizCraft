@@ -1,4 +1,3 @@
-// src/app/api/generate-from-youtube/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -18,10 +17,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const runtime = 'nodejs';
 
-// List of public Cobalt instances to try in order
+// List of public Cobalt instances to try (Main + Backups)
 const COBALT_INSTANCES = [
   'https://api.cobalt.tools/api/json',
-  'https://cobalt.api.kwiatekmiki.pl/api/json', // Backup instance
+  'https://cobalt.api.kwiatekmiki.pl/api/json',
+  'https://cobalt.q1.si/api/json', 
+  'https://api.cobalt.pl/api/json'
 ];
 
 // --- Helper: Fetch audio via Cobalt API (Bypasses IP Blocks) ---
@@ -37,11 +38,12 @@ async function downloadWithCobalt(url: string, outputPath: string): Promise<stri
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          // Use a standard browser UA to avoid bot detection
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
         body: JSON.stringify({
           url: url,
-          downloadMode: 'audio', // Correct parameter
+          downloadMode: 'audio', 
           audioFormat: 'mp3',
           filenamePattern: 'basic'
         }),
@@ -54,6 +56,7 @@ async function downloadWithCobalt(url: string, outputPath: string): Promise<stri
 
       const data = await response.json();
       
+      // Handle different response shapes
       if (!data.url) {
         if (data.status === 'picker') throw new Error('Cobalt returned a picker (multiple streams), which is not supported yet.');
         throw new Error(`Cobalt API did not return a stream URL. Status: ${data.status}`);
@@ -96,6 +99,7 @@ async function downloadWithCobalt(url: string, outputPath: string): Promise<stri
     }
   }
 
+  // If we exit the loop, all instances failed
   throw lastError || new Error('All Cobalt instances failed.');
 }
 
@@ -191,6 +195,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'transcript_unavailable', message: 'Content too short.' }, { status: 400 });
     }
 
+    // 3. Save as DOCUMENT (Integration)
+    // We store the YouTube URL in 'storage_path' and mark type as 'youtube'
+    const savedDoc = await prisma.documents.create({
+        data: {
+            user_id: user.id,
+            file_name: 'YouTube Video Analysis', // Basic title; specific metadata extraction is heavier
+            file_type: 'youtube',
+            storage_path: videoUrl, // Important: Store URL here
+            extracted_text: transcriptText,
+            file_size: BigInt(transcriptText.length), // Approx size
+        }
+    });
+
+    // 4. Generate Quiz
     const quizData = await callAIToGenerateQuiz(transcriptText, 10, 'medium', 'MIXED');
 
     const questionsToCreate = quizData.questions.map((q: any) => ({
@@ -215,7 +233,14 @@ export async function POST(request: NextRequest) {
 
     await incrementAIGenerationUsage(user.id, 1);
 
-    return NextResponse.json<ApiResponse<Quiz>>({ success: true, data: savedQuiz as Quiz });
+    // Return BOTH quiz and document ID
+    return NextResponse.json<ApiResponse>({ 
+      success: true, 
+      data: { 
+        quiz: savedQuiz, 
+        document: savedDoc // Frontend can now redirect to /documents/[id]
+      } 
+    });
 
   } catch (error: any) {
     console.error('Error in generate-from-youtube:', error);

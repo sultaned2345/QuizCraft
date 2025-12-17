@@ -17,7 +17,8 @@ import {
   BrainCircuit,
   BookOpen,
   ListChecks,
-  EyeOff
+  EyeOff,
+  Youtube // Added icon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface, ChatInterfaceHandle } from '@/components/ChatInterface';
@@ -70,6 +71,39 @@ const safeRender = (content: any): string => {
     );
   }
   return '';
+};
+
+// --- YouTube Embed Component ---
+const YouTubeEmbed = ({ videoUrl }: { videoUrl: string }) => {
+  // Extract Video ID (supports standard v=... and short youtu.be/)
+  let videoId = null;
+  
+  if (videoUrl.includes('youtu.be/')) {
+      videoId = videoUrl.split('youtu.be/')[1]?.split('?')[0];
+  } else if (videoUrl.includes('v=')) {
+      videoId = videoUrl.split('v=')[1]?.split('&')[0];
+  }
+
+  if (!videoId) return (
+    <div className="p-8 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
+       <Youtube className="w-10 h-10 mx-auto mb-2 opacity-50" />
+       <p>Video unavailable or invalid URL</p>
+    </div>
+  );
+
+  return (
+    <div className="w-full aspect-video rounded-xl overflow-hidden shadow-sm border bg-black">
+      <iframe
+        width="100%"
+        height="100%"
+        src={`https://www.youtube.com/embed/${videoId}`}
+        title="YouTube video player"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    </div>
+  );
 };
 
 // --- Interfaces ---
@@ -181,7 +215,7 @@ export default function DocumentViewPage() {
 
   // --- Data Fetching ---
   const { data: contentData } = useSWR<
-    ApiResponse<{ extracted_text: string; file_name: string }>
+    ApiResponse<{ extracted_text: string; file_name: string; file_type?: string }>
   >(
     session ? `/api/documents/${documentId}/content` : null,
     (url) => fetcher(url, session!.access_token),
@@ -200,15 +234,23 @@ export default function DocumentViewPage() {
     swrOptions,
   );
 
-  const isPdf =
-    contentData?.data?.file_name.toLowerCase().endsWith('.pdf') ?? false;
-
-  // Modified: Fetch URL for all file types to allow download, not just PDFs
   const { data: urlData } = useSWR<ApiResponse<{ signedUrl: string }>>(
     session ? `/api/documents/${documentId}/url` : null,
     (url) => fetcher(url, session!.access_token),
     swrOptions,
   );
+
+  // --- Logic to Detect File Types ---
+  const fileName = contentData?.data?.file_name || "";
+  const signedUrl = urlData?.data?.signedUrl || "";
+  
+  const isPdf = fileName.toLowerCase().endsWith('.pdf');
+  
+  // Check if it's YouTube based on file_type (from DB) OR the URL structure (fallback check)
+  const isYoutube = 
+    contentData?.data?.file_type === 'youtube' || 
+    signedUrl.includes('youtube.com') || 
+    signedUrl.includes('youtu.be');
 
   const isLoading = !contentData;
 
@@ -309,7 +351,8 @@ export default function DocumentViewPage() {
                 {contentData?.data?.file_name}
               </h1>
               <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                {isPdf ? 'PDF Document' : 'Note'}
+                {isYoutube ? <Youtube className="w-3 h-3 text-red-500" /> : <FileText className="w-3 h-3" />}
+                {isYoutube ? 'YouTube Video' : isPdf ? 'PDF Document' : 'Text Document'}
               </span>
             </div>
           </div>
@@ -344,7 +387,7 @@ export default function DocumentViewPage() {
                      toast({ title: "Download unavailable", description: "Could not generate download link." });
                    }
                 }}>
-                  <Download className="w-4 h-4 mr-2" /> Download File
+                  <Download className="w-4 h-4 mr-2" /> {isYoutube ? 'Open on YouTube' : 'Download File'}
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Share2 className="w-4 h-4 mr-2" /> Share Document
@@ -372,7 +415,7 @@ export default function DocumentViewPage() {
                     value="document"
                     className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-2 pt-1.5 text-xs flex items-center justify-center gap-2"
                   >
-                    <BookOpen className="w-3.5 h-3.5" /> Document
+                    <BookOpen className="w-3.5 h-3.5" /> {isYoutube ? 'Video & Transcript' : 'Document'}
                   </TabsTrigger>
                   <TabsTrigger
                     value="analysis"
@@ -388,9 +431,25 @@ export default function DocumentViewPage() {
                   value="document"
                   className="h-full m-0 border-0 data-[state=inactive]:hidden"
                 >
-                  {/* Updated Render Logic: PDF -> Viewer; Other -> Fallback -> Text */}
-                  {urlData?.data?.signedUrl && isPdf ? (
-                    // Valid PDF Viewer
+                  {isYoutube ? (
+                    // CASE 1: YouTube Video + Transcript
+                    <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
+                        <div className="max-w-4xl mx-auto p-6 space-y-8" onMouseUp={handleMouseUpCapture}>
+                            <YouTubeEmbed videoUrl={signedUrl} />
+                            
+                            <div className="prose dark:prose-invert max-w-none">
+                                <div className="flex items-center gap-2 pb-2 border-b">
+                                    <FileText className="w-5 h-5 text-muted-foreground" />
+                                    <h3 className="text-xl font-semibold m-0">Video Transcript</h3>
+                                </div>
+                                <div className="pt-4">
+                                    <MarkdownViewer content={contentData?.data?.extracted_text || '*No transcript available.*'} />
+                                </div>
+                            </div>
+                        </div>
+                    </ScrollArea>
+                  ) : urlData?.data?.signedUrl && isPdf ? (
+                    // CASE 2: Valid PDF Viewer
                     <div className="h-full w-full bg-zinc-100 dark:bg-zinc-950">
                       <div className="h-full w-full overflow-hidden">
                         <PdfViewer
@@ -400,7 +459,7 @@ export default function DocumentViewPage() {
                       </div>
                     </div>
                   ) : showRawText ? (
-                    // Text View (Toggled from Fallback)
+                    // CASE 3: Text View (Toggled from Fallback)
                     <ScrollArea className="h-full w-full bg-zinc-50 dark:bg-zinc-950">
                        <div className="sticky top-0 z-10 p-2 flex justify-center bg-transparent pointer-events-none">
                             <Button 
@@ -424,7 +483,7 @@ export default function DocumentViewPage() {
                       </div>
                     </ScrollArea>
                   ) : (
-                    // Fallback / Metadata View
+                    // CASE 4: Fallback / Metadata View
                      <FilePreviewFallback 
                         fileName={contentData?.data?.file_name || "Unknown File"}
                         downloadUrl={urlData?.data?.signedUrl}
