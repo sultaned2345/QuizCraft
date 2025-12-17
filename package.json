@@ -68,6 +68,7 @@
     "react": "^18",
     "react-day-picker": "9.8.0",
     "react-dom": "^18",
+    "react-force-graph-2d": "^1.29.0",
     "react-hook-form": "^7.60.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",

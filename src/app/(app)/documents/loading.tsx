@@ -21,9 +21,9 @@ export default function DocumentsLoading() {
         </div>
       </div>
 
-      {/* Grid Skeleton - Matches 2 col layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {[...Array(4)].map((_, i) => (
+      {/* Grid Skeleton - Matches 3 Column Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
           <DocumentCardSkeleton key={i} />
         ))}
       </div>
