@@ -18,7 +18,8 @@ import {
   User,
   CreditCard,
   FolderKanban,
-  Mic, // <-- IMPORTED
+  Mic,
+  LayoutDashboard, // <-- 1. IMPORTED DASHBOARD ICON
 } from 'lucide-react';
 import { useState, Suspense } from 'react';
 import { PageProvider } from '@/contexts/PageContext';
@@ -117,13 +118,14 @@ const SidebarNav = () => {
   const pathname = usePathname();
 
   const navItems = [
+    // --- 2. ADDED DASHBOARD LINK HERE ---
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    // ------------------------------------
     { href: '/projects', label: 'Projects', icon: FolderKanban },
     { href: '/documents', label: 'Documents', icon: FileText },
     { href: '/quizzes', label: 'Quizzes', icon: FileQuestion },
     { href: '/notes', label: 'Notes', icon: StickyNote },
-    // --- ADDED RECORDINGS HERE ---
     { href: '/recordings', label: 'Recordings', icon: Mic },
-    // ---------------------------
     { href: '/flashcards', label: 'Flashcards', icon: Layers },
     { href: '/essay-grader', label: 'Essay Grader', icon: FileSignature },
     { href: '/account', label: 'Account', icon: CreditCard, isLast: true },
@@ -213,8 +215,9 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-20 flex-col border-r bg-background sm:flex">
           <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
+            {/* 3. UPDATED LOGO LINK TO /dashboard */}
             <Link
-              href="/documents"
+              href="/dashboard"
               className="flex items-center justify-center gap-2 font-semibold"
             >
               <Sparkles className="h-6 w-6 text-primary" />
