@@ -18,80 +18,96 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const runtime = 'nodejs';
 
-// --- NEW: Helper to fetch audio via Cobalt API (Bypasses IP Blocks) ---
+// List of public Cobalt instances to try in order
+const COBALT_INSTANCES = [
+  'https://api.cobalt.tools/api/json',
+  'https://cobalt.api.kwiatekmiki.pl/api/json', // Backup instance
+];
+
+// --- Helper: Fetch audio via Cobalt API (Bypasses IP Blocks) ---
 async function downloadWithCobalt(url: string, outputPath: string): Promise<string> {
-  console.log('[Cobalt] Attempting download via Cobalt API...');
-  
-  // 1. Request the stream URL from Cobalt
-  const response = await fetch('https://api.cobalt.tools/api/json', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    },
-    body: JSON.stringify({
-      url: url,
-      isAudioOnly: true,
-      aFormat: 'mp3',
-      filenamePattern: 'nerdy'
-    }),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Cobalt API Error ${response.status}: ${errorText}`);
+  for (const instance of COBALT_INSTANCES) {
+    try {
+      console.log(`[Cobalt] Attempting download via ${instance}...`);
+      
+      const response = await fetch(instance, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: JSON.stringify({
+          url: url,
+          downloadMode: 'audio', // Correct parameter
+          audioFormat: 'mp3',
+          filenamePattern: 'basic'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.url) {
+        if (data.status === 'picker') throw new Error('Cobalt returned a picker (multiple streams), which is not supported yet.');
+        throw new Error(`Cobalt API did not return a stream URL. Status: ${data.status}`);
+      }
+
+      console.log('[Cobalt] Stream URL received. Downloading bytes...');
+
+      // Download the actual file from the stream URL
+      const fileStream = fs.createWriteStream(outputPath);
+      const streamResponse = await fetch(data.url);
+
+      if (!streamResponse.ok || !streamResponse.body) {
+        throw new Error(`Failed to download stream from Cobalt: ${streamResponse.statusText}`);
+      }
+
+      // Pipe the Web Stream to the File System
+      // @ts-ignore - ReadableStream/Node stream mismatch typing issue
+      const reader = streamResponse.body.getReader();
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) fileStream.write(Buffer.from(value));
+      }
+      
+      fileStream.end();
+
+      return new Promise((resolve, reject) => {
+        fileStream.on('finish', () => {
+          console.log('[Cobalt] Download complete.');
+          resolve(outputPath);
+        });
+        fileStream.on('error', (err) => reject(err));
+      });
+
+    } catch (err: any) {
+      console.warn(`[Cobalt] Failed on instance ${instance}:`, err.message);
+      lastError = err;
+      // Continue to next instance...
+    }
   }
 
-  const data = await response.json();
-  
-  // Cobalt returns a 'url' (stream) or 'picker' (multiple). We need the 'url'.
-  if (!data.url) {
-    if (data.status === 'picker') throw new Error('Cobalt returned a picker (multiple streams), which is not supported yet.');
-    throw new Error('Cobalt API did not return a stream URL.');
-  }
-
-  console.log('[Cobalt] Stream URL received. Downloading bytes...');
-
-  // 2. Download the actual file from the stream URL
-  const fileStream = fs.createWriteStream(outputPath);
-  const streamResponse = await fetch(data.url);
-
-  if (!streamResponse.ok || !streamResponse.body) {
-    throw new Error(`Failed to download stream from Cobalt: ${streamResponse.statusText}`);
-  }
-
-  // 3. Pipe the Web Stream to the File System
-  // @ts-ignore - ReadableStream/Node stream mismatch typing issue
-  const reader = streamResponse.body.getReader();
-  const chunks = [];
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) fileStream.write(Buffer.from(value));
-  }
-  
-  fileStream.end();
-
-  return new Promise((resolve, reject) => {
-    fileStream.on('finish', () => {
-      console.log('[Cobalt] Download complete.');
-      resolve(outputPath);
-    });
-    fileStream.on('error', (err) => reject(err));
-  });
+  throw lastError || new Error('All Cobalt instances failed.');
 }
 
 // --- Fallback: Standard YTDL ---
 async function downloadWithYtdl(url: string, outputPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     console.log(`[YTDL] Starting download to ${outputPath}...`);
-    // Try to force the 'ANDROID' client to bypass some bot checks
+    
     const stream = ytdl(url, { 
       quality: 'lowestaudio', 
       filter: 'audioonly',
-      // @ts-ignore - 'clients' option exists in newer @distube/ytdl-core versions
+      // @ts-ignore
       requestOptions: {
          headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -147,8 +163,8 @@ export async function POST(request: NextRequest) {
         try {
           await downloadWithCobalt(videoUrl, tempFilePath);
         } catch (cobaltError: any) {
-          console.error('Cobalt failed, trying YTDL:', cobaltError.message);
-          // Fallback to YTDL
+          console.error('Cobalt failed, trying YTDL fallback:', cobaltError.message);
+          // Fallback to YTDL if Cobalt fails
           await downloadWithYtdl(videoUrl, tempFilePath);
         }
         
@@ -156,12 +172,15 @@ export async function POST(request: NextRequest) {
         transcriptText = await transcribeAudioFile(tempFilePath);
         
       } catch (audioError: any) {
-        console.error('Audio extraction/transcription failed:', audioError);
+        // Log the actual chain of errors
+        const msg = audioError.message || 'Unknown audio error';
+        console.error('Audio processing completely failed:', msg);
+        
         return NextResponse.json<ApiResponse>(
           {
             success: false,
             error: 'transcription_failed',
-            message: `Could not process video audio. Vercel IP may be blocked by YouTube. Error: ${audioError.message}`,
+            message: `Could not process video. Transcript disabled and audio download failed. (Detail: ${msg})`,
           },
           { status: 422 }
         );
