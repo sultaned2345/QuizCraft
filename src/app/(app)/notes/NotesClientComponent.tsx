@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Loader2, Plus, Sparkles, Edit, Trash2, BookCopy, Search, X, 
-  StickyNote, Calendar, MoreVertical, ArrowUpRight
+  StickyNote, Calendar, MoreVertical, ArrowUpRight, Network, Grid
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { KnowledgeGraph } from '@/components/notes/KnowledgeGraph';
 
 const GenerateNotesDialog = dynamic(
   () => import('@/components/GenerateNotesDialog').then((mod) => mod.GenerateNotesDialog),
@@ -77,6 +78,9 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const [allTags, setAllTags] = useState<Set<string>>(new Set());
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // NEW: State for View Mode
+  const [viewMode, setViewMode] = useState<'grid' | 'graph'>('grid');
 
   const { session } = useAuth();
   const router = useRouter();
@@ -224,12 +228,35 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         </div>
       </div>
 
-      <div className="mb-6 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 relative">
+          <div className="relative flex-1">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input placeholder="Search loaded notes by title..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          
+          {/* VIEW TOGGLE */}
+          <div className="flex items-center p-1 bg-secondary rounded-lg border">
+             <Button 
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className={cn("h-8 px-3", viewMode === 'grid' && "bg-background shadow-sm")}
+                onClick={() => setViewMode('grid')}
+             >
+                <Grid className="w-4 h-4 mr-2" /> Grid
+             </Button>
+             <Button 
+                variant={viewMode === 'graph' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className={cn("h-8 px-3", viewMode === 'graph' && "bg-background shadow-sm")}
+                onClick={() => setViewMode('graph')}
+             >
+                <Network className="w-4 h-4 mr-2" /> Graph
+             </Button>
+          </div>
       </div>
       
-      {allTags.size > 0 && (
+      {/* Show tags only in Grid view */}
+      {viewMode === 'grid' && allTags.size > 0 && (
           <div className="mb-6 flex flex-wrap gap-2">
             <Button
               variant={!selectedTag ? 'default' : 'secondary'}
@@ -256,6 +283,13 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           </div>
         )}
       
+      {/* CONDITIONAL RENDERING */}
+      {viewMode === 'graph' ? (
+         <div className="animate-in fade-in duration-500">
+            <KnowledgeGraph />
+         </div>
+      ) : (
+       <>
        {(notes.length === 0) ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
           <BookCopy className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -291,6 +325,7 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
                 )}
                 onClick={() => router.push(`/notes/${note.id}`)}
               >
+                {/* Card Content ... (Unchanged) */}
                 <div className="absolute top-4 left-0 w-4 flex flex-col gap-2 items-center opacity-20 pointer-events-none">
                      <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
                      <div className="w-1.5 h-1.5 rounded-full bg-foreground" />
@@ -315,7 +350,6 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
 
                         {/* Actions Dropdown */}
                         <div onClick={(e) => e.stopPropagation()}>
-                            {/* FIX: AlertDialog now wraps DropdownMenu to provide context for Trigger */}
                             <AlertDialog>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -411,6 +445,8 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
             Showing {notes.length} of {usage.count} notes
           </p>
         </div>
+      )}
+      </>
       )}
 
       {isGeneratorOpen && (
