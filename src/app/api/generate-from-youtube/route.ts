@@ -1,3 +1,4 @@
+// src/app/api/generate-from-youtube/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -5,14 +6,40 @@ import {
   checkAIGenerationUsageLimit,
   incrementAIGenerationUsage,
 } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz } from '@/lib/aiGeneration';
+import { callAIToGenerateQuiz, transcribeAudioFile } from '@/lib/aiGeneration'; // Import new helper
 import { ApiResponse, Quiz } from '@/types/database';
 import { Prisma } from '@prisma/client';
 import { YoutubeTranscript } from 'youtube-transcript';
+import ytdl from '@distube/ytdl-core'; // Make sure to install this
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { v4 as uuidv4 } from 'uuid';
 
 export const runtime = 'nodejs';
 
+// Helper to download audio to temp file
+async function downloadAudioToTemp(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const tempDir = os.tmpdir();
+    const filePath = path.join(tempDir, `${uuidv4()}.mp3`);
+    
+    // Low quality audio is fine for speech recognition and saves bandwidth
+    const stream = ytdl(url, { quality: 'lowestaudio', filter: 'audioonly' });
+    
+    const writeStream = fs.createWriteStream(filePath);
+    
+    stream.pipe(writeStream);
+    
+    writeStream.on('finish', () => resolve(filePath));
+    writeStream.on('error', (err) => reject(err));
+    stream.on('error', (err) => reject(err));
+  });
+}
+
 export async function POST(request: NextRequest) {
+  let tempFilePath: string | null = null;
+
   try {
     const user = await requireAuth(request);
     const { videoUrl } = await request.json();
@@ -28,51 +55,42 @@ export async function POST(request: NextRequest) {
     const usageCheck = await checkAIGenerationUsageLimit(user.id);
     if (!usageCheck.isValid) {
       return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'limit_exceeded',
-          message: usageCheck.message,
-        },
+        { success: false, error: 'limit_exceeded', message: usageCheck.message },
         { status: 403 }
       );
     }
 
-    // 2. Fetch Transcript
+    // 2. Fetch Transcript (Strategy: Text -> Fallback to Audio)
     let transcriptText = '';
+    
     try {
-      // Uses the 'youtube-transcript' library found in your package.json
+      console.log('Attempting to fetch transcript text directly...');
       const transcriptItems = await YoutubeTranscript.fetchTranscript(videoUrl);
-      
-      if (!transcriptItems || transcriptItems.length === 0) {
-         throw new Error('No transcript found');
+      if (transcriptItems && transcriptItems.length > 0) {
+        transcriptText = transcriptItems.map(item => item.text).join(' ');
       }
-
-      // Combine all text segments into one string
-      transcriptText = transcriptItems.map(item => item.text).join(' ');
-
-    } catch (toolError: any) {
-      console.warn(`YouTube tool error for URL ${videoUrl}:`, toolError.message);
-
-      // Handle specific "disabled" error if the library throws it
-      if (toolError.message.includes('Transcript is disabled') || toolError.message.includes('No transcript')) {
+    } catch (transcriptError: any) {
+      console.warn('Transcript fetch failed, falling back to audio extraction:', transcriptError.message);
+      
+      // FALLBACK: Download Audio & Transcribe
+      try {
+        console.log('Downloading audio stream...');
+        tempFilePath = await downloadAudioToTemp(videoUrl);
+        
+        console.log('Transcribing audio with Groq...');
+        transcriptText = await transcribeAudioFile(tempFilePath);
+        
+      } catch (audioError: any) {
+        console.error('Audio extraction/transcription failed:', audioError);
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: 'transcript_disabled',
-            message: 'Quiz generation failed. The video does not have a transcript available.',
+            error: 'transcription_failed',
+            message: 'Could not generate quiz. The video has no captions, and audio transcription failed.',
           },
-          { status: 400 }
+          { status: 422 }
         );
       }
-
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'youtube_tool_failed',
-          message: `Could not fetch video data: ${toolError.message}`,
-        },
-        { status: 502 }
-      );
     }
 
     // 3. Check for sufficient length
@@ -81,18 +99,18 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'transcript_unavailable',
-          message: 'The transcript is too short to generate a quiz.',
+          message: 'The content is too short to generate a quiz.',
         },
         { status: 400 }
       );
     }
 
-    // 4. Proceed with Quiz Generation
+    // 4. Proceed with Quiz Generation (Gemini)
     const quizData = await callAIToGenerateQuiz(
       transcriptText,
-      10, // numQuestions
-      'medium', // difficulty
-      'MIXED' // questionType
+      10, 
+      'medium', 
+      'MIXED' 
     );
 
     // 5. Save quiz to database
@@ -115,11 +133,7 @@ export async function POST(request: NextRequest) {
           create: questionsToCreate,
         },
       },
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-      },
+      select: { id: true, title: true, createdAt: true },
     });
 
     // 6. Increment usage
@@ -131,11 +145,19 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    if (error instanceof Response) return error;
     console.error('Error in generate-from-youtube route:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: error.message || 'Internal server error.' },
       { status: 500 }
     );
+  } finally {
+    // Cleanup: Delete temp file if it exists
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch (e) {
+        console.error('Failed to delete temp file:', e);
+      }
+    }
   }
 }

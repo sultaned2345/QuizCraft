@@ -2,7 +2,8 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { Question, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
-import Groq from "groq-sdk"; // Requires: npm install groq-sdk
+import Groq from "groq-sdk"; 
+import fs from 'fs'; // Required for server-side file streaming
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
@@ -11,7 +12,6 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
 
 // --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
-// The Flash model can handle up to 1M tokens, so this is safe.
 const MAX_INPUT_LENGTH = 100000; 
 
 if (!API_KEY) {
@@ -30,9 +30,7 @@ const groq = new Groq({ apiKey: GROQ_API_KEY });
  */
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
-    // Strip HTML tags and normalize whitespace
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    // Check if the remaining text has at least 20 characters
     return text.length > 20; 
 }
 
@@ -121,7 +119,6 @@ export async function callAIToGenerateQuiz(
     },
   });
 
-  // Safety truncate
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
 
@@ -162,34 +159,44 @@ export async function callAIToGenerateQuiz(
 }
 
 // ---------------------------------------------------------------------------
-// 2. NOTE GENERATION
+// 2. NOTE GENERATION (TURBO-CHARGED)
 // ---------------------------------------------------------------------------
 
 function buildNotePrompt({ text }: { text: string }): string {
-  return `You are an expert note-taker. Based on the following content, generate structured summary notes.
+  return `You are a "Turbo" AI Study Assistant. Transform the following content into a high-quality, visually engaging study guide.
 
 You MUST format the notes as clean, semantic HTML.
-- Use <h2> for main topics.
-- Use <h3> for sub-topics.
-- Use <ul> and <li> for bullet points.
-- Use <strong> for key terms.
-- Use <p> for paragraphs.
-- Do NOT use any Markdown (like ##, **, or -).
+Rules for formatting:
+- **Emojis:** Use relevant emojis for section headers and key points to make the notes skimmable (e.g., 💡 for ideas, ⚠️ for warnings, 🔑 for key terms).
+- **Structure:**
+  1. **🎯 Executive Summary:** A 2-3 sentence high-level overview.
+  2. **🔑 Core Concepts:** The main ideas, formatted as bullet points.
+  3. **📘 Detailed Breakdown:** Deep dive into the content. Use <h3> for sub-topics.
+  4. **📊 Comparisons (Optional):** If the text compares two things, use an HTML <table>.
+  5. **📖 Glossary:** A definition list of complex terms used in the text.
+  6. **🚀 Actionable Takeaways:** Practical applications or summary points.
+- **Tags:**
+  - Use <h2> for main section headers (with emojis).
+  - Use <h3> for sub-sections.
+  - Use <ul>/<ol> and <li> for lists.
+  - Use <strong> for emphasis.
+  - Use <blockquote> for very important quotes or "Remember this" callouts.
+  - Use <table>, <tr>, <th>, <td> for data/comparisons (add border classes if needed, but keep it semantic).
+- Do NOT use Markdown (no #, *, -).
 - Do NOT use <html>, <body>, or <head> tags.
-- The HTML content must be detailed and capture the essential information.
 
 Content:
 """
 ${text}
 """
 
-Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string (at least 50 characters) and MUST NOT be empty or just "<p></p>".
+Return ONLY valid JSON in this exact shape. The "content" field MUST be a valid HTML string.
 
 {
   "notes": [
     {
-      "title": "Concise Title Reflecting Main Topic",
-      "content": "<h2>Main Topic 1</h2><p>This is a summary paragraph.</p><h3>Sub-topic 1.1</h3><ul><li><strong>Key Term:</strong> Definition...</li><li>Another key point...</li></ul><h2>Main Topic 2</h2><p>More details...</p>"
+      "title": "A Concise & Catchy Title",
+      "content": "<h2>🎯 Executive Summary</h2><p>...</p><h2>🔑 Core Concepts</h2><ul><li><strong>Concept A:</strong> ...</li></ul>..."
     }
   ]
 }`;
@@ -201,7 +208,7 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
     generationConfig: {
-      temperature: 0.5,
+      temperature: 0.6, // Slightly higher for more creative/natural study guide flow
       responseMimeType: "application/json",
     },
   });
@@ -227,7 +234,6 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     }
   }
 
-  // Validations
   if (
     !parsed.notes || 
     !Array.isArray(parsed.notes) || 
@@ -235,13 +241,10 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
     !parsed.notes[0].title ||
     typeof parsed.notes[0].content !== 'string'
   ) {
-    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
-    throw new Error("AI failed to return a valid note structure with title and content.");
+    throw new Error("AI failed to return a valid note structure.");
   }
 
-  // Check for meaningful content
   if (!isContentMeaningful(parsed.notes[0].content)) {
-     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
      throw new Error("AI failed to generate meaningful content for this note.");
   }
   
@@ -311,20 +314,13 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
 }
 
 // ---------------------------------------------------------------------------
-// 4. AUDIO PROCESSING (VOICE NOTES - GROQ)
+// 4. AUDIO PROCESSING (VOICE NOTES - DIRECT UPLOAD)
 // ---------------------------------------------------------------------------
 
-/**
- * Processes an audio file using Groq:
- * 1. Transcribes using Whisper (distil-whisper-large-v3-en).
- * 2. Generates Title, Summary, and Suggestions using Llama3.
- */
 export async function callAIToProcessAudio(audioFile: File): Promise<{ title: string; transcript: string; summary: string; suggestions: string[] }> {
   if (!GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY environment variable");
 
   // 1. Transcribe (Whisper)
-  // Note: Groq SDK accepts File/Blob/Buffer directly in node depending on version, 
-  // but for Next.js Route Handlers receiving FormData, 'audioFile' (File) works well.
   const transcription = await groq.audio.transcriptions.create({
     file: audioFile,
     model: "distil-whisper-large-v3-en",
@@ -370,4 +366,29 @@ export async function callAIToProcessAudio(audioFile: File): Promise<{ title: st
     summary: analysis.summary || "No summary available.",
     suggestions: Array.isArray(analysis.suggestions) ? analysis.suggestions : []
   };
+}
+
+// ---------------------------------------------------------------------------
+// 5. SERVER-SIDE AUDIO TRANSCRIPTION (URL/FILEPATH FALLBACK)
+// ---------------------------------------------------------------------------
+
+export async function transcribeAudioFile(filePath: string): Promise<string> {
+  if (!GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY environment variable");
+
+  try {
+    const fileStream = fs.createReadStream(filePath);
+
+    const transcription = await groq.audio.transcriptions.create({
+      file: fileStream,
+      model: "distil-whisper-large-v3-en",
+      response_format: "json",
+      language: "en",
+      temperature: 0.0,
+    });
+
+    return transcription.text;
+  } catch (error: any) {
+    console.error("Groq Transcription Error:", error);
+    throw new Error(`Failed to transcribe audio: ${error.message}`);
+  }
 }

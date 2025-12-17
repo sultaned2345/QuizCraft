@@ -10,6 +10,7 @@
     "postinstall": "prisma generate && shx cp node_modules/pdfjs-dist/build/pdf.worker.mjs public/pdf.worker.mjs"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.10.0",
     "@prisma/client": "^6.19.0",
