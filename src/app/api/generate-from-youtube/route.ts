@@ -6,11 +6,12 @@ import {
   checkAIGenerationUsageLimit,
   incrementAIGenerationUsage,
 } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz, transcribeAudioFile } from '@/lib/aiGeneration'; // Import new helper
+import { callAIToGenerateQuiz, transcribeAudioFile } from '@/lib/aiGeneration';
 import { ApiResponse, Quiz } from '@/types/database';
 import { Prisma } from '@prisma/client';
 import { YoutubeTranscript } from 'youtube-transcript';
-import ytdl from '@distube/ytdl-core'; // Make sure to install this
+// Fallback libraries
+import ytdl from '@distube/ytdl-core'; 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -21,19 +22,40 @@ export const runtime = 'nodejs';
 // Helper to download audio to temp file
 async function downloadAudioToTemp(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const tempDir = os.tmpdir();
-    const filePath = path.join(tempDir, `${uuidv4()}.mp3`);
-    
-    // Low quality audio is fine for speech recognition and saves bandwidth
-    const stream = ytdl(url, { quality: 'lowestaudio', filter: 'audioonly' });
-    
-    const writeStream = fs.createWriteStream(filePath);
-    
-    stream.pipe(writeStream);
-    
-    writeStream.on('finish', () => resolve(filePath));
-    writeStream.on('error', (err) => reject(err));
-    stream.on('error', (err) => reject(err));
+    try {
+      const tempDir = os.tmpdir();
+      const filePath = path.join(tempDir, `${uuidv4()}.mp3`);
+      
+      console.log(`[YouTube] Starting download to ${filePath}...`);
+
+      // Use basic options; add cookies/agent here if needed in production
+      const stream = ytdl(url, { 
+        quality: 'lowestaudio', 
+        filter: 'audioonly',
+        // requestOptions: { ... } // Add proxy or headers here if blocked
+      });
+      
+      const writeStream = fs.createWriteStream(filePath);
+      
+      stream.pipe(writeStream);
+      
+      writeStream.on('finish', () => {
+        console.log(`[YouTube] Download complete: ${filePath}`);
+        resolve(filePath);
+      });
+      
+      writeStream.on('error', (err) => {
+        console.error(`[YouTube] File Write Error:`, err);
+        reject(err);
+      });
+      
+      stream.on('error', (err) => {
+        console.error(`[YouTube] YTDL Stream Error:`, err);
+        reject(err);
+      });
+    } catch (e) {
+      reject(e);
+    }
   });
 }
 
@@ -74,6 +96,10 @@ export async function POST(request: NextRequest) {
       
       // FALLBACK: Download Audio & Transcribe
       try {
+        if (!process.env.GROQ_API_KEY) {
+          throw new Error("GROQ_API_KEY is missing. Cannot perform audio fallback.");
+        }
+
         console.log('Downloading audio stream...');
         tempFilePath = await downloadAudioToTemp(videoUrl);
         
@@ -81,12 +107,15 @@ export async function POST(request: NextRequest) {
         transcriptText = await transcribeAudioFile(tempFilePath);
         
       } catch (audioError: any) {
-        console.error('Audio extraction/transcription failed:', audioError);
+        // Return the specific error to the client for debugging
+        const errorDetails = audioError.message || JSON.stringify(audioError);
+        console.error('Audio extraction/transcription failed:', errorDetails);
+        
         return NextResponse.json<ApiResponse>(
           {
             success: false,
             error: 'transcription_failed',
-            message: 'Could not generate quiz. The video has no captions, and audio transcription failed.',
+            message: `Audio processing failed: ${errorDetails}`, // <-- CHANGED to show actual error
           },
           { status: 422 }
         );
@@ -136,7 +165,6 @@ export async function POST(request: NextRequest) {
       select: { id: true, title: true, createdAt: true },
     });
 
-    // 6. Increment usage
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json<ApiResponse<Quiz>>({
@@ -153,11 +181,7 @@ export async function POST(request: NextRequest) {
   } finally {
     // Cleanup: Delete temp file if it exists
     if (tempFilePath && fs.existsSync(tempFilePath)) {
-      try {
-        fs.unlinkSync(tempFilePath);
-      } catch (e) {
-        console.error('Failed to delete temp file:', e);
-      }
+      try { fs.unlinkSync(tempFilePath); } catch (e) { /* ignore */ }
     }
   }
 }

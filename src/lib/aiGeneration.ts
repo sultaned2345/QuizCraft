@@ -8,10 +8,7 @@ import fs from 'fs'; // Required for server-side file streaming
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
 const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
-
-// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
 const MAX_INPUT_LENGTH = 100000; 
 
 if (!API_KEY) {
@@ -25,9 +22,6 @@ if (!GROQ_API_KEY) {
 const genAI = new GoogleGenerativeAI(API_KEY);
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-/**
- * Strips HTML tags and checks if the remaining text is meaningful.
- */
 function isContentMeaningful(content: string): boolean {
     if (!content) return false;
     const text = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -159,7 +153,7 @@ export async function callAIToGenerateQuiz(
 }
 
 // ---------------------------------------------------------------------------
-// 2. NOTE GENERATION (TURBO-CHARGED)
+// 2. NOTE GENERATION
 // ---------------------------------------------------------------------------
 
 function buildNotePrompt({ text }: { text: string }): string {
@@ -208,7 +202,7 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   const model = genAI.getGenerativeModel({
     model: AI_MODEL_NAME,
     generationConfig: {
-      temperature: 0.6, // Slightly higher for more creative/natural study guide flow
+      temperature: 0.6,
       responseMimeType: "application/json",
     },
   });
