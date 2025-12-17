@@ -1,6 +1,10 @@
+// src/app/api/dashboard/weaknesses/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/getServerSession';
+
+// --- FIX: Prevent static generation for this route ---
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {

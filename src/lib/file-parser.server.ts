@@ -126,3 +126,6 @@ export async function extractTextFromServerFile(
     throw new Error(error.message || `Text extraction failed`);
   }
 }
+
+// --- FIX: Export alias for compatibility ---
+export const extractTextFromFile = extractTextFromServerFile;

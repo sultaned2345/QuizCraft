@@ -1,3 +1,4 @@
+// src/lib/auth.ts
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
@@ -67,5 +68,8 @@ export function validateRequestBody<T>(body: any, requiredFields: (keyof T)[]): 
     }
   }
   
-  return { isValid: true }; //
+  return { isValid: true };
 }
+
+// --- FIX: Export alias for compatibility ---
+export const getUserSession = getAuthenticatedUser;
