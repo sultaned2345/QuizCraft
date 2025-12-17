@@ -1,46 +1,14 @@
-// src/app/(app)/documents/page.tsx
 import { Suspense } from 'react';
-import { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { getServerSession } from '@/lib/getServerSession';
-import { prisma } from '@/lib/prisma';
-import DocumentsClientComponent from './DocumentsClientComponent';
-import { AddDocumentDialog } from '@/components/AddDocumentDialog'; // Import the new component
-import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { DocumentsClientComponent } from './DocumentsClientComponent';
+import { AddDocumentDialog } from '@/components/AddDocumentDialog';
+import { Loader2 } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'Documents - QuizCraft',
-  description: 'Manage your uploaded documents and study materials.',
-};
+export const dynamic = 'force-dynamic';
 
-export default async function DocumentsPage() {
-  const session = await getServerSession();
-
-  if (!session || !session.user) {
-    redirect('/login');
-  }
-
-  // Fetch documents
-  const documents = await prisma.documents.findMany({
-    where: {
-      user_id: session.user.id,
-    },
-    orderBy: {
-      created_at: 'desc',
-    },
-    select: {
-      id: true,
-      file_name: true,
-      file_type: true,
-      created_at: true,
-      file_size: true,
-      // We don't need extracted_text for the list view to keep it light
-    },
-  });
-
+export default function DocumentsPage() {
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
+    <div className="container mx-auto px-4 py-8 max-w-6xl h-full flex flex-col">
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Library</h1>
@@ -49,16 +17,17 @@ export default async function DocumentsPage() {
           </p>
         </div>
         
-        {/* NEW: Replaces standard button with the Dialog */}
-        <AddDocumentDialog>
-           <Button className="shadow-lg hover:shadow-xl transition-all">
-              <Plus className="w-4 h-4 mr-2" /> Add New Document
-           </Button>
-        </AddDocumentDialog>
+        {/* The New Unified Dialog Button */}
+        <AddDocumentDialog />
       </div>
 
-      <Suspense fallback={<div className="text-center py-10">Loading documents...</div>}>
-        <DocumentsClientComponent initialDocuments={documents as any} />
+      {/* Content List */}
+      <Suspense fallback={
+        <div className="flex justify-center py-10">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      }>
+        <DocumentsClientComponent />
       </Suspense>
     </div>
   );
