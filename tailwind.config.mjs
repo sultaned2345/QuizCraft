@@ -1,6 +1,5 @@
 // tailwind.config.mjs
-// UPDATED FILE
-import typography from '@tailwindcss/typography'; // <-- IMPORT THIS
+import typography from '@tailwindcss/typography';
 
 /** @type {import('tailwindcss').Config} */
 const config = {
@@ -13,6 +12,12 @@ const config = {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        // Register the fonts we added in layout.tsx
+        sans: ['var(--font-sans)', 'sans-serif'],
+        mono: ['var(--font-mono)', 'monospace'],
+      },
+      // ... keep existing keyframes/animation ...
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
@@ -22,56 +27,20 @@ const config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        'pulse-glow': {
+          '0%, 100%': { boxShadow: '0 0 10px -2px var(--primary)' },
+          '50%': { boxShadow: '0 0 20px 2px var(--primary)' },
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-glow': 'pulse-glow 3s infinite',
       },
-      // --- ADD TYPOGRAPHY STYLES ---
-      typography: ({ theme }: { theme: (key: string) => string }) => ({
-        DEFAULT: {
-          css: {
-            '--tw-prose-body': theme('colors.foreground / 0.9'),
-            '--tw-prose-headings': theme('colors.foreground'),
-            '--tw-prose-lead': theme('colors.muted.foreground'),
-            '--tw-prose-links': theme('colors.primary'),
-            '--tw-prose-bold': theme('colors.foreground'),
-            '--tw-prose-counters': theme('colors.muted.foreground'),
-            '--tw-prose-bullets': theme('colors.primary'),
-            '--tw-prose-hr': theme('colors.border'),
-            '--tw-prose-quotes': theme('colors.foreground'),
-            '--tw-prose-quote-borders': theme('colors.primary'),
-            '--tw-prose-captions': theme('colors.muted.foreground'),
-            '--tw-prose-code': theme('colors.primary'),
-            '--tw-prose-pre-code': theme('colors.foreground'),
-            '--tw-prose-pre-bg': theme('colors.muted'),
-            '--tw-prose-th-borders': theme('colors.border'),
-            '--tw-prose-td-borders': theme('colors.border'),
-            // Invert for dark mode
-            '--tw-prose-invert-body': theme('colors.foreground / 0.8'),
-            '--tw-prose-invert-headings': theme('colors.foreground'),
-            '--tw-prose-invert-lead': theme('colors.muted.foreground'),
-            '--tw-prose-invert-links': theme('colors.primary'),
-            '--tw-prose-invert-bold': theme('colors.foreground'),
-            '--tw-prose-invert-counters': theme('colors.muted.foreground'),
-            '--tw-prose-invert-bullets': theme('colors.primary'),
-            '--tw-prose-invert-hr': theme('colors.border'),
-            '--tw-prose-invert-quotes': theme('colors.foreground'),
-            '--tw-prose-invert-quote-borders': theme('colors.primary'),
-            '--tw-prose-invert-captions': theme('colors.muted.foreground'),
-            '--tw-prose-invert-code': theme('colors.primary'),
-            '--tw-prose-invert-pre-code': theme('colors.foreground'),
-            '--tw-prose-invert-pre-bg': theme('colors.muted'),
-            '--tw-prose-invert-th-borders': theme('colors.border'),
-            '--tw-prose-invert-td-borders': theme('colors.border'),
-          },
-        },
-      }),
-      // --- END TYPOGRAPHY ---
     },
   },
   plugins: [
-    typography(), // <-- ADD THIS
+    typography(),
   ],
 };
 

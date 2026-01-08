@@ -12,15 +12,11 @@ import {
   Card,
   CardContent,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import {
-  Loader2,
   ArrowLeft,
-  RotateCw,
   Check,
   X,
   AlertCircle,
@@ -29,9 +25,13 @@ import {
   ArrowUp,
   ArrowDown,
   RefreshCcw,
+  Activity,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// --- Types ---
 
 interface QuizData {
   quiz: Quiz;
@@ -43,7 +43,8 @@ type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 // Extended type to hold shuffled options for display
 type QuizQuestion = Question & { shuffledOptions?: string[] };
 
-// Helper function to shuffle an array
+// --- Helpers ---
+
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -65,15 +66,12 @@ function OrderingQuestionUI({
   answerStatus: AnswerStatus;
   onQuestionComplete: (isCorrect: boolean) => void;
 }) {
-  // Local state for the user's current ordering
   const [currentOrder, setCurrentOrder] = useState<string[]>([]);
 
-  // Initialize with the shuffled options provided by the parent
   useEffect(() => {
     if (question.shuffledOptions) {
       setCurrentOrder([...question.shuffledOptions]);
     } else if (question.options && Array.isArray(question.options)) {
-        // Fallback if shuffle didn't happen for some reason
         setCurrentOrder([...question.options]);
     }
   }, [question]);
@@ -84,10 +82,8 @@ function OrderingQuestionUI({
     const newOrder = [...currentOrder];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
 
-    // Bounds check
     if (swapIndex < 0 || swapIndex >= newOrder.length) return;
 
-    // Swap
     [newOrder[index], newOrder[swapIndex]] = [
       newOrder[swapIndex],
       newOrder[index],
@@ -97,14 +93,8 @@ function OrderingQuestionUI({
 
   const handleSubmit = () => {
     if (answerStatus !== 'unanswered') return;
-
-    // Compare currentOrder with the correct order (question.options)
     const correctOrder = question.options as string[];
-    
-    // Simple array equality check
-    const isCorrect =
-      JSON.stringify(currentOrder) === JSON.stringify(correctOrder);
-      
+    const isCorrect = JSON.stringify(currentOrder) === JSON.stringify(correctOrder);
     onQuestionComplete(isCorrect);
   };
 
@@ -112,24 +102,23 @@ function OrderingQuestionUI({
     <div className="space-y-4">
       <div className="space-y-2">
         {currentOrder.map((item, index) => {
-          // Check if this specific item is in the correct slot (for feedback)
           const correctOrder = question.options as string[];
           const isSlotCorrect = correctOrder[index] === item;
 
-          let itemClass = 'bg-background border-border';
+          let itemClass = 'bg-black/40 border-white/10 text-zinc-300';
           if (answerStatus === 'correct') {
-            itemClass = 'border-green-500 bg-green-50 text-green-700';
+            itemClass = 'border-green-500/50 bg-green-500/10 text-green-400';
           } else if (answerStatus === 'incorrect') {
             itemClass = isSlotCorrect
-              ? 'border-green-500 bg-green-50 text-green-700' // Correctly placed items
-              : 'border-destructive bg-red-50 text-destructive'; // Incorrectly placed
+              ? 'border-green-500/50 bg-green-500/10 text-green-400'
+              : 'border-red-500/50 bg-red-500/10 text-red-400';
           }
 
           return (
             <div
               key={`${item}-${index}`}
               className={cn(
-                'flex items-center gap-3 p-3 border rounded-md transition-colors',
+                'flex items-center gap-3 p-3 border rounded-lg transition-colors',
                 itemClass
               )}
             >
@@ -137,38 +126,38 @@ function OrderingQuestionUI({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-6 w-6 hover:bg-white/10 text-muted-foreground hover:text-white"
                   onClick={() => moveItem(index, 'up')}
                   disabled={index === 0 || answerStatus !== 'unanswered'}
                 >
-                  <ArrowUp className="w-4 h-4" />
+                  <ArrowUp className="w-3 h-3" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-6 w-6 hover:bg-white/10 text-muted-foreground hover:text-white"
                   onClick={() => moveItem(index, 'down')}
                   disabled={
                     index === currentOrder.length - 1 ||
                     answerStatus !== 'unanswered'
                   }
                 >
-                  <ArrowDown className="w-4 h-4" />
+                  <ArrowDown className="w-3 h-3" />
                 </Button>
               </div>
-              <span className="flex-1 font-medium">{item}</span>
+              <span className="flex-1 font-medium font-mono text-sm">{item}</span>
               {answerStatus !== 'unanswered' &&
                 (isSlotCorrect ? (
-                  <Check className="w-5 h-5 text-green-600" />
+                  <Check className="w-4 h-4 text-green-500" />
                 ) : (
-                  <X className="w-5 h-5 text-destructive" />
+                  <X className="w-4 h-4 text-red-500" />
                 ))}
             </div>
           );
         })}
       </div>
       {answerStatus === 'unanswered' && (
-        <Button className="w-full mt-4" onClick={handleSubmit}>
+        <Button className="w-full mt-4 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90" onClick={handleSubmit}>
           Submit Order
         </Button>
       )}
@@ -188,16 +177,13 @@ function MatchingQuestionUI({
   answerStatus: AnswerStatus;
   onQuestionComplete: (isCorrect: boolean) => void;
 }) {
-  const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(
-    null
-  );
-  // userMatches[promptIndex] = optionIndex (in the shuffledOptions array)
+  const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
   const [userMatches, setUserMatches] = useState<(number | null)[]>([]);
 
   const {
     prompts,
-    options: correctOptions, // This is the unshuffled answer key
-    shuffledOptions, // This is the shuffled list for display
+    options: correctOptions, 
+    shuffledOptions, 
   } = useMemo(
     () => ({
       prompts: (question.prompts as string[]) || [],
@@ -207,7 +193,6 @@ function MatchingQuestionUI({
     [question]
   );
 
-  // Reset state when the question changes
   useEffect(() => {
     setUserMatches(new Array(prompts.length).fill(null));
     setSelectedPromptIdx(null);
@@ -217,11 +202,10 @@ function MatchingQuestionUI({
     if (answerStatus !== 'unanswered') return;
 
     if (userMatches[promptIdx] !== null) {
-      // This prompt is already matched, clear its match
       const newUserMatches = [...userMatches];
       newUserMatches[promptIdx] = null;
       setUserMatches(newUserMatches);
-      setSelectedPromptIdx(promptIdx); // Reselect it to allow new match
+      setSelectedPromptIdx(promptIdx); 
     } else {
       setSelectedPromptIdx(promptIdx);
     }
@@ -231,12 +215,10 @@ function MatchingQuestionUI({
     if (answerStatus !== 'unanswered' || selectedPromptIdx === null) return;
 
     const newUserMatches = [...userMatches];
-    // If this option was used elsewhere, clear that old match first
     const existingMatchIdx = newUserMatches.indexOf(optionIdx);
     if (existingMatchIdx > -1) {
       newUserMatches[existingMatchIdx] = null;
     }
-    // Set new match
     newUserMatches[selectedPromptIdx] = optionIdx;
     setUserMatches(newUserMatches);
     setSelectedPromptIdx(null);
@@ -278,7 +260,7 @@ function MatchingQuestionUI({
             variant="ghost"
             size="sm"
             onClick={handleReset}
-            className="text-muted-foreground"
+            className="text-muted-foreground hover:text-white"
           >
             <RefreshCcw className="w-3 h-3 mr-1" /> Reset Matches
           </Button>
@@ -288,29 +270,20 @@ function MatchingQuestionUI({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 relative">
         {/* Prompts Column */}
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          <h4 className="text-[10px] font-bold font-mono text-muted-foreground uppercase tracking-wider mb-2">
             Items
           </h4>
           {prompts.map((prompt, pIdx) => {
             const isSelected = selectedPromptIdx === pIdx;
             const isMatched = userMatches[pIdx] !== null;
-            let state:
-              | 'default'
-              | 'selected'
-              | 'matched'
-              | 'correct'
-              | 'incorrect' = 'default';
+            let state: 'default' | 'selected' | 'matched' | 'correct' | 'incorrect' = 'default';
 
             if (answerStatus === 'unanswered') {
               if (isSelected) state = 'selected';
               else if (isMatched) state = 'matched';
             } else {
-              // After submission
               const correctAns = correctOptions[pIdx];
-              const userAns =
-                userMatches[pIdx] !== null
-                  ? shuffledOptions[userMatches[pIdx]!]
-                  : null;
+              const userAns = userMatches[pIdx] !== null ? shuffledOptions[userMatches[pIdx]!] : null;
               state = userAns === correctAns ? 'correct' : 'incorrect';
             }
 
@@ -320,30 +293,24 @@ function MatchingQuestionUI({
                   variant="outline"
                   onClick={() => handlePromptClick(pIdx)}
                   className={cn(
-                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border-2 transition-all',
-                    state === 'selected' &&
-                      'border-primary ring-1 ring-primary bg-primary/5',
-                    state === 'matched' &&
-                      'border-primary/50 bg-primary/5 text-primary',
-                    state === 'correct' &&
-                      'border-green-500 bg-green-50 text-green-700',
-                    state === 'incorrect' &&
-                      'border-destructive bg-red-50 text-destructive'
+                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border transition-all',
+                    state === 'default' && 'border-white/10 bg-black/40 text-zinc-300 hover:bg-white/5',
+                    state === 'selected' && 'border-primary ring-1 ring-primary bg-primary/10 text-primary',
+                    state === 'matched' && 'border-primary/50 bg-primary/5 text-primary/80',
+                    state === 'correct' && 'border-green-500 bg-green-500/10 text-green-400',
+                    state === 'incorrect' && 'border-red-500 bg-red-500/10 text-red-400'
                   )}
                   disabled={answerStatus !== 'unanswered'}
                 >
-                  <span className="mr-2 font-bold opacity-50">{pIdx + 1}.</span>{' '}
+                  <span className="mr-2 font-mono font-bold opacity-50 text-xs">{pIdx + 1}.</span>{' '}
                   {prompt}
                 </Button>
-                {/* Visual connector dot (only on larger screens) */}
                 <div
                   className={cn(
-                    'absolute right-[-18px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full hidden md:block z-10',
-                    isMatched || state !== 'default'
-                      ? 'bg-primary'
-                      : 'bg-border',
+                    'absolute right-[-18px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full hidden md:block z-10 transition-colors',
+                    isMatched || state !== 'default' ? 'bg-primary' : 'bg-white/10',
                     state === 'correct' && 'bg-green-500',
-                    state === 'incorrect' && 'bg-destructive'
+                    state === 'incorrect' && 'bg-red-500'
                   )}
                 />
               </div>
@@ -353,18 +320,16 @@ function MatchingQuestionUI({
 
         {/* Options Column */}
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          <h4 className="text-[10px] font-bold font-mono text-muted-foreground uppercase tracking-wider mb-2">
             Matches
           </h4>
           {shuffledOptions.map((option, oIdx) => {
             const isMatched = userMatches.includes(oIdx);
-            let state: 'default' | 'matched' | 'correct' | 'incorrect' =
-              'default';
+            let state: 'default' | 'matched' | 'correct' | 'incorrect' = 'default';
 
             if (answerStatus === 'unanswered') {
               if (isMatched) state = 'matched';
             } else {
-              // Find which prompt matched this option to determine color
               const promptIdx = userMatches.indexOf(oIdx);
               if (promptIdx > -1) {
                 const correctAns = correctOptions[promptIdx];
@@ -374,35 +339,26 @@ function MatchingQuestionUI({
 
             return (
               <div key={oIdx} className="relative">
-                {/* Visual connector dot */}
                 <div
                   className={cn(
-                    'absolute left-[-18px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full hidden md:block z-10',
-                    isMatched || state !== 'default'
-                      ? 'bg-primary'
-                      : 'bg-border',
+                    'absolute left-[-18px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full hidden md:block z-10 transition-colors',
+                    isMatched || state !== 'default' ? 'bg-primary' : 'bg-white/10',
                     state === 'correct' && 'bg-green-500',
-                    state === 'incorrect' && 'bg-destructive'
+                    state === 'incorrect' && 'bg-red-500'
                   )}
                 />
                 <Button
                   variant="outline"
                   onClick={() => handleOptionClick(oIdx)}
                   className={cn(
-                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border-2 transition-all',
-                    state === 'matched' &&
-                      'border-primary/50 bg-primary/5 text-primary',
-                    state === 'correct' &&
-                      'border-green-500 bg-green-50 text-green-700',
-                    state === 'incorrect' &&
-                      'border-destructive bg-red-50 text-destructive',
-                    answerStatus === 'unanswered' &&
-                      selectedPromptIdx === null &&
-                      'opacity-60 cursor-not-allowed hover:bg-transparent'
+                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border transition-all',
+                    state === 'default' && 'border-white/10 bg-black/40 text-zinc-300 hover:bg-white/5',
+                    state === 'matched' && 'border-primary/50 bg-primary/5 text-primary/80',
+                    state === 'correct' && 'border-green-500 bg-green-500/10 text-green-400',
+                    state === 'incorrect' && 'border-red-500 bg-red-500/10 text-red-400',
+                    answerStatus === 'unanswered' && selectedPromptIdx === null && 'opacity-50 cursor-not-allowed'
                   )}
-                  disabled={
-                    answerStatus !== 'unanswered' || selectedPromptIdx === null
-                  }
+                  disabled={answerStatus !== 'unanswered' || selectedPromptIdx === null}
                 >
                   {option}
                 </Button>
@@ -414,7 +370,7 @@ function MatchingQuestionUI({
 
       {answerStatus === 'unanswered' && (
         <Button
-          className="w-full mt-4"
+          className="w-full mt-4 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90"
           disabled={!allMatched}
           onClick={handleSubmit}
         >
@@ -583,402 +539,271 @@ export default function TakeQuizPage() {
   };
 
   const handleRestart = () => {
-    if (quizData?.questions && quizData.questions.length > 0) {
-      const shuffledQuestions = shuffleArray(quizData.questions);
-      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
-          return {
-            ...q,
-            options: shuffleArray(q.options as string[]),
-          };
-        }
-        if (
-          (q.question_type === 'MATCHING' || q.question_type === 'ORDERING') &&
-          Array.isArray(q.options)
-        ) {
-          return {
-            ...q,
-            shuffledOptions: shuffleArray(q.options as string[]),
-          };
-        }
-        return q;
-      });
-      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
-    }
-    setCurrentQuestionIndex(0);
-    setSelectedAnswer(null);
-    setAnswerStatus('unanswered');
-    setCorrectAnswers(0);
-    setIsFinished(false);
-    setShowHint(false);
+    // Quick reload for simplicity to re-fetch and re-shuffle
+    window.location.reload();
   };
 
   const getOptionClass = (optionText: string) => {
-    if (answerStatus === 'unanswered') {
-      return 'border-border hover:bg-muted/50';
-    }
+    if (answerStatus === 'unanswered') return 'border-white/10 hover:bg-white/5 hover:border-primary/50 text-zinc-300';
+    
     const isThisCorrect = currentQuestion.correct_answer === optionText;
     if (isThisCorrect) {
-      return 'border-green-500 bg-green-50 text-green-700 ring-2 ring-green-500';
+      return 'border-green-500 bg-green-500/10 text-green-400 shadow-[0_0_15px_-3px_rgba(34,197,94,0.4)]';
     }
     if (selectedAnswer === optionText && !isThisCorrect) {
-      return 'border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive';
+      return 'border-red-500 bg-red-500/10 text-red-400 shadow-[0_0_15px_-3px_rgba(239,68,68,0.4)]';
     }
-    return 'border-border opacity-60';
+    return 'border-white/5 opacity-50';
   };
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="ml-2">Loading Quiz...</p>
+      <div className="flex h-screen items-center justify-center bg-background">
+         <div className="text-primary font-mono animate-pulse text-sm">INITIALIZING SIMULATION...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !quizData) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-destructive">
-        <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">Failed to Load Quiz</h2>
-        <p className="text-center">{error.message}</p>
-        <Button
-          onClick={() => router.push('/quizzes')}
-          variant="outline"
-          className="mt-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
-        </Button>
-      </div>
-    );
-  }
-
-  if (!quizData || quizQuestions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">
-          {quizData?.quiz?.title || 'Quiz'}
-        </h2>
-        <p className="text-center">This quiz has no questions in it.</p>
-        <Button
-          onClick={() => router.push('/quizzes')}
-          variant="outline"
-          className="mt-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quizzes
+      <div className="flex flex-col items-center justify-center h-screen bg-background text-red-500">
+        <AlertCircle className="h-12 w-12 mb-4 opacity-50" />
+        <h2 className="text-xl font-mono font-bold">SIMULATION FAILED</h2>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-6 font-mono text-xs">
+          ABORT
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full items-center py-8">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/quizzes')}
-            className="pl-0"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Quizzes
+    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden relative">
+       {/* Background Grid Pattern */}
+       <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
+      <div className="w-full max-w-3xl mx-auto p-6 relative z-10 flex flex-col h-full">
+        {/* Top HUD */}
+        <div className="flex items-center justify-between mb-8">
+          <Button variant="ghost" onClick={() => router.push('/quizzes')} className="text-muted-foreground hover:text-white font-mono text-xs">
+            <ArrowLeft className="mr-2 h-4 w-4" /> ABORT MISSION
           </Button>
-          <h1
-            className="text-xl font-semibold truncate text-center"
-            title={quizData.quiz.title}
-          >
-            {quizData.quiz.title}
-          </h1>
-          <div className="w-24"></div> {/* Spacer */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono">
+             <Activity className="w-3 h-3 text-primary animate-pulse" />
+             <span>LIVE_SIMULATION</span>
+          </div>
         </div>
 
         {!isFinished && (
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-sm font-medium text-muted-foreground">
-              Question {currentQuestionIndex + 1} of {quizQuestions.length}
-            </span>
-            <Progress value={progress} className="flex-1 h-2" />
+          <div className="mb-8 space-y-2">
+            <div className="flex justify-between text-xs font-mono text-muted-foreground uppercase">
+                <span>Progress</span>
+                <span>{Math.round(progress)}% Complete</span>
+            </div>
+            <Progress value={progress} className="h-1 bg-white/10" />
           </div>
         )}
 
+        <div className="flex-1 flex flex-col justify-center pb-12">
         <AnimatePresence mode="wait">
           {isFinished ? (
             <motion.div
               key="summary"
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center"
+              className="flex flex-col items-center text-center"
             >
-              <Card className="w-full max-w-md shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-center text-2xl">
-                    Quiz Complete!
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center gap-4">
-                  <Trophy className="w-16 h-16 text-yellow-500" />
-                  <h3 className="text-4xl font-bold mt-4">
-                    {correctAnswers} / {quizQuestions.length}
-                  </h3>
-                  <p className="text-lg text-muted-foreground">
-                    Your score:{' '}
-                    {Math.round(
-                      (correctAnswers / quizQuestions.length) * 100
-                    )}
-                    %
-                  </p>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-3">
-                  <Button className="w-full" onClick={handleRestart}>
-                    <RotateCw className="mr-2 h-4 w-4" />
-                    Take Again
+               <div className="relative mb-8">
+                  <div className="absolute inset-0 bg-yellow-500/20 blur-[60px] rounded-full" />
+                  <Trophy className="w-24 h-24 text-yellow-500 relative z-10 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
+               </div>
+               
+               <h2 className="text-3xl font-bold font-mono mb-2 tracking-tight text-white">MISSION ACCOMPLISHED</h2>
+               <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 mb-8">
+                 {Math.round((correctAnswers / quizQuestions.length) * 100)}%
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4 w-full max-w-sm mb-8">
+                  <div className="p-5 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center">
+                     <span className="text-xs font-mono text-muted-foreground uppercase mb-1">Correct</span>
+                     <span className="text-2xl font-bold text-green-400">{correctAnswers}</span>
+                  </div>
+                  <div className="p-5 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center">
+                     <span className="text-xs font-mono text-muted-foreground uppercase mb-1">Total</span>
+                     <span className="text-2xl font-bold text-white">{quizQuestions.length}</span>
+                  </div>
+               </div>
+
+               <div className="flex gap-4 w-full max-w-sm">
+                  <Button 
+                    className="flex-1 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90 font-bold" 
+                    onClick={handleRestart}
+                  >
+                    Re-Deploy
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 font-mono uppercase tracking-widest border-white/10 hover:bg-white/5" 
                     onClick={() => router.push('/quizzes')}
                   >
-                    Back to Quizzes
+                    Exit
                   </Button>
-                </CardFooter>
-              </Card>
+               </div>
             </motion.div>
           ) : (
             <motion.div
               key={currentQuestionIndex}
-              initial={{ opacity: 0, x: 50 }}
+              initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
+              exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
+              className="w-full"
             >
-              <Card className="shadow-lg">
-                <CardContent className="p-6">
-                  <p className="text-lg font-semibold mb-4 min-h-[60px]">
-                    {currentQuestion.question_text}
-                  </p>
+              <Card className="bg-zinc-900/80 backdrop-blur-xl border-white/10 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
+                <CardContent className="p-8">
+                  <div className="mb-8">
+                    <span className="text-xs font-mono text-primary/70 uppercase tracking-widest mb-3 block">
+                        Query Sequence 0{currentQuestionIndex + 1}
+                    </span>
+                    <h3 className="text-xl md:text-2xl font-semibold leading-relaxed text-white">
+                        {currentQuestion.question_text}
+                    </h3>
+                  </div>
+
                   <div className="space-y-3">
-                    {/* Multiple Choice Options */}
-                    {currentQuestion.question_type === 'MULTIPLE_CHOICE' &&
+                    {/* Multiple Choice / True False */}
+                    {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
                       (currentQuestion.options as string[]).map((option) => (
                         <Button
                           key={option}
                           variant="outline"
                           className={cn(
-                            'h-auto min-h-12 w-full justify-start text-left p-4 whitespace-normal',
-                            answerStatus !== 'unanswered' &&
-                              'pointer-events-none',
+                            'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal text-base transition-all duration-200',
+                            answerStatus !== 'unanswered' && 'pointer-events-none opacity-100',
                             getOptionClass(option)
                           )}
                           onClick={() => handleAnswerSelect(option)}
                         >
-                          <span className="flex-1">{option}</span>
-                          {answerStatus !== 'unanswered' &&
-                            getOptionClass(option).includes('green') && (
-                              <Check className="w-5 h-5 ml-2 text-green-600" />
-                            )}
-                          {answerStatus !== 'unanswered' &&
-                            getOptionClass(option).includes('destructive') && (
-                              <X className="w-5 h-5 ml-2 text-destructive" />
-                            )}
+                          <span className="flex-1 font-sans">{option}</span>
+                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-5 h-5 ml-2 text-green-400" />}
+                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-5 h-5 ml-2 text-red-400" />}
                         </Button>
-                      ))}
-
-                    {/* True/False Options */}
-                    {currentQuestion.question_type === 'TRUE_FALSE' &&
-                      ['True', 'False'].map((option) => (
-                        <Button
-                          key={option}
-                          variant="outline"
-                          className={cn(
-                            'h-12 w-full text-left p-4',
-                            answerStatus !== 'unanswered' &&
-                              'pointer-events-none',
-                            getOptionClass(option)
-                          )}
-                          onClick={() => handleAnswerSelect(option)}
-                        >
-                          <span className="flex-1">{option}</span>
-                          {answerStatus !== 'unanswered' &&
-                            getOptionClass(option).includes('green') && (
-                              <Check className="w-5 h-5 ml-2 text-green-600" />
-                            )}
-                          {answerStatus !== 'unanswered' &&
-                            getOptionClass(option).includes('destructive') && (
-                              <X className="w-5 h-5 ml-2 text-destructive" />
-                            )}
-                        </Button>
-                      ))}
-
-                    {/* Fill in the Blank */}
+                    ))}
+                    
+                    {/* Fill in Blank */}
                     {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                      <div className="space-y-3">
-                        <Input
-                          type="text"
-                          placeholder="Type your answer..."
-                          value={selectedAnswer || ''}
-                          onChange={(e) => setSelectedAnswer(e.target.value)}
-                          disabled={answerStatus !== 'unanswered'}
-                          className="text-base"
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === 'Enter' &&
-                              answerStatus === 'unanswered' &&
-                              selectedAnswer
-                            ) {
-                              handleAnswerSelect(selectedAnswer.trim());
-                            }
-                          }}
+                        <div className="space-y-4">
+                            <Input 
+                                placeholder="ENTER DATA VALUE..." 
+                                className="bg-black/50 border-white/20 h-14 font-mono text-lg text-white"
+                                value={selectedAnswer || ''}
+                                onChange={(e) => setSelectedAnswer(e.target.value)}
+                                disabled={answerStatus !== 'unanswered'}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
+                                      handleAnswerSelect(selectedAnswer.trim());
+                                    }
+                                }}
+                            />
+                            <Button 
+                                className="w-full h-12 font-mono uppercase tracking-widest bg-white text-black hover:bg-white/90" 
+                                disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()} 
+                                onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
+                            >
+                                Verify Data
+                            </Button>
+                        </div>
+                    )}
+
+                     {/* Complex Types */}
+                     {currentQuestion.question_type === 'MATCHING' && (
+                        <MatchingQuestionUI 
+                            question={currentQuestion} 
+                            answerStatus={answerStatus} 
+                            onQuestionComplete={handleComplexQuestionComplete} 
                         />
-                        <Button
-                          className="w-full"
-                          disabled={
-                            answerStatus !== 'unanswered' ||
-                            !selectedAnswer?.trim()
-                          }
-                          onClick={() =>
-                            handleAnswerSelect(selectedAnswer!.trim())
-                          }
-                        >
-                          Submit Answer
-                        </Button>
-                      </div>
-                    )}
+                     )}
+                     
+                     {currentQuestion.question_type === 'ORDERING' && (
+                        <OrderingQuestionUI 
+                            question={currentQuestion} 
+                            answerStatus={answerStatus} 
+                            onQuestionComplete={handleComplexQuestionComplete} 
+                        />
+                     )}
 
-                    {/* Matching Component */}
-                    {currentQuestion.question_type === 'MATCHING' && (
-                      <MatchingQuestionUI
-                        question={currentQuestion}
-                        answerStatus={answerStatus}
-                        onQuestionComplete={handleComplexQuestionComplete}
-                      />
-                    )}
-
-                    {/* Ordering Component */}
-                    {currentQuestion.question_type === 'ORDERING' && (
-                      <OrderingQuestionUI
-                        question={currentQuestion}
-                        answerStatus={answerStatus}
-                        onQuestionComplete={handleComplexQuestionComplete}
-                      />
-                    )}
                   </div>
 
-                  {/* Feedback Area */}
+                  {/* Feedback Overlay */}
                   <AnimatePresence>
-                    {answerStatus === 'unanswered' &&
-                      showHint &&
-                      currentQuestion.explanation && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-4 flex flex-col font-medium text-yellow-600"
+                    {answerStatus !== 'unanswered' && (
+                        <motion.div 
+                            initial={{ height: 0, opacity: 0 }} 
+                            animate={{ height: 'auto', opacity: 1 }}
+                            className={cn(
+                                "mt-8 p-6 rounded-lg border-l-4 font-mono text-sm",
+                                answerStatus === 'correct' ? "bg-green-500/10 border-green-500 text-green-400" : "bg-red-500/10 border-red-500 text-red-400"
+                            )}
                         >
-                          <div className="flex items-center">
-                            <Lightbulb className="w-5 h-5 mr-2" />
-                            Hint:
-                          </div>
-                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                            {currentQuestion.explanation}
-                          </p>
-                        </motion.div>
-                      )}
-
-                    {answerStatus === 'correct' && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 flex flex-col font-medium text-green-600"
-                      >
-                        <div className="flex items-center">
-                          <Check className="w-5 h-5 mr-2" />
-                          That's correct!
-                        </div>
-                        {currentQuestion.explanation && (
-                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                            {currentQuestion.explanation}
-                          </p>
-                        )}
-                      </motion.div>
-                    )}
-
-                    {answerStatus === 'incorrect' && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 flex flex-col font-medium text-destructive"
-                      >
-                        <div className="flex items-center">
-                          <X className="w-5 h-5 mr-2" />
-                          That's not right.
-                        </div>
-
-                        {currentQuestion.question_type ===
-                          'FILL_IN_THE_BLANK' && (
-                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                            Correct answer(s):{' '}
-                            {Array.isArray(currentQuestion.options) &&
-                            currentQuestion.options.length > 0
-                              ? currentQuestion.options.join(', ')
-                              : currentQuestion.correct_answer}
-                          </p>
-                        )}
-
-                        {currentQuestion.question_type === 'ORDERING' && (
-                            <div className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                                <p className="font-semibold text-foreground">Correct Order:</p>
-                                <ol className="list-decimal list-inside">
-                                    {(currentQuestion.options as string[])?.map((opt, i) => <li key={i}>{opt}</li>)}
-                                </ol>
+                            <div className="flex items-center gap-2 font-bold mb-2 uppercase tracking-wider text-base">
+                                {answerStatus === 'correct' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                                {answerStatus === 'correct' ? 'Data Verified' : 'Corruption Detected'}
                             </div>
-                        )}
+                            
+                            {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                                <div className="mb-2 text-white/80">
+                                    Expected: <span className="text-white font-bold">{Array.isArray(currentQuestion.options) ? currentQuestion.options[0] : currentQuestion.correct_answer}</span>
+                                </div>
+                            )}
 
-                        {currentQuestion.explanation && (
-                          <p className="text-sm font-normal text-muted-foreground ml-7 mt-1">
-                            {currentQuestion.explanation}
-                          </p>
-                        )}
-                      </motion.div>
+                            <p className="opacity-90 font-sans leading-relaxed text-zinc-300">
+                                {currentQuestion.explanation || (answerStatus === 'incorrect' ? "Check your source material for further analysis." : "Logic sound. Proceed to next query.")}
+                            </p>
+                        </motion.div>
                     )}
                   </AnimatePresence>
                 </CardContent>
-                <CardFooter className="p-6 pt-0 flex justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowHint(true)}
-                    disabled={
-                      answerStatus !== 'unanswered' ||
-                      showHint ||
-                      !currentQuestion.explanation
-                    }
-                    className={cn(
-                      'transition-all',
-                      answerStatus !== 'unanswered' ||
-                        showHint ||
-                        !currentQuestion.explanation
-                        ? 'opacity-0'
-                        : 'opacity-100'
-                    )}
-                  >
-                    <Lightbulb className="w-4 h-4 mr-2" />
-                    Show Hint
-                  </Button>
+                
+                <CardFooter className="bg-black/40 p-6 border-t border-white/5 flex justify-between items-center">
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setShowHint(true)} 
+                        disabled={answerStatus !== 'unanswered' || showHint || !currentQuestion.explanation} 
+                        className={cn(
+                            "text-yellow-500/70 hover:text-yellow-500 hover:bg-yellow-500/10 transition-all",
+                            (answerStatus !== 'unanswered' || showHint) && "opacity-0"
+                        )}
+                    >
+                        <Lightbulb className="w-4 h-4 mr-2" /> HINT
+                    </Button>
 
-                  <Button
-                    className="w-full sm:w-auto"
-                    disabled={answerStatus === 'unanswered'}
-                    onClick={handleNext}
-                  >
-                    {currentQuestionIndex === quizQuestions.length - 1
-                      ? 'Finish Quiz'
-                      : 'Next Question'}
-                  </Button>
+                    <AnimatePresence>
+                        {showHint && answerStatus === 'unanswered' && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10 }} 
+                                animate={{ opacity: 1, y: 0 }}
+                                className="absolute bottom-20 left-8 right-8 bg-yellow-950/90 border border-yellow-500/30 p-4 rounded-lg text-yellow-200 text-sm shadow-xl backdrop-blur-md z-20"
+                            >
+                                <div className="font-bold flex items-center gap-2 mb-1"><Lightbulb className="w-4 h-4" /> Hint Decrypted:</div>
+                                {currentQuestion.explanation}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <Button 
+                        onClick={handleNext} 
+                        disabled={answerStatus === 'unanswered'} 
+                        className="bg-white text-black hover:bg-white/90 font-mono text-xs uppercase font-bold px-8 h-10"
+                    >
+                        {currentQuestionIndex === quizQuestions.length - 1 ? 'FINALIZE' : 'NEXT_QUERY'} <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
+                    </Button>
                 </CardFooter>
               </Card>
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );

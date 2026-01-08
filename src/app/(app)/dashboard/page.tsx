@@ -1,51 +1,58 @@
+// src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
-import { SmartStudyQueue } from "@/components/dashboard/SmartStudyQueue";
-import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
+import { PriorityTargets } from "@/components/dashboard/PriorityTargets";
+import { MissionLog } from "@/components/dashboard/MissionLog";
 import { StudyHeatmap } from "@/components/dashboard/StudyHeatmap";
-import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { SkeletonCard } from "@/components/SkeletonCard";
 
 // Server Actions to fetch data
 import { getSmartStudyQueue, getHeatmapData, getRecentActivity } from "@/lib/dashboard-data";
-import { getUser } from "@/lib/auth"; // Your auth helper
+import { getUser } from "@/lib/auth"; 
 
 export default async function DashboardPage() {
   const user = await getUser();
   
-  // Parallel data fetching for critical top-fold items
-  const queueData = await getSmartStudyQueue(user.id);
-  const recentItems = await getRecentActivity(user.id);
+  // Parallel fetching
+  const [queueData, recentItems] = await Promise.all([
+    getSmartStudyQueue(user.id),
+    getRecentActivity(user.id)
+  ]);
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto">
-      <DashboardHeader user={user} />
+    <div className="space-y-8 pb-10">
+      
+      {/* 1. Hero Section */}
+      <WelcomeHero user={user} />
 
-      {/* Top Row: Immediate Actions & Recents */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RecentActivity items={recentItems} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* 2. Left Column: Priority Tasks (Directives) */}
+        <div className="lg:col-span-2 space-y-8">
+          <PriorityTargets data={queueData} />
+          
+          <div className="mt-8">
+             <h2 className="text-xl font-mono font-bold tracking-tight mb-6">ACTIVITY MATRIX</h2>
+             <Suspense fallback={<SkeletonCard className="h-[250px] w-full bg-card/40 border-white/5" />}>
+               <StudyHeatmapFetcher userId={user.id} />
+             </Suspense>
+          </div>
         </div>
+
+        {/* 3. Right Column: Recent Log */}
         <div className="lg:col-span-1">
-           <SmartStudyQueue data={queueData} />
+           <MissionLog items={recentItems} />
         </div>
-      </div>
-
-      {/* Middle Row: Analytics (Lazy Loaded) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Suspense fallback={<SkeletonCard className="h-[300px]" />}>
-          <StudyHeatmapFetcher userId={user.id} />
-        </Suspense>
-        <Suspense fallback={<SkeletonCard className="h-[300px]" />}>
-          {/* Add the Radar Chart here later */}
-          <QuizPerformanceFetcher userId={user.id} />
-        </Suspense>
       </div>
     </div>
   );
 }
 
-// Wrapper component to handle async fetching for Suspense
+// Wrapper for Suspense
 async function StudyHeatmapFetcher({ userId }: { userId: string }) {
   const data = await getHeatmapData(userId);
-  return <StudyHeatmap data={data} />;
+  return (
+    <div className="p-6 rounded-2xl border border-white/10 bg-card/40 backdrop-blur-sm">
+        <StudyHeatmap data={data} />
+    </div>
+  );
 }
