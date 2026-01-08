@@ -3,13 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 
+// FIX: Force dynamic rendering
+export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type GraphNode = {
   id: string;
   label: string;
-  group: string; // 'note' or tag
-  val: number; // For node size
+  group: string; 
+  val: number; 
 };
 
 type GraphLink = {
@@ -26,15 +28,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
 
-    // 1. Fetch ALL notes for the user in a single optimized query
-    // We only need id, title, and the adjacency list (linked_note_ids)
     const notes = await prisma.notes.findMany({
       where: { user_id: user.id },
       select: {
         id: true,
         title: true,
         tags: true,
-        linked_note_ids: true, // These are outgoing links
+        linked_note_ids: true, 
       },
     });
 
@@ -42,9 +42,7 @@ export async function GET(req: NextRequest) {
     const links: GraphLink[] = [];
     const nodeIds = new Set(notes.map((n) => n.id));
 
-    // 2. Transform into Graph format (Nodes & Edges)
     notes.forEach((note) => {
-      // Add Node
       nodes.push({
         id: note.id,
         label: note.title,
@@ -52,9 +50,6 @@ export async function GET(req: NextRequest) {
         val: 1,
       });
 
-      // Add Edges (Links)
-      // linked_note_ids stores outgoing links. 
-      // We check if the target exists to prevent broken edges.
       note.linked_note_ids.forEach((targetId) => {
         if (nodeIds.has(targetId)) {
           links.push({

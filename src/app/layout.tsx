@@ -7,8 +7,9 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { Footer } from "@/components/Footer"
 import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
-import { Toaster } from "@/components/ui/toaster" // FIX: Correct import path
-import { CookieConsent } from "@/components/CookieConsent" // FIX: Switched to Named Import
+import { Toaster } from "@/components/ui/toaster" 
+// FIX: Change to default import to match the export in the component file
+import CookieConsent from "@/components/CookieConsent" 
 import "./globals.css"
 
 const inter = Inter({

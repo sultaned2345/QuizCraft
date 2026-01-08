@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
 
+// FIX: Force dynamic rendering because this route uses headers/cookies (via requireAuth)
+export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -63,7 +65,7 @@ export async function GET(req: NextRequest) {
       data: formattedWeaknesses,
     });
   } catch (error: any) {
-    if (error instanceof Response) return error; // Handle requireAuth redirect/error
+    if (error instanceof Response) return error; 
     console.error('[API /api/dashboard/weaknesses] Error:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Failed to fetch weakness analysis.' },
