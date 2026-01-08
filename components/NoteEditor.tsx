@@ -1,298 +1,151 @@
 // components/NoteEditor.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Loader2,
-  Save,
-  ArrowLeft,
-  FileText,
-  StickyNote,
-  Link as LinkIcon,
+import { useState, useEffect, useRef } from 'react';
+import { 
+  Loader2, 
+  Save, 
+  Sparkles, 
+  ChevronLeft,
+  Share2 
 } from 'lucide-react';
-import { Note, ApiResponse, RelatedItem } from '@/types/database';
-import { useAuth } from '@/contexts/AuthContext'; // <-- FIX: Corrected path
-import NextLink from 'next/link';
-import { useToast } from '@/hooks/use-toast'; // <-- FIX: Added slash
-import { RichTextEditor } from '@/components/RichTextEditor';
-import { BacklinksWidget } from '@/components/BacklinksWidget';
-import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
-// (RelatedContentWidget is unchanged)
-function RelatedContentWidget({
-  note,
-  onLinkClick,
-}: {
-  note: Note | null;
-  onLinkClick: () => void;
-}) {
-  const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const { session } = useAuth();
-
-  useEffect(() => {
-    if (note && note.content && session) {
-      const fetchRelated = async () => {
-        setIsLoading(true);
-        setRelatedItems([]);
-        try {
-          const response = await fetch('/api/content/find-related', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              contentId: note.id,
-              contentType: 'note',
-              textContent: note.content, // This should be text, not HTML
-            }),
-          });
-          const result: ApiResponse<RelatedItem[]> = await response.json();
-          if (result.success && result.data) {
-            setRelatedItems(result.data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch related content:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchRelated();
-    }
-  }, [note, session]);
-
-  return (
-    <div className="space-y-3">
-      <h4 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-        <LinkIcon className="w-4 h-4" />
-        Related Materials
-      </h4>
-      {isLoading && (
-        <p className="text-xs text-muted-foreground">Loading...</p>
-      )}
-      {!isLoading && relatedItems.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">
-          No related content found.
-        </p>
-      )}
-      {!isLoading &&
-        relatedItems.length > 0 &&
-        relatedItems.map((item) => (
-          <div key={item.content_id} className="border rounded-md">
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="w-full justify-start h-auto py-2 rounded-b-none border-0 border-b"
-            >
-              <NextLink
-                href={
-                  item.content_type === 'note'
-                    ? `/notes/${item.content_id}`
-                    : `/documents/${item.content_id}`
-                }
-                title={item.content_title}
-                onClick={onLinkClick}
-              >
-                {item.content_type === 'note' ? (
-                  <StickyNote className="w-4 h-4 mr-2 shrink-0" />
-                ) : (
-                  <FileText className="w-4 h-4 mr-2 shrink-0" />
-                )}
-                <span className="truncate text-xs font-semibold">
-                  {item.content_title}
-                </span>
-              </NextLink>
-            </Button>
-            {item.content_chunk && (
-              <p className="text-xs text-muted-foreground italic p-2 bg-muted/50 border-t truncate">
-                "...{item.content_chunk}..."
-              </p>
-            )}
-          </div>
-        ))}
-    </div>
-  );
-}
+// We'll use a simple textarea for now, but styled beautifully.
+// In a real V2, this would be TipTap or Slate.js.
 
 interface NoteEditorProps {
-  note: Note | null; // Null for a new note
+  noteId: string;
+  initialTitle?: string;
+  initialContent?: string;
 }
 
-export function NoteEditor({ note }: NoteEditorProps) {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
+export default function NoteEditor({ noteId, initialTitle = '', initialContent = '' }: NoteEditorProps) {
   const { session } = useAuth();
-  const router = useRouter();
   const { toast } = useToast();
-  const { openModal } = useUpgradeModal();
-  const isUpdating = !!note;
+  const router = useRouter();
+  
+  const [title, setTitle] = useState(initialTitle);
+  const [content, setContent] = useState(initialContent);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
+  // Auto-save logic
   useEffect(() => {
-    if (note) {
-      setTitle(note.title);
-      setContent(note.content);
-      setTags(note.tags ? note.tags.join(', ') : '');
-    } else {
-      // It's a new note
-      setTitle('');
-      setContent('');
-      setTags('');
-    }
-    setIsLoaded(true);
-  }, [note]);
+    const timer = setTimeout(() => {
+      if (title !== initialTitle || content !== initialContent) {
+        handleSave(false);
+      }
+    }, 2000);
 
-  const parseLinks = (htmlContent: string) => {
-    const regex = /href="\/notes\/([0-9a-fA-F-]{36})"/g;
-    const ids = new Set<string>();
-    let match;
-    while ((match = regex.exec(htmlContent)) !== null) {
-      ids.add(match[1]);
-    }
-    return Array.from(ids);
-  };
+    return () => clearTimeout(timer);
+  }, [title, content]);
 
-  const handleSave = async () => {
-    if (!title.trim() || !session) {
-      toast({ title: 'Title is required.', variant: 'destructive' });
-      return;
-    }
+  const handleSave = async (manual: boolean = false) => {
     setIsSaving(true);
-
-    const tagsArray = tags.split(',').map((tag) => tag.trim()).filter(Boolean);
-    const linkedIds = parseLinks(content);
-
-    const noteData = {
-      title,
-      content,
-      tags: tagsArray,
-      linked_note_ids: linkedIds,
-    };
-
     try {
-      const url = isUpdating ? `/api/notes?id=${note?.id}` : '/api/notes';
-      const method = isUpdating ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
+      const res = await fetch(`/api/notes/${noteId}`, {
+        method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify(noteData),
+        body: JSON.stringify({ title, content }),
       });
 
-      const result: ApiResponse<Note> = await response.json();
-      if (!response.ok || !result.success || !result.data) {
-        if (result.error === 'limit_exceeded') {
-          openModal();
-          throw new Error(result.message || 'Note limit reached.');
-        }
-        throw new Error(result.error);
+      if (!res.ok) throw new Error();
+      
+      setLastSaved(new Date());
+      if (manual) {
+        toast({ description: "Note saved successfully." });
       }
-
-      toast({ title: `Note ${isUpdating ? 'Updated' : 'Created'}` });
-
-      if (!isUpdating) {
-        router.replace(`/notes/${result.data.id}`);
-      } else {
-        router.refresh();
-      }
-    } catch (error: any) {
-      if (!error.message.includes('limit reached')) {
-        toast({
-          title: 'Save Failed',
-          description: error.message,
-          variant: 'destructive',
-        });
-      }
+    } catch (e) {
+      toast({ variant: "destructive", description: "Failed to save note." });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const isDisabled = isSaving || !isLoaded;
+  const handleAiExpand = async () => {
+    // Placeholder for AI expansion logic
+    setIsAiGenerating(true);
+    toast({ description: "Consulting Neural Engine..." });
+    setTimeout(() => {
+        setContent(prev => prev + "\n\n[AI SUGGESTION]: Consider exploring the connection between this topic and quantum mechanics...");
+        setIsAiGenerating(false);
+    }, 1500);
+  };
 
-  // (JSX is unchanged)
   return (
-    <div className="flex flex-col h-full">
-      {/* Header Bar */}
-      <div className="flex items-center justify-between mb-6 gap-4">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/notes')}
-          disabled={isDisabled}
+    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-4xl mx-auto relative">
+      
+      {/* 1. Top Bar (Minimal) */}
+      <div className="flex items-center justify-between py-4 px-6 border-b border-white/5 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+        <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => router.push('/notes')}
+            className="text-muted-foreground hover:text-white -ml-2 font-mono text-xs"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Notes
+            <ChevronLeft className="w-4 h-4 mr-1" /> BACK
         </Button>
-        <Button onClick={handleSave} disabled={isDisabled}>
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
-          {isSaving ? 'Saving...' : 'Save Note'}
-        </Button>
+        
+        <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest hidden sm:block">
+                {isSaving ? 'SAVING...' : lastSaved ? `SAVED ${lastSaved.toLocaleTimeString()}` : 'UNSAVED'}
+            </span>
+            <div className="h-4 w-px bg-white/10 mx-2" />
+            <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={handleAiExpand}
+                disabled={isAiGenerating}
+                className="text-purple-400 hover:text-purple-300 hover:bg-purple-400/10 h-8"
+            >
+                {isAiGenerating ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Sparkles className="w-3 h-3 mr-2" />}
+                <span className="font-mono text-xs font-bold">EXPAND</span>
+            </Button>
+            <Button 
+                size="sm" 
+                className="bg-white text-black hover:bg-zinc-200 h-8 font-mono text-xs font-bold"
+                onClick={() => handleSave(true)}
+            >
+                SAVE
+            </Button>
+        </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-8 overflow-hidden">
-        {/* Main Editor */}
-        <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-2">
-          <div className="grid gap-2">
-            <Label htmlFor="title-input" className="text-base">
-              Title
-            </Label>
-            <Input
-              id="title-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="text-2xl font-bold h-12"
-              placeholder="My New Note Title"
-              disabled={isDisabled}
+      {/* 2. The Paper (Editor Area) */}
+      <div className="flex-1 overflow-y-auto bg-background custom-scrollbar">
+        <div className="max-w-3xl mx-auto px-8 py-12 flex flex-col gap-6 min-h-full">
+            
+            {/* Title Input (Borderless) */}
+            <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Note Title"
+                className="w-full bg-transparent text-4xl font-bold text-white placeholder:text-zinc-700 focus:outline-none font-sans tracking-tight"
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="tags-input" className="text-base">
-              Tags
-            </Label>
-            <Input
-              id="tags-input"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="e.g. biology, exam1, chapter3"
-              disabled={isDisabled}
-            />
-          </div>
-          <div className="grid gap-2 flex-1">
-            <Label className="text-base">Content</Label>
-            {isLoaded ? (
-              <RichTextEditor
-                content={content}
-                onChange={setContent}
-                editable={!isDisabled}
-              />
-            ) : (
-              <Skeleton className="w-full min-h-[300px] rounded-md" />
-            )}
-          </div>
-        </div>
 
-        {/* Sidebar */}
-        <div className="lg:col-span-1 overflow-y-auto space-y-6 border-l -ml-4 pl-8">
-          <RelatedContentWidget note={note} onLinkClick={() => {}} />
-          <BacklinksWidget noteId={note?.id || null} />
+            {/* Content Area (Typography Optimized) */}
+            <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Start writing..."
+                className="flex-1 w-full resize-none bg-transparent border-none p-0 focus-visible:ring-0 text-lg leading-relaxed text-zinc-300 placeholder:text-zinc-800 font-serif min-h-[500px]"
+                spellCheck={false}
+            />
+            
+            {/* Footer decoration */}
+            <div className="pt-20 pb-10 flex justify-center opacity-20">
+                <div className="w-16 h-1 bg-white rounded-full" />
+            </div>
         </div>
       </div>
     </div>
