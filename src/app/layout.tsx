@@ -1,43 +1,48 @@
 // src/app/layout.tsx
-import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google"; // Import JetBrains Mono
-import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toast";
+import type { Metadata } from "next"
+import type { ReactNode } from "react"
+import { Inter } from "next/font/google"
+import { Suspense } from "react"
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/contexts/AuthContext"
+import { Footer } from "@/components/Footer"
+import { UpgradeModalProvider } from "@/components/UpgradeModalContext"
+import { Toaster } from "@/components/ui/toaster" // FIX: Correct import path
+import { CookieConsent } from "@/components/CookieConsent" // FIX: Switched to Named Import
+import "./globals.css"
 
-const inter = Inter({ 
-  subsets: ["latin"], 
-  variable: "--font-sans" 
-});
-
-const jetbrainsMono = JetBrains_Mono({ 
-  subsets: ["latin"], 
-  variable: "--font-mono" // Variable for Tailwind
-});
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+})
 
 export const metadata: Metadata = {
-  title: "QuizCraft | AI Cognitive Optimization", // Updated Title
-  description: "Turn your study material into active recall missions.",
-};
+  title: "QuizCraft - Turn Documents into Quizzes in Seconds",
+  description:
+    "Transform any document into engaging quizzes instantly with AI. Perfect for educators, trainers, and content creators.",
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-background text-foreground`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark" // Default to Dark Mode for the "Gamer" vibe
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster />
-        </ThemeProvider>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body className="antialiased flex flex-col min-h-screen">
+        <AuthProvider>
+          <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
+            <UpgradeModalProvider>
+              <div className="flex-1 flex flex-col">
+                <Suspense fallback={null}>{children}</Suspense>
+              </div>
+              <Footer />
+              <CookieConsent />
+              <Toaster />
+            </UpgradeModalProvider>
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
-  );
+  )
 }
