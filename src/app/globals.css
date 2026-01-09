@@ -5,10 +5,6 @@
 @layer base {
   :root {
     /* --- LIGHT MODE (High-Tech Clinical) --- */
-    /* Using HSL values for better compatibility if OKLCH fails, 
-       but keeping your OKLCH values wrapped in standard var defs */
-    --background: 99% 0 0; /* oklch(99% 0 0) - simplifed for variable usage if needed, but pasting raw works too */
-    
     --background: 99% 0 0;
     --foreground: 20% 0.02 265; 
     
@@ -74,12 +70,12 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Fix: Use native CSS to avoid @apply resolution errors in Tailwind v4 */
+    border-color: oklch(var(--border));
+    outline-color: oklch(var(--ring) / 0.5);
   }
   body {
-    /* Re-wrapping in oklch() here to ensure tailwind reads them correctly 
-       if your config expects bare numbers, OR use direct values above.
-       Assuming you want direct OKLCH support: */
+    /* Explicitly wrapping in oklch ensures compatibility with your var definitions */
     @apply bg-[oklch(var(--background))] text-[oklch(var(--foreground))];
   }
 }
