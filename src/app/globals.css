@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   :root {
@@ -82,9 +80,12 @@
 /* --- UTILITIES --- */
 @layer utilities {
   .glass {
-    /* Fixed: Removed 'backdrop-blur-md' from @apply to avoid build error */
-    @apply bg-[oklch(var(--card))]/60 border border-white/10 shadow-xl;
+    /* Fixed: Replace broken @apply with standard CSS for border */
+    @apply bg-[oklch(var(--card))]/60 shadow-xl;
     
+    /* Manual replacement for border-white/10 */
+    border: 1px solid rgb(255 255 255 / 0.1);
+
     /* Native CSS replacement for backdrop-blur-md */
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
