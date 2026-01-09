@@ -70,12 +70,11 @@
 
 @layer base {
   * {
-    /* Fix: Use native CSS to avoid @apply resolution errors in Tailwind v4 */
+    /* Fixed: Use native CSS to avoid 'border-border' resolution error */
     border-color: oklch(var(--border));
     outline-color: oklch(var(--ring) / 0.5);
   }
   body {
-    /* Explicitly wrapping in oklch ensures compatibility with your var definitions */
     @apply bg-[oklch(var(--background))] text-[oklch(var(--foreground))];
   }
 }
@@ -83,7 +82,12 @@
 /* --- UTILITIES --- */
 @layer utilities {
   .glass {
-    @apply bg-[oklch(var(--card))]/60 backdrop-blur-md border border-white/10 shadow-xl;
+    /* Fixed: Removed 'backdrop-blur-md' from @apply to avoid build error */
+    @apply bg-[oklch(var(--card))]/60 border border-white/10 shadow-xl;
+    
+    /* Native CSS replacement for backdrop-blur-md */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
   
   .glow {
