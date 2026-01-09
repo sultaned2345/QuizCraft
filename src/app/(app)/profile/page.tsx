@@ -1,4 +1,3 @@
-// src/app/(app)/profile/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -7,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  User, 
   Mail, 
   Shield, 
   Cpu, 
@@ -15,14 +13,21 @@ import {
   CheckCircle2,
   Loader2
 } from 'lucide-react';
+// Corrected import path for Avatar (now that we created the file)
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// Replaced deprecated auth-helpers with ssr
+import { createBrowserClient } from '@supabase/ssr';
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const supabase = createClientComponentClient();
+  
+  // Initialize Supabase client correctly for client components
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
   
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +86,7 @@ export default function ProfilePage() {
                 <div className="relative z-10 flex items-start gap-6">
                     <Avatar className="h-24 w-24 border-2 border-white/10 shadow-xl">
                         <AvatarImage src={user?.user_metadata?.avatar_url} />
-                        <AvatarFallback className="bg-zinc-800 text-2xl font-mono">{fullName[0]}</AvatarFallback>
+                        <AvatarFallback className="bg-zinc-800 text-2xl font-mono">{fullName?.[0] || '?'}</AvatarFallback>
                     </Avatar>
                     
                     <div className="space-y-4 flex-1 max-w-md">
@@ -148,12 +153,11 @@ export default function ProfilePage() {
                         </div>
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                     </div>
-                    {/* Placeholder for OAuth providers */}
                  </div>
             </div>
         </div>
 
-        {/* Right Col: Usage Stats (The "Rings") */}
+        {/* Right Col: Usage Stats */}
         <div className="space-y-6">
             <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-6">
                 <h3 className="text-sm font-medium text-white mb-6 flex items-center gap-2">
@@ -161,7 +165,6 @@ export default function ProfilePage() {
                 </h3>
 
                 <div className="space-y-6">
-                    {/* Stat 1 */}
                     <div className="space-y-2">
                         <div className="flex justify-between text-xs">
                             <span className="text-zinc-400">AI Tokens</span>
@@ -172,7 +175,6 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    {/* Stat 2 */}
                     <div className="space-y-2">
                         <div className="flex justify-between text-xs">
                             <span className="text-zinc-400">Storage Grid</span>
