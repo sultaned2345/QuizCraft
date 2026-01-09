@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function NotesClientComponent() {
+export function NotesClientComponent() {
   const { session } = useAuth();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');

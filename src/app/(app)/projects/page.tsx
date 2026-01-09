@@ -1,9 +1,9 @@
-// src/app/(app)/projects/page.tsx
 'use client';
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Plus, Search, Filter } from 'lucide-react';
+// FIX: Added 'Folder' to imports
+import { Plus, Search, Filter, Folder } from 'lucide-react';
 import { Project } from '@/types/database';
 import { fetcher } from '@/lib/fetcher';
 import { Button } from '@/components/ui/button';

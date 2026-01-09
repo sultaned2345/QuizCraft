@@ -13,7 +13,7 @@ import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
-export default function DocumentsClientComponent() {
+export function DocumentsClientComponent() {
   const { session } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
