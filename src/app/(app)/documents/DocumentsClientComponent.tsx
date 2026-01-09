@@ -8,7 +8,6 @@ import { fetcher } from '@/lib/fetcher';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DocumentCard } from '@/components/documents/DocumentCard';
-// Ensure this component exists or remove import if using generic skeleton
 import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; 
 import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,14 +36,14 @@ export function DocumentsClientComponent() {
     }
   };
 
-  // --- FIX START ---
-  // Safely extract the array. If .data is an object or null, fallback to []
+  // --- FIX APPLIED HERE ---
+  // Ensure we are working with an array. If API returns an error object, this falls back to [].
   const safeDocs = Array.isArray(documentsData?.data) ? documentsData.data : [];
 
   const filteredDocs = safeDocs.filter((d: any) =>
     d.file_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  // --- FIX END ---
+  // ------------------------
 
   return (
     <div className="space-y-8 h-full flex flex-col">
@@ -97,7 +96,7 @@ export function DocumentsClientComponent() {
             </div>
             <h3 className="text-lg font-medium text-white">Archive Empty</h3>
             <p className="text-muted-foreground max-w-sm mt-1 mb-6 text-sm">
-              {searchQuery ? "No matching files found." : "Upload PDF documents or YouTube links to begin analysis."}
+              Upload PDF documents or YouTube links to begin analysis.
             </p>
             {!searchQuery && (
               <Button onClick={() => setIsAddOpen(true)} variant="outline" className="border-white/10 hover:bg-white/5">
