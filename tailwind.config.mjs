@@ -16,6 +16,7 @@ const config = {
         sans: ['var(--font-sans)', 'sans-serif'],
         mono: ['var(--font-mono)', 'monospace'],
       },
+      // 👇 THIS SECTION WAS MISSING 👇
       colors: {
         border: "oklch(var(--border) / <alpha-value>)",
         input: "oklch(var(--input) / <alpha-value>)",
@@ -51,6 +52,7 @@ const config = {
           foreground: "oklch(var(--card-foreground) / <alpha-value>)",
         },
       },
+      // 👆 END OF MISSING SECTION 👆
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
