@@ -1,101 +1,153 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    /* --- LIGHT MODE (High-Tech Clinical) --- */
-    --background: 99% 0 0;
-    --foreground: 20% 0.02 265; 
-    
-    --card: 100% 0 0;
-    --card-foreground: 20% 0.02 265;
-    
-    --popover: 100% 0 0;
-    --popover-foreground: 20% 0.02 265;
-    
-    --primary: 55% 0.25 280; 
-    --primary-foreground: 99% 0 0;
-    
-    --secondary: 95% 0.02 265;
-    --secondary-foreground: 20% 0.02 265;
-    
-    --muted: 95% 0.02 265;
-    --muted-foreground: 50% 0.05 265;
-    
-    --accent: 95% 0.05 265;
-    --accent-foreground: 20% 0.02 265;
-    
-    --destructive: 60% 0.2 20;
-    --destructive-foreground: 99% 0 0;
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
 
-    --border: 90% 0.02 265;
-    --input: 90% 0.02 265;
-    --ring: 55% 0.25 280;
-    
-    --radius: 0.5rem;
-  }
+/* Manual dark mode variant for class-based toggling */
+@custom-variant dark (&:is(.dark *));
 
-  .dark {
-    /* --- DARK MODE (Deep Space HUD) --- */
-    --background: 10% 0.02 270; 
-    --foreground: 98% 0.01 280;
+:root {
+  /* --- LIGHT MODE (High-Tech Clinical) --- */
+  --background: oklch(99% 0 0);
+  --foreground: oklch(20% 0.02 265); 
+  
+  --card: oklch(100% 0 0);
+  --card-foreground: oklch(20% 0.02 265);
+  
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(20% 0.02 265);
+  
+  /* Vibrant Electric Purple */
+  --primary: oklch(55% 0.25 280); 
+  --primary-foreground: oklch(99% 0 0);
+  
+  --secondary: oklch(95% 0.02 265);
+  --secondary-foreground: oklch(20% 0.02 265);
+  
+  --muted: oklch(95% 0.02 265);
+  --muted-foreground: oklch(50% 0.05 265);
+  
+  --accent: oklch(95% 0.05 265);
+  --accent-foreground: oklch(20% 0.02 265);
+  
+  --destructive: oklch(60% 0.2 20);
+  --destructive-foreground: oklch(99% 0 0);
 
-    --card: 14% 0.03 270; 
-    --card-foreground: 98% 0.01 280;
+  --border: oklch(90% 0.02 265);
+  --input: oklch(90% 0.02 265);
+  --ring: oklch(55% 0.25 280);
+  
+  --radius: 0.5rem; /* Sharper corners for tech feel */
+}
 
-    --popover: 12% 0.03 270;
-    --popover-foreground: 98% 0.01 280;
+.dark {
+  /* --- DARK MODE (Deep Space HUD) --- */
+  /* Deep Blue-Black Void */
+  --background: oklch(10% 0.02 270); 
+  --foreground: oklch(98% 0.01 280);
 
-    --primary: 65% 0.22 280; 
-    --primary-foreground: 99% 0 0;
+  /* Glassmorphic Panels */
+  --card: oklch(14% 0.03 270 / 0.6); 
+  --card-foreground: oklch(98% 0.01 280);
 
-    --secondary: 20% 0.04 270;
-    --secondary-foreground: 98% 0.01 280;
+  --popover: oklch(12% 0.03 270);
+  --popover-foreground: oklch(98% 0.01 280);
 
-    --muted: 18% 0.03 270;
-    --muted-foreground: 70% 0.05 270;
+  /* Neon Cyan/Purple Gradient Main Color */
+  --primary: oklch(65% 0.22 280); 
+  --primary-foreground: oklch(99% 0 0);
 
-    --accent: 25% 0.05 270;
-    --accent-foreground: 99% 0 0;
+  --secondary: oklch(20% 0.04 270);
+  --secondary-foreground: oklch(98% 0.01 280);
 
-    --destructive: 60% 0.2 20;
-    --destructive-foreground: 99% 0 0;
+  --muted: oklch(18% 0.03 270);
+  --muted-foreground: oklch(70% 0.05 270);
 
-    --border: 30% 0.05 270;
-    --input: 25% 0.05 270;
-    --ring: 65% 0.22 280;
-  }
+  --accent: oklch(25% 0.05 270);
+  --accent-foreground: oklch(99% 0 0);
+
+  --destructive: oklch(60% 0.2 20);
+  --destructive-foreground: oklch(99% 0 0);
+
+  /* Glowing Borders */
+  --border: oklch(30% 0.05 270);
+  --input: oklch(25% 0.05 270);
+  --ring: oklch(65% 0.22 280);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  /* --- CUSTOM FONTS --- */
+  --font-mono: var(--font-mono); 
+  --font-sans: var(--font-sans);
 }
 
 @layer base {
   * {
-    /* Fixed: Use native CSS to avoid 'border-border' resolution error */
-    border-color: oklch(var(--border));
-    outline-color: oklch(var(--ring) / 0.5);
+    @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-[oklch(var(--background))] text-[oklch(var(--foreground))];
+    @apply bg-background text-foreground;
   }
 }
 
-/* --- UTILITIES --- */
-@layer utilities {
-  .glass {
-    /* Fixed: Replace broken @apply with standard CSS for border */
-    @apply bg-[oklch(var(--card))]/60 shadow-xl;
-    
-    /* Manual replacement for border-white/10 */
-    border: 1px solid rgb(255 255 255 / 0.1);
+/* --- 3. CUSTOM UTILITIES FOR "SOUL" --- */
 
-    /* Native CSS replacement for backdrop-blur-md */
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+@layer utilities {
+  /* Holographic Glass Effect */
+  .glass {
+    /* Using native CSS for the border to ensure safety, though v4 might handle it */
+    @apply bg-card/60 backdrop-blur-md shadow-xl;
+    border: 1px solid rgb(255 255 255 / 0.1);
   }
-  
+
+  /* Neon Glow Effect */
   .glow {
-    box-shadow: 0 0 20px -5px oklch(var(--primary));
+    box-shadow: 0 0 20px -5px var(--primary);
   }
   
   .glow-text {
-    text-shadow: 0 0 10px oklch(var(--primary));
+    text-shadow: 0 0 10px var(--primary);
   }
+
+  /* Grid Background Pattern */
+  .bg-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+  }
+}
+
+/* Animations (Preserved & Enhanced) */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+  opacity: 0; 
 }
