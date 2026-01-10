@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from '@/lib/getServerSession';
 import { prisma } from '@/lib/prisma';
-import { ProjectWorkspace } from './ProjectClientComponent';
+import { ProjectClientComponent } from './ProjectClientComponent';
 
 interface ProjectPageProps {
   params: {
@@ -13,89 +13,65 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const session = await getServerSession();
   if (!session?.user) redirect('/login');
 
-  // 1. Fetch Project with all relations
+  // 1. Fetch Project with all its links
   const project = await prisma.projects.findUnique({
     where: { 
       id: params.projectId,
       user_id: session.user.id 
     },
     include: {
-      // Get all linked items (Documents, Notes, Quizzes, Recordings)
-      links: {
-        include: {
-          // Unfortunately, Prisma doesn't auto-fetch the polymorphic relation content 
-          // easily in one go. We will handle the "content" mapping below or 
-          // fetch specific types separately.
-        }
-      },
-      // We can also fetch known relations directly if defined in schema
-      // (Using the glue table is cleaner for order, but direct fetch is easier for MVP)
+      links: true, // We need the links table to know what is in this project
     }
   });
 
   if (!project) return notFound();
 
-  // 2. Fetch the actual content items belonging to this project
-  //    (We do this separately to get the strongly typed objects)
+  // 2. Fetch the actual content items efficiently
+  //    We grab all IDs first, then fetch them in parallel batches
+  const contentIds = project.links.map(l => l.content_id);
   
-  // A. Documents (PDFs)
-  const documents = await prisma.documents.findMany({
-    where: { 
-      // Link via join table OR direct project_id if you added it (our schema uses link table)
-      // Let's use the link table to find document IDs
-      id: { in: (await prisma.project_content_links.findMany({
-        where: { project_id: project.id, content_type: 'document' },
-        select: { content_id: true }
-      })).map(l => l.content_id) }
+  const [documents, recordings, notes, quizzes] = await Promise.all([
+    prisma.documents.findMany({ where: { id: { in: contentIds } } }),
+    prisma.recordings.findMany({ where: { id: { in: contentIds } } }),
+    prisma.notes.findMany({ where: { id: { in: contentIds } } }),
+    prisma.quiz.findMany({ where: { id: { in: contentIds } } }),
+  ]);
+
+  // 3. Merge the "Link" data with the "Content" data
+  //    This creates the unified list expected by ProjectClientComponent
+  const unifiedLinks = project.links.map(link => {
+    let details: any = {};
+    
+    // Find the specific item details based on type
+    if (link.content_type === 'document') {
+      details = documents.find(d => d.id === link.content_id) || {};
+    } else if (link.content_type === 'recording') {
+      details = recordings.find(r => r.id === link.content_id) || {};
+    } else if (link.content_type === 'note') {
+      details = notes.find(n => n.id === link.content_id) || {};
+    } else if (link.content_type === 'quiz') {
+      details = quizzes.find(q => q.id === link.content_id) || {};
     }
-  });
 
-  // B. Recordings (Audio)
-  const recordings = await prisma.recordings.findMany({
-    where: { 
-      id: { in: (await prisma.project_content_links.findMany({
-        where: { project_id: project.id, content_type: 'recording' },
-        select: { content_id: true }
-      })).map(l => l.content_id) }
-    }
-  });
-
-  // C. Notes (Summaries)
-  const notes = await prisma.notes.findMany({
-    where: { 
-      id: { in: (await prisma.project_content_links.findMany({
-        where: { project_id: project.id, content_type: 'note' },
-        select: { content_id: true }
-      })).map(l => l.content_id) }
-    },
-    orderBy: { created_at: 'desc' }
-  });
-
-  // D. Quizzes
-  const quizzes = await prisma.quiz.findMany({
-    where: { 
-      id: { in: (await prisma.project_content_links.findMany({
-        where: { project_id: project.id, content_type: 'quiz' },
-        select: { content_id: true }
-      })).map(l => l.content_id) }
-    }
-  });
-
-  // 3. Determine Initial State
-  // Combine Docs and Recordings into a single "Sources" list
-  const sources = [
-    ...documents.map(d => ({ ...d, type: 'document' as const })),
-    ...recordings.map(r => ({ ...r, type: 'recording' as const, file_name: r.title, storage_path: null })) // Recordings might not have a PDF path
-  ];
+    // Return the combined shape
+    return {
+      id: link.id,               // The Link ID (crucial for removing items from project)
+      content_id: link.content_id,
+      content_type: link.content_type,
+      // Fallback titles/descriptions if data is missing
+      title: details.title || details.file_name || details.topic || 'Untitled',
+      description: details.description || details.summary || '',
+      icon: link.content_type,
+      created_at: link.created_at.toISOString(),
+      ...details // Spread the rest of the specific details (like storage_path, etc.)
+    };
+  }).filter(item => item.title !== 'Untitled'); // Optional: Filter out broken links
 
   return (
     <div className="h-[calc(100vh-4rem)] overflow-hidden">
-      <ProjectWorkspace 
-        project={project} 
-        initialSources={sources}
-        initialNotes={notes}
-        initialQuizzes={quizzes}
-        userId={session.user.id}
+      <ProjectClientComponent 
+        initialProject={project} 
+        initialContent={{ links: unifiedLinks }} 
       />
     </div>
   );
