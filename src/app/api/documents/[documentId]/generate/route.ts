@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { 
-  generateDocumentSummary, 
-  generateQuizFromText, 
-  generateFlashcardsFromText 
-} from '@/lib/ai-service';
+  callAIToGenerateNote, 
+  callAIToGenerateQuiz, 
+  callAIToGenerateFlashcards 
+} from '@/lib/aiGeneration'; // <--- CHANGED: Use the robust Gemini/Groq library
 
 // Maximize execution time for Hobby Plan (60s)
 export const maxDuration = 60; 
@@ -44,27 +44,31 @@ export async function POST(
     let result;
     
     if (type === 'notes') {
-      const summary = await generateDocumentSummary(textContext, baseTitle);
+      // Returns { title, content } (HTML string)
+      const noteData = await callAIToGenerateNote(textContext);
+      
       result = await prisma.notes.create({
         data: {
           user_id: user.id,
           document_id: doc.id,
-          title: `${baseTitle} - Study Notes`,
-          content: summary,
+          title: noteData.title || `${baseTitle} - Notes`,
+          content: noteData.content,
           tags: ['ai-generated']
         }
       });
     } 
     
     else if (type === 'quiz') {
-      const questionsData = await generateQuizFromText(textContext, 10);
+      // Returns { title, questions: [] }
+      const quizData = await callAIToGenerateQuiz(textContext, 10, 'medium');
+      
       result = await prisma.quiz.create({
         data: {
           userId: user.id,
           document_id: doc.id,
-          title: `${baseTitle} - Practice Quiz`,
+          title: quizData.title || `${baseTitle} - Quiz`,
           questions: {
-            create: questionsData.map((q: any) => ({
+            create: quizData.questions.map((q: any) => ({
               question_text: q.question_text,
               question_type: q.question_type,
               correct_answer: q.correct_answer,
@@ -77,16 +81,18 @@ export async function POST(
     } 
     
     else if (type === 'flashcards') {
-      const cardsData = await generateFlashcardsFromText(textContext, 15);
+      // Returns array of objects { front_content, back_content }
+      const cardsData = await callAIToGenerateFlashcards(textContext, 15);
+      
       result = await prisma.flashcard_decks.create({
         data: {
           user_id: user.id,
           document_id: doc.id,
-          title: `${baseTitle} - Key Terms`,
+          title: `${baseTitle} - Flashcards`,
           flashcards: {
             create: cardsData.map((c: any) => ({
-              front_content: c.front,
-              back_content: c.back
+              front_content: c.front_content, // Note key change if mapping from different lib
+              back_content: c.back_content
             }))
           }
         }
