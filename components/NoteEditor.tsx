@@ -1,35 +1,43 @@
 // components/NoteEditor.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Loader2, 
-  Save, 
   Sparkles, 
-  ChevronLeft,
-  Share2 
+  ChevronLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
 
 // We'll use a simple textarea for now, but styled beautifully.
 // In a real V2, this would be TipTap or Slate.js.
 
 interface NoteEditorProps {
-  noteId: string;
+  noteId?: string;      // Made optional to support documentId usage
+  documentId?: string;  // Added to support Document Hub usage
   initialTitle?: string;
   initialContent?: string;
+  isReadOnly?: boolean; // Added for read-only modes
 }
 
-export default function NoteEditor({ noteId, initialTitle = '', initialContent = '' }: NoteEditorProps) {
+export function NoteEditor({ 
+  noteId, 
+  documentId, 
+  initialTitle = '', 
+  initialContent = '', 
+  isReadOnly = false 
+}: NoteEditorProps) {
   const { session } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   
+  // Determine which ID to use for API calls
+  const activeId = noteId || documentId;
+
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [isSaving, setIsSaving] = useState(false);
@@ -38,6 +46,8 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
 
   // Auto-save logic
   useEffect(() => {
+    if (isReadOnly) return;
+
     const timer = setTimeout(() => {
       if (title !== initialTitle || content !== initialContent) {
         handleSave(false);
@@ -45,12 +55,14 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [title, content]);
+  }, [title, content, isReadOnly, initialTitle, initialContent]);
 
   const handleSave = async (manual: boolean = false) => {
+    if (isReadOnly || !activeId) return;
+
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/notes/${noteId}`, {
+      const res = await fetch(`/api/notes/${activeId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -66,6 +78,7 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
         toast({ description: "Note saved successfully." });
       }
     } catch (e) {
+      console.error("Save error:", e);
       toast({ variant: "destructive", description: "Failed to save note." });
     } finally {
       setIsSaving(false);
@@ -73,9 +86,12 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
   };
 
   const handleAiExpand = async () => {
-    // Placeholder for AI expansion logic
+    if (isReadOnly) return;
+    
     setIsAiGenerating(true);
     toast({ description: "Consulting Neural Engine..." });
+    
+    // Placeholder for AI expansion logic
     setTimeout(() => {
         setContent(prev => prev + "\n\n[AI SUGGESTION]: Consider exploring the connection between this topic and quantum mechanics...");
         setIsAiGenerating(false);
@@ -90,7 +106,7 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
         <Button 
             variant="ghost" 
             size="sm" 
-            onClick={() => router.push('/notes')}
+            onClick={() => router.back()}
             className="text-muted-foreground hover:text-white -ml-2 font-mono text-xs"
         >
             <ChevronLeft className="w-4 h-4 mr-1" /> BACK
@@ -101,23 +117,28 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
                 {isSaving ? 'SAVING...' : lastSaved ? `SAVED ${lastSaved.toLocaleTimeString()}` : 'UNSAVED'}
             </span>
             <div className="h-4 w-px bg-white/10 mx-2" />
-            <Button 
-                size="sm" 
-                variant="ghost" 
-                onClick={handleAiExpand}
-                disabled={isAiGenerating}
-                className="text-purple-400 hover:text-purple-300 hover:bg-purple-400/10 h-8"
-            >
-                {isAiGenerating ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Sparkles className="w-3 h-3 mr-2" />}
-                <span className="font-mono text-xs font-bold">EXPAND</span>
-            </Button>
-            <Button 
-                size="sm" 
-                className="bg-white text-black hover:bg-zinc-200 h-8 font-mono text-xs font-bold"
-                onClick={() => handleSave(true)}
-            >
-                SAVE
-            </Button>
+            
+            {!isReadOnly && (
+              <>
+                <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={handleAiExpand}
+                    disabled={isAiGenerating}
+                    className="text-purple-400 hover:text-purple-300 hover:bg-purple-400/10 h-8"
+                >
+                    {isAiGenerating ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Sparkles className="w-3 h-3 mr-2" />}
+                    <span className="font-mono text-xs font-bold">EXPAND</span>
+                </Button>
+                <Button 
+                    size="sm" 
+                    className="bg-white text-black hover:bg-zinc-200 h-8 font-mono text-xs font-bold"
+                    onClick={() => handleSave(true)}
+                >
+                    SAVE
+                </Button>
+              </>
+            )}
         </div>
       </div>
 
@@ -130,7 +151,8 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Note Title"
-                className="w-full bg-transparent text-4xl font-bold text-white placeholder:text-zinc-700 focus:outline-none font-sans tracking-tight"
+                readOnly={isReadOnly}
+                className="w-full bg-transparent text-4xl font-bold text-white placeholder:text-zinc-700 focus:outline-none font-sans tracking-tight disabled:opacity-50"
             />
 
             {/* Content Area (Typography Optimized) */}
@@ -138,7 +160,8 @@ export default function NoteEditor({ noteId, initialTitle = '', initialContent =
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Start writing..."
-                className="flex-1 w-full resize-none bg-transparent border-none p-0 focus-visible:ring-0 text-lg leading-relaxed text-zinc-300 placeholder:text-zinc-800 font-serif min-h-[500px]"
+                readOnly={isReadOnly}
+                className="flex-1 w-full resize-none bg-transparent border-none p-0 focus-visible:ring-0 text-lg leading-relaxed text-zinc-300 placeholder:text-zinc-800 font-serif min-h-[500px] disabled:opacity-50"
                 spellCheck={false}
             />
             
