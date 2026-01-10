@@ -34,9 +34,13 @@ export default function Dashboard() {
     (url) => fetcher(url, session?.access_token || '')
   );
 
-  const filteredDocs = documents?.data?.filter((doc: any) => 
+  // FIX: Ensure documents.data is actually an array before filtering.
+  // API might return an error object or unexpected structure.
+  const safeDocs = Array.isArray(documents?.data) ? documents.data : [];
+
+  const filteredDocs = safeDocs.filter((doc: any) => 
     doc.file_name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
