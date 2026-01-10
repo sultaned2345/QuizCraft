@@ -2,7 +2,7 @@
 'use client';
 
 import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react'; // CHANGED: Added Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,7 +39,7 @@ import {
   Sparkles,
   LogOut,
   ArrowLeft,
-  Youtube, // <-- IMPORTED
+  Youtube,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -84,9 +84,10 @@ const DashboardHeader = () => {
   );
 };
 
-export default function CreatePage() {
+// CHANGED: Moved main logic to a sub-component
+function CreatePageContent() {
   const [textContent, setTextContent] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState(''); // <-- NEW STATE
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
@@ -171,7 +172,7 @@ export default function CreatePage() {
       }
 
       setTextContent('');
-      setYoutubeUrl(''); // Clear other inputs
+      setYoutubeUrl('');
       setSelectedFile(file);
       setError('');
     }
@@ -184,7 +185,6 @@ export default function CreatePage() {
     setError('');
   };
 
-  // --- NEW: Handle YouTube Input ---
   const handleYoutubeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setYoutubeUrl(e.target.value);
     if (selectedFile) setSelectedFile(null);
@@ -199,7 +199,6 @@ export default function CreatePage() {
       return;
     }
 
-    // Validation
     if (!textContent.trim() && !selectedFile && !youtubeUrl.trim()) {
       setError('Provide text, upload a file, or enter a YouTube URL.');
       return;
@@ -211,9 +210,6 @@ export default function CreatePage() {
     try {
       let response;
 
-      // ---------------------------------------------------------
-      // SCENARIO A: YOUTUBE GENERATION
-      // ---------------------------------------------------------
       if (youtubeUrl.trim()) {
         toast({ title: 'Processing Video', description: 'Fetching transcript/audio...' });
         
@@ -226,11 +222,7 @@ export default function CreatePage() {
             body: JSON.stringify({ videoUrl: youtubeUrl }),
         });
 
-      } 
-      // ---------------------------------------------------------
-      // SCENARIO B: TEXT / FILE GENERATION
-      // ---------------------------------------------------------
-      else {
+      } else {
         let finalTextContent = textContent.trim();
         
         if (selectedFile) {
@@ -264,15 +256,11 @@ export default function CreatePage() {
         });
       }
 
-      // ---------------------------------------------------------
-      // HANDLE RESPONSE (Common for both)
-      // ---------------------------------------------------------
       if (!response.ok) {
         let errorBody: any;
         try { errorBody = await response.json(); } 
         catch { errorBody = { error: response.statusText }; }
 
-        // Check for limit exceeded
         if (errorBody?.error === 'limit_exceeded') {
           openModal();
           throw new Error(errorBody.message || 'AI limit reached.');
@@ -282,8 +270,7 @@ export default function CreatePage() {
       }
 
       const result = await response.json();
-      if (!result.success || !result.data?.id) { // Note: generate-from-youtube returns { success: true, data: { ... } }
-         // Handle inconsistent API responses (some return result.id directly, some result.data.id)
+      if (!result.success || !result.data?.id) {
          const quizId = result.id || result.data?.id;
          if (!quizId) throw new Error('API returned success but no Quiz ID.');
       }
@@ -548,5 +535,14 @@ export default function CreatePage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+// CHANGED: Default export is now a Suspense wrapper
+export default function CreatePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <CreatePageContent />
+    </Suspense>
   );
 }
