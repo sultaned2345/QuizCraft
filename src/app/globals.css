@@ -37,16 +37,14 @@
   --input: oklch(90% 0.02 265);
   --ring: oklch(55% 0.25 280);
   
-  --radius: 0.5rem; /* Sharper corners for tech feel */
+  --radius: 0.5rem;
 }
 
 .dark {
   /* --- DARK MODE (Deep Space HUD) --- */
-  /* Deep Blue-Black Void */
   --background: oklch(10% 0.02 270); 
   --foreground: oklch(98% 0.01 280);
 
-  /* Glassmorphic Panels */
   --card: oklch(14% 0.03 270 / 0.6); 
   --card-foreground: oklch(98% 0.01 280);
 
@@ -69,7 +67,6 @@
   --destructive: oklch(60% 0.2 20);
   --destructive-foreground: oklch(99% 0 0);
 
-  /* Glowing Borders */
   --border: oklch(30% 0.05 270);
   --input: oklch(25% 0.05 270);
   --ring: oklch(65% 0.22 280);
@@ -99,10 +96,6 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  
-  /* --- CUSTOM FONTS --- */
-  --font-mono: var(--font-mono); 
-  --font-sans: var(--font-sans);
 }
 
 @layer base {
@@ -114,17 +107,12 @@
   }
 }
 
-/* --- 3. CUSTOM UTILITIES FOR "SOUL" --- */
-
 @layer utilities {
-  /* Holographic Glass Effect */
   .glass {
-    /* Using native CSS for the border to ensure safety, though v4 might handle it */
     @apply bg-card/60 backdrop-blur-md shadow-xl;
     border: 1px solid rgb(255 255 255 / 0.1);
   }
 
-  /* Neon Glow Effect */
   .glow {
     box-shadow: 0 0 20px -5px var(--primary);
   }
@@ -133,16 +121,29 @@
     text-shadow: 0 0 10px var(--primary);
   }
 
-  /* Grid Background Pattern */
   .bg-grid {
     background-size: 40px 40px;
     background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),
       linear-gradient(to bottom, var(--border) 1px, transparent 1px);
     mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
   }
+  
+  /* NEW: For TurboLoading Spinner */
+  .direction-reverse {
+    animation-direction: reverse;
+  }
+  
+  /* NEW: For Progress Bar Shimmer */
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+  }
 }
 
-/* Animations (Preserved & Enhanced) */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
