@@ -12,15 +12,14 @@ export async function POST(req: NextRequest) {
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
-    // --- FIX START: Convert File to Buffer ---
-    // The server-side parser needs a raw Buffer to work with libraries like pdf-parse
+    // 1. Extract Text
+    // Convert File to Buffer for server-side processing
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // Pass both the file metadata object AND the buffer
+    // Pass both file metadata and the raw buffer
     const text = await extractTextFromFile(file, buffer);
-    // --- FIX END ---
-
+    
     if (!text) return NextResponse.json({ error: 'Failed to extract text' }, { status: 400 });
 
     // 2. Save to DB
@@ -32,12 +31,22 @@ export async function POST(req: NextRequest) {
         file_size: BigInt(file.size),
         extracted_text: text,
         storage_path: `uploads/${user.id}/${Date.now()}_${file.name}`,
+        processing_status: 'completed' // Mark as completed since we extracted text inline
       }
     });
 
-    return NextResponse.json({ success: true, data: doc });
+    // --- FIX IS HERE: Convert BigInt to string before JSON serialization ---
+    return NextResponse.json({ 
+      success: true, 
+      data: {
+        ...doc,
+        file_size: doc.file_size?.toString() // Convert BigInt to string
+      }
+    });
+    // -----------------------------------------------------------------------
+
   } catch (e: any) {
-    console.error("Upload error:", e); // Helpful for debugging
+    console.error("Upload error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
