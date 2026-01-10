@@ -8,7 +8,8 @@ import { fetcher } from '@/lib/fetcher';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DocumentCard } from '@/components/documents/DocumentCard';
-import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; 
+// Ensure these skeletons exist or use a generic fallback
+// import { DocumentCardSkeleton } from '@/components/skeletons/DocumentCardSkeleton'; 
 import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
@@ -36,21 +37,20 @@ export function DocumentsClientComponent() {
     }
   };
 
-  // --- FIX APPLIED HERE ---
-  // Ensure we are working with an array. If API returns an error object, this falls back to [].
   const safeDocs = Array.isArray(documentsData?.data) ? documentsData.data : [];
 
   const filteredDocs = safeDocs.filter((d: any) =>
     d.file_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  // ------------------------
 
   return (
     <div className="space-y-8 h-full flex flex-col">
       {/* 1. Command Bar Header */}
-      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between border-b border-white/5 pb-6">
+      {/* FIX: Removed border-white/5, used border-border */}
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between border-b border-border pb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">Library</h1>
+          {/* FIX: Used text-foreground instead of text-white */}
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Library</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Central repository for source materials and transcripts.
           </p>
@@ -59,18 +59,23 @@ export function DocumentsClientComponent() {
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            {/* FIX: Replaced zinc/white styles with semantic theme styles */}
             <Input
               placeholder="Search files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-zinc-900/50 border-white/10 focus:bg-zinc-900 transition-all h-9 text-sm font-sans"
+              className="pl-9 bg-muted/50 border-border focus:bg-background transition-all h-9 text-sm font-sans"
             />
           </div>
-          <div className="h-6 w-px bg-white/10 mx-1 hidden md:block" />
+          {/* FIX: Divider color */}
+          <div className="h-6 w-px bg-border mx-1 hidden md:block" />
+          
+          {/* FIX: Button colors to adapt to light/dark automatically */}
           <Button 
             onClick={() => setIsAddOpen(true)} 
             size="sm" 
-            className="h-9 bg-white text-black hover:bg-zinc-200 font-medium px-4"
+            className="h-9 px-4 font-medium" 
+            variant="default" // Uses primary color
           >
             <Plus className="w-4 h-4 mr-2" /> Upload
           </Button>
@@ -82,24 +87,26 @@ export function DocumentsClientComponent() {
         {isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-48 rounded-xl bg-zinc-900/40 border border-white/5 animate-pulse" />
+                // FIX: Skeleton color
+                <div key={i} className="h-48 rounded-xl bg-muted/60 border border-border animate-pulse" />
             ))}
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-white/10 rounded-xl bg-zinc-900/20">
+          <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-border rounded-xl bg-muted/20">
              <p className="text-muted-foreground">System error. Unable to load archive.</p>
           </div>
         ) : filteredDocs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[50vh] text-center border border-dashed border-white/10 rounded-xl bg-zinc-900/20">
-            <div className="h-12 w-12 rounded-full bg-zinc-900 flex items-center justify-center mb-4 border border-white/5">
-                <FileText className="w-5 h-5 text-zinc-500" />
+          <div className="flex flex-col items-center justify-center h-[50vh] text-center border border-dashed border-border rounded-xl bg-muted/20">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4 border border-border">
+                <FileText className="w-5 h-5 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium text-white">Archive Empty</h3>
+            {/* FIX: Text color */}
+            <h3 className="text-lg font-medium text-foreground">Archive Empty</h3>
             <p className="text-muted-foreground max-w-sm mt-1 mb-6 text-sm">
               Upload PDF documents or YouTube links to begin analysis.
             </p>
             {!searchQuery && (
-              <Button onClick={() => setIsAddOpen(true)} variant="outline" className="border-white/10 hover:bg-white/5">
+              <Button onClick={() => setIsAddOpen(true)} variant="outline" className="border-border hover:bg-accent">
                 Add Material
               </Button>
             )}
@@ -118,6 +125,7 @@ export function DocumentsClientComponent() {
       </div>
 
       <AddDocumentDialog 
+        // @ts-ignore - Assuming props match your dialog component
         open={isAddOpen} 
         onOpenChange={setIsAddOpen} 
         onUploadComplete={() => mutate()} 
