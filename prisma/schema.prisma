@@ -1,5 +1,5 @@
-// prisma/schema.prisma
-// MODIFIED FILE
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 // Datasource and Generator
 generator client {
@@ -13,14 +13,16 @@ datasource db {
   schemas  = ["auth", "public"] // Define the schemas Prisma should be aware of
 }
 
-// --- Public Schema Models ---
+// ==========================================
+// PUBLIC SCHEMA (Your App Data)
+// ==========================================
 
 // Represents public user profile data, linked 1-to-1 with auth.users
 model profiles {
-  id                String    @id @db.Uuid
-  email             String    @unique
-  subscription_plan String?   @default("free")
-  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  id                 String    @id @db.Uuid
+  email              String    @unique
+  subscription_plan  String?   @default("free")
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationships
   user               users[]
@@ -36,31 +38,14 @@ model profiles {
   projects           projects[]
   project_links      project_content_links[]
   generation_jobs    generation_jobs[]
-  recordings         recordings[] // <-- ADDED: Relation to recordings
+  recordings         recordings[]
 
   @@map("profiles")
   @@schema("public")
 }
 
-// --- NEW MODEL: recordings ---
-model recordings {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id     String    @db.Uuid
-  title       String
-  transcript  String    @db.Text
-  summary     String?   @db.Text
-  suggestions Json?     @db.JsonB // Stores array of AI suggestions/action items
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+// --- CORE HIERARCHY: Projects ---
 
-  // Relationships
-  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@map("recordings")
-  @@schema("public")
-}
-
-// --- NEW MODEL: projects ---
 model projects {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id     String    @db.Uuid
@@ -71,19 +56,19 @@ model projects {
 
   // Relationships
   profile profiles                @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  links   project_content_links[] // Links to content
+  links   project_content_links[] // Links to content (docs, quizzes, etc.)
 
   @@map("projects")
   @@schema("public")
 }
 
-// --- NEW MODEL: project_content_links (Many-to-Many Join Table) ---
+// The "Glue" Table linking content to projects
 model project_content_links {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id      String    @db.Uuid
   project_id   String    @db.Uuid
   content_id   String    @db.Uuid // ID of the document, quiz, note, etc.
-  content_type String    @db.Text // 'document', 'quiz', 'note', 'deck'
+  content_type String    @db.Text // 'document', 'quiz', 'note', 'deck', 'recording'
   created_at   DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationships
@@ -96,10 +81,50 @@ model project_content_links {
   @@schema("public")
 }
 
-// Represents a quiz created by a user
+// --- INPUT SOURCES (Files & Audio) ---
+
+model documents {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String    @db.Uuid
+  file_name      String
+  file_type      String    @db.VarChar(100)
+  file_size      BigInt?
+  storage_path   String    @unique // Path in Supabase Storage
+  extracted_text String?   @db.Text // Text content from PDF/DOCX
+  ai_summary     String?   @db.Text
+  ai_insights    Json?     @db.JsonB
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  profile         profiles          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
+  generation_jobs generation_jobs[]
+
+  @@map("documents")
+  @@schema("public")
+}
+
+model recordings {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String    @db.Uuid
+  title       String
+  transcript  String    @db.Text
+  summary     String?   @db.Text
+  suggestions Json?     @db.JsonB // AI suggestions/action items
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("recordings")
+  @@schema("public")
+}
+
+// --- OUTPUT TOOLS (Quizzes, Notes, Flashcards) ---
+
 model Quiz {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId             String?   @map("user_id") @db.Uuid // Foreign key referencing profiles.id
+  userId             String?   @map("user_id") @db.Uuid
   title              String
   share_link         String?   @unique
   createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -110,16 +135,15 @@ model Quiz {
   // Relationships
   questions questions[]
   profile   profiles?       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
-  attempts  quiz_attempts[] // Relation to quiz attempts
+  attempts  quiz_attempts[]
 
   @@map("quizzes")
   @@schema("public")
 }
 
-// Represents a single question within a quiz
 model questions {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  quiz_id        String?   @db.Uuid // Foreign key referencing quizzes.id
+  quiz_id        String?   @db.Uuid
   question_text  String
   question_type  String
   correct_answer String
@@ -135,10 +159,9 @@ model questions {
   @@schema("public")
 }
 
-// Represents notes created by a user
 model notes {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id         String    @db.Uuid // Foreign key referencing profiles.id
+  user_id         String    @db.Uuid
   title           String
   content         String
   tags            String[]  @default([])
@@ -146,17 +169,16 @@ model notes {
   created_at      DateTime? @default(now()) @db.Timestamptz(6)
   updated_at      DateTime? @updatedAt @db.Timestamptz(6)
 
-  // Relation to the user profile
+  // Relationship
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
 
   @@map("notes")
   @@schema("public")
 }
 
-// Represents a deck of flashcards created by a user
 model flashcard_decks {
   id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String    @db.Uuid // Foreign key referencing profiles.id
+  user_id    String    @db.Uuid
   title      String
   created_at DateTime? @default(now()) @db.Timestamptz(6)
   updated_at DateTime? @updatedAt @db.Timestamptz(6)
@@ -169,70 +191,48 @@ model flashcard_decks {
   @@schema("public")
 }
 
-// Represents a single flashcard within a deck
 model flashcards {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  deck_id       String    @db.Uuid // Foreign key referencing flashcard_decks.id
+  deck_id       String    @db.Uuid
   front_content String
   back_content  String
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
   updated_at    DateTime? @updatedAt @db.Timestamptz(6)
-  review_at     DateTime? @default(now()) @db.Timestamptz(6) // When the card is next due for review
-  ease_factor   Float?    @default(2.5) // Multiplier for review interval
+  review_at     DateTime? @default(now()) @db.Timestamptz(6) // Spaced repetition due date
+  ease_factor   Float?    @default(2.5)
 
-  // Relationship back to the deck
+  // Relationship
   deck flashcard_decks @relation(fields: [deck_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "flashcards_deck_id_fkey")
 
   @@map("flashcards")
   @@schema("public")
 }
 
-// Represents uploaded documents
-model documents {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id        String    @db.Uuid // Foreign key referencing profiles.id
-  file_name      String
-  file_type      String    @db.VarChar(100)
-  file_size      BigInt?
-  storage_path   String    @unique // Store the path in Supabase Storage, ensure uniqueness
-  extracted_text String?   @db.Text // Store extracted text
-  ai_summary     String?   @db.Text
-  ai_insights    Json?     @db.JsonB
-  created_at     DateTime? @default(now()) @db.Timestamptz(6)
-
-  // Relationship to the user profile
-  profile         profiles          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "documents_user_id_fkey")
-  generation_jobs generation_jobs[]
-
-  @@map("documents")
-  @@schema("public")
-}
-
-// Represents graded essays and their feedback
 model graded_essays {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id            String    @db.Uuid // Foreign key referencing profiles.id
+  user_id            String    @db.Uuid
   essay_title        String?   @db.Text
   essay_content      String    @db.Text
   rubric_or_criteria String?   @db.Text
-  feedback           Json?     @db.JsonB // Stores the structured feedback from AI
-  score              Int? // Stores the overall numerical score
+  feedback           Json?     @db.JsonB // AI Feedback
+  score              Int?
   graded_at          DateTime? @default(now()) @db.Timestamptz(6)
 
-  // Relation to the user profile
+  // Relationship
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "graded_essays_user_id_fkey")
 
   @@map("graded_essays")
   @@schema("public")
 }
 
-// Represents a user's attempt at a quiz
+// --- ANALYTICS & AI ---
+
 model quiz_attempts {
   id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id    String    @db.Uuid
   quiz_id    String    @db.Uuid
   score      Int
-  total      Int // Total questions in the quiz at time of attempt
+  total      Int
   created_at DateTime? @default(now()) @db.Timestamptz(6)
 
   // Relationships
@@ -245,12 +245,11 @@ model quiz_attempts {
   @@schema("public")
 }
 
-// --- NEW MODEL FOR AI USAGE ---
 model ai_usage {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id     String    @db.Uuid
   usage_count Int       @default(0)
-  usage_month DateTime  @db.Date // Use DateTime with @db.Date to map to SQL DATE
+  usage_month DateTime  @db.Date
   updated_at  DateTime? @default(now()) @db.Timestamptz(6)
 
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_usage_user_id_fkey")
@@ -260,14 +259,13 @@ model ai_usage {
   @@schema("public")
 }
 
-// --- NEW MODEL FOR CHAT HISTORY ---
 model chat_history {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id      String    @db.Uuid
   role         String // 'user' or 'model'
   content      String    @db.Text
-  context_id   String?   @db.Uuid // For Contextual Chat
-  context_type String?   @db.Text // 'note', 'document', 'quiz', etc.
+  context_id   String?   @db.Uuid // For Contextual Chat (Project ID or Doc ID)
+  context_type String?   @db.Text 
   created_at   DateTime? @default(now()) @db.Timestamptz(6)
 
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -278,14 +276,13 @@ model chat_history {
   @@schema("public")
 }
 
-// --- NEW MODEL FOR EMBEDDINGS ---
 model content_embeddings {
   id            String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id       String                      @db.Uuid
-  content_id    String                      @db.Uuid // This ID refers to either a 'notes' or 'documents' ID
-  content_type  String                      @db.Text // 'note' or 'document'
+  content_id    String                      @db.Uuid // ID of document/note
+  content_type  String                      @db.Text 
   content_chunk String                      @db.Text
-  embedding     Unsupported("vector(768)") // Assuming 'text-embedding-004' (768 dims)
+  embedding     Unsupported("vector(768)") // pgvector type
   created_at    DateTime?                   @default(now()) @db.Timestamptz(6)
 
   profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "content_embeddings_user_id_fkey")
@@ -296,15 +293,14 @@ model content_embeddings {
   @@schema("public")
 }
 
-// --- NEW MODEL: generation_jobs ---
 model generation_jobs {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id       String    @db.Uuid
   document_id   String    @db.Uuid
-  job_type      String    @db.Text // 'quiz', 'note', or 'flashcard'
+  job_type      String    @db.Text // 'quiz', 'note', 'flashcard'
   status        String    @default("pending") @db.Text // 'pending', 'processing', 'complete', 'failed'
   error_message String?   @db.Text
-  output_id     String?   @db.Uuid // The ID of the generated Quiz, Note, or Deck
+  output_id     String?   @db.Uuid // ID of the generated item
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
   updated_at    DateTime? @updatedAt @db.Timestamptz(6)
 
@@ -318,10 +314,14 @@ model generation_jobs {
   @@schema("public")
 }
 
-// --- Auth Schema Models ---
+// ==========================================
+// AUTH SCHEMA (Supabase Internal)
+// ==========================================
+// These models map to the auth tables so we can reference them in foreign keys.
+
 model users {
   instance_id                 String?   @db.Uuid
-  id                          String    @id @db.Uuid // Primary key, used by public.profiles.id
+  id                          String    @id @db.Uuid
   aud                         String?   @db.VarChar(255)
   role                        String?   @db.VarChar(255)
   email                       String?   @db.VarChar(255)
@@ -384,7 +384,7 @@ model flow_state {
   id                     String                @id @db.Uuid
   user_id                String?               @db.Uuid
   auth_code              String
-  code_challenge_method  code_challenge_method // Refers to enum below
+  code_challenge_method  code_challenge_method
   code_challenge         String
   provider_type          String
   provider_access_token  String?
@@ -393,7 +393,7 @@ model flow_state {
   updated_at             DateTime?             @db.Timestamptz(6)
   authentication_method  String
   auth_code_issued_at    DateTime?             @db.Timestamptz(6)
-  saml_relay_states      saml_relay_states[] // Opposite relation
+  saml_relay_states      saml_relay_states[]
 
   @@index([created_at(sort: Desc)])
   @@index([auth_code], map: "idx_auth_code")
@@ -459,8 +459,8 @@ model mfa_factors {
   id                   String           @id @db.Uuid
   user_id              String           @db.Uuid
   friendly_name        String?
-  factor_type          factor_type // Refers to enum below
-  status               factor_status // Refers to enum below
+  factor_type          factor_type
+  status               factor_status
   created_at           DateTime         @db.Timestamptz(6)
   updated_at           DateTime         @db.Timestamptz(6)
   secret               String?
@@ -481,7 +481,7 @@ model oauth_clients {
   id                 String                  @id @db.Uuid
   client_id          String                  @unique
   client_secret_hash String
-  registration_type  oauth_registration_type // Refers to enum below
+  registration_type  oauth_registration_type
   redirect_uris      String
   grant_types        String
   client_name        String?
@@ -499,7 +499,7 @@ model oauth_clients {
 model one_time_tokens {
   id         String              @id @db.Uuid
   user_id    String              @db.Uuid
-  token_type one_time_token_type // Refers to enum below
+  token_type one_time_token_type
   token_hash String
   relates_to String
   created_at DateTime            @default(now()) @db.Timestamp(6)
@@ -544,7 +544,7 @@ model saml_providers {
   updated_at        DateTime?           @db.Timestamptz(6)
   name_id_format    String?
   sso_providers     sso_providers       @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  saml_relay_states saml_relay_states[] // Opposite relation
+  saml_relay_states saml_relay_states[]
 
   @@index([sso_provider_id])
   @@schema("auth")
@@ -580,7 +580,7 @@ model sessions {
   created_at     DateTime?        @db.Timestamptz(6)
   updated_at     DateTime?        @db.Timestamptz(6)
   factor_id      String?          @db.Uuid
-  aal            aal_level? // Refers to enum below
+  aal            aal_level?
   not_after      DateTime?        @db.Timestamptz(6)
   refreshed_at   DateTime?        @db.Timestamp(6)
   user_agent     String?
@@ -621,7 +621,6 @@ model sso_providers {
   @@schema("auth")
 }
 
-// --- Enums ---
 enum aal_level {
   aal1
   aal2
@@ -647,7 +646,7 @@ enum factor_status {
 enum factor_type {
   totp
   webauthn
-  phone // Added based on mfa_factors definition
+  phone
 
   @@schema("auth")
 }

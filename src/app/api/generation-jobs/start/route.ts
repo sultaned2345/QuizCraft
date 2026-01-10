@@ -1,88 +1,76 @@
-// src/app/api/generation-jobs/start/route.ts
-// NEW FILE
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { getServerSession } from '@/lib/getServerSession';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/auth';
-import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { ApiResponse } from '@/types/database';
 
-export const runtime = 'nodejs';
-
-interface StartJobRequestBody {
-  documentId: string;
-  jobType: 'quiz' | 'note' | 'flashcard';
-}
-
-/**
- * @route POST /api/generation-jobs/start
- * @description Starts a new generation job for a document (Quiz, Note, or Flashcards)
- */
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const user = await requireAuth(request);
-    const { documentId, jobType }: StartJobRequestBody = await request.json();
+    // 1. Authentication Check
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
+    // 2. Parse Request Body
+    const body = await req.json();
+    const { documentId, jobType } = body;
+
+    // 3. Validation
     if (!documentId || !jobType) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Missing documentId or jobType.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Missing required fields: documentId, jobType' }, 
+        { status: 400 }
+      );
     }
 
-    if (!['quiz', 'note', 'flashcard'].includes(jobType)) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid jobType.' }, { status: 400 });
+    // Enforce valid job types to prevent bad data
+    const validJobTypes = ['quiz', 'flashcard', 'summary', 'note'];
+    if (!validJobTypes.includes(jobType)) {
+      return NextResponse.json(
+        { error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` },
+        { status: 400 }
+      );
     }
 
-    // 1. Check AI Usage Limit before starting
-    const usageCheck = await checkAIGenerationUsageLimit(user.id);
-    if (!usageCheck.isValid || !usageCheck.canGenerate) {
-      return NextResponse.json<ApiResponse>({ 
-          success: false, 
-          error: usageCheck.error, // "limit_exceeded"
-          message: usageCheck.message 
-      }, { status: 403 });
-    }
-
-    // 2. Check for an existing pending/processing job for this exact doc+type
-    const existingJob = await prisma.generation_jobs.findFirst({
-      where: {
-        document_id: documentId,
-        user_id: user.id,
-        job_type: jobType,
-        status: { in: ['pending', 'processing'] }
+    // 4. Verify Document Ownership
+    // Ensure the user actually owns the document they are trying to process
+    const doc = await prisma.documents.findUnique({
+      where: { 
+        id: documentId,
+        user_id: session.user.id 
       }
     });
 
-    if (existingJob) {
-      return NextResponse.json<ApiResponse>({ 
-        success: false, 
-        error: 'A job for this document and type is already in progress.' 
-      }, { status: 400 });
+    if (!doc) {
+      return NextResponse.json(
+        { error: 'Document not found or access denied.' },
+        { status: 404 }
+      );
     }
-    
-    // 3. Create the new job
-    const newJob = await prisma.generation_jobs.create({
+
+    // 5. Create the Job Record
+    // The 'status' defaults to 'pending' in the schema
+    const job = await prisma.generation_jobs.create({
       data: {
-        user_id: user.id,
+        user_id: session.user.id,
         document_id: documentId,
         job_type: jobType,
-        status: 'pending',
+        status: 'pending' 
       }
     });
 
-    // 4. Increment AI usage count (reserves the spot)
-    await incrementAIGenerationUsage(user.id, 1);
+    console.log(`[Job Started] User ${session.user.id} requested '${jobType}' for Doc ${documentId}`);
 
-    // 202 Accepted: The request has been accepted for processing, but is not complete.
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: newJob,
-      message: 'Generation job has been queued successfully.'
-    }, { status: 202 });
+    // 6. Return Success
+    return NextResponse.json({ 
+      success: true, 
+      jobId: job.id,
+      message: 'Job queued successfully.' 
+    });
 
   } catch (error: any) {
-    if (error instanceof Response) return error; // Handle requireAuth errors
-    console.error('[API /api/generation-jobs/start] Error:', error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Failed to start generation job.' },
+    console.error('Start Job Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' },
       { status: 500 }
     );
   }

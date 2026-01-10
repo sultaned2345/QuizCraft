@@ -1,4 +1,3 @@
-// src/app/(app)/projects/[projectId]/ProjectClientComponent.tsx
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -46,7 +45,8 @@ import {
   StickyNote,
   Layers,
   Plus,
-  Play, // <-- IMPORT PLAY ICON
+  Play,
+  Mic, // Icon for recording
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -59,8 +59,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { usePageContext, PageContextType } from '@/contexts/PageContext';
+
+// IMPORT THE RECORDER
+import { AudioRecorder } from '@/components/AudioRecorder';
 
 interface ProjectClientComponentProps {
   initialProject: Project;
@@ -68,26 +70,25 @@ interface ProjectClientComponentProps {
 }
 
 type ContentLinkItem = ProjectContentDetails['links'][0];
-type ContentType = 'document' | 'quiz' | 'note' | 'deck' | '';
+type ContentType = 'document' | 'quiz' | 'note' | 'deck' | 'recording' | '';
 
 // Helper to get the correct icon
 const getIcon = (type: string) => {
   if (type === 'document') return <FileText className="w-5 h-5 text-blue-500" />;
-  // --- FIX: Change quiz icon ---
   if (type === 'quiz') return <FileQuestion className="w-5 h-5 text-green-500" />;
   if (type === 'note') return <StickyNote className="w-5 h-5 text-yellow-500" />;
   if (type === 'deck') return <Layers className="w-5 h-5 text-purple-500" />;
+  if (type === 'recording') return <Mic className="w-5 h-5 text-red-500" />;
   return <FileText className="w-5 h-5" />;
 };
 
 // Helper to get the correct link
 const getHref = (type: string, id: string) => {
   if (type === 'document') return `/documents/${id}`;
-  // --- FIX: Change quiz link ---
-  if (type === 'quiz') return `/quiz/${id}`; // Link to quiz-taking page
-  // --- END FIX ---
+  if (type === 'quiz') return `/quiz/${id}`;
   if (type === 'note') return `/notes/${id}`;
   if (type === 'deck') return `/flashcards/${id}`;
+  if (type === 'recording') return `/recordings/${id}`; // Or open in modal
   return '#';
 };
 
@@ -96,34 +97,32 @@ export function ProjectClientComponent({
   initialContent,
 }: ProjectClientComponentProps) {
   const [project, setProject] = useState(initialProject);
-  const [content, setContent] = useState<ContentLinkItem[]>(
-    initialContent.links
-  );
-  const [isDeleting, setIsDeleting] = useState(false); // For deleting links
-  const [isSaving, setIsSaving] = useState(false); // For modal saves
+  const [content, setContent] = useState<ContentLinkItem[]>(initialContent.links);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Edit Project Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editTitle, setEditTitle] = useState(project.title);
-  const [editDescription, setEditDescription] = useState(
-    project.description || ''
-  );
+  const [editDescription, setEditDescription] = useState(project.description || '');
 
   // Add Item Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // Record Audio Modal State
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+
+  // Add Existing Item State
   const [addItemType, setAddItemType] = useState<ContentType>('');
-  const [availableItems, setAvailableItems] = useState<
-    { id: string; title: string }[]
-  >([]);
+  const [availableItems, setAvailableItems] = useState<{ id: string; title: string }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [isFetchingItems, setIsFetchingItems] = useState(false);
 
   const { session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-
-  // --- (Page Context, EditSave, FetchItems, AddItem, RemoveItem handlers are unchanged) ---
   const { setPageContext } = usePageContext();
+
   const pageContext = useMemo(
     (): PageContextType => ({
       type: 'project',
@@ -137,6 +136,8 @@ export function ProjectClientComponent({
     setPageContext(pageContext);
     return () => setPageContext(null);
   }, [setPageContext, pageContext]);
+
+  // --- Handlers ---
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,11 +163,7 @@ export function ProjectClientComponent({
       toast({ title: 'Project Updated' });
       setIsEditModalOpen(false);
     } catch (error: any) {
-      toast({
-        title: 'Update Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -182,18 +179,13 @@ export function ProjectClientComponent({
         const response = await fetch(`/api/content/list?type=${type}&excludeProject=${project.id}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        const result: ApiResponse<{ id: string; title: string }[]> =
-          await response.json();
+        const result: ApiResponse<{ id: string; title: string }[]> = await response.json();
         if (!result.success || !result.data) {
           throw new Error(result.error || `Failed to fetch ${type}s.`);
         }
         setAvailableItems(result.data);
       } catch (error: any) {
-        toast({
-          title: 'Error',
-          description: error.message,
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
       } finally {
         setIsFetchingItems(false);
       }
@@ -227,11 +219,7 @@ export function ProjectClientComponent({
       setAddItemType('');
       setSelectedItemId('');
     } catch (error: any) {
-      toast({
-        title: 'Add Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Add Failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -240,7 +228,6 @@ export function ProjectClientComponent({
   const handleRemoveItem = async (linkId: string, title: string) => {
     if (isDeleting || !session) return;
     setIsDeleting(true);
-
     const originalContent = [...content];
     setContent((prev) => prev.filter((item) => item.id !== linkId));
 
@@ -255,29 +242,49 @@ export function ProjectClientComponent({
       }
       toast({ title: 'Item Removed', description: `"${title}" removed.` });
     } catch (error: any) {
-      toast({
-        title: 'Remove Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Remove Failed', description: error.message, variant: 'destructive' });
       setContent(originalContent);
     } finally {
       setIsDeleting(false);
     }
   };
 
+  const handleRecordingComplete = (newRecording: any) => {
+    // Add the new recording to the content list optimistically
+    // Note: The object structure might vary, adapting to ContentLinkItem shape
+    const newLink: ContentLinkItem = {
+      id: `temp-${Date.now()}`, // Temp ID until refresh
+      content_id: newRecording.id,
+      content_type: 'recording',
+      title: newRecording.title || 'New Recording',
+      description: 'Audio Recording',
+      icon: 'recording',
+      created_at: new Date().toISOString()
+    };
+    
+    setContent((prev) => [newLink, ...prev]);
+    setIsRecordModalOpen(false);
+    router.refresh(); // Fetch authoritative data
+  };
+
   return (
     <>
-      {/* --- (Header and Empty State are unchanged) --- */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <Button variant="ghost" onClick={() => router.push('/projects')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Projects
         </Button>
         <div className="flex gap-2">
+          {/* New Record Button */}
+          <Button variant="default" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsRecordModalOpen(true)}>
+            <Mic className="w-4 h-4 mr-2" />
+            Record Lecture
+          </Button>
+
           <Button variant="outline" onClick={() => setIsAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Add Item
+            Add Existing
           </Button>
           <Button
             variant="ghost"
@@ -301,25 +308,31 @@ export function ProjectClientComponent({
       </div>
 
       {content.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed rounded-lg">
+        <div className="text-center py-16 border-2 border-dashed rounded-lg bg-muted/10">
           <CardTitle>This project is empty</CardTitle>
           <CardDescription className="mt-2">
-            Add your documents, quizzes, and notes to get started.
+            Record a lecture, upload documents, or add existing quizzes.
           </CardDescription>
-          <Button className="mt-6" onClick={() => setIsAddModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add First Item
-          </Button>
+          <div className="flex gap-3 justify-center mt-6">
+            <Button onClick={() => setIsRecordModalOpen(true)} variant="default">
+              <Mic className="w-4 h-4 mr-2" />
+              Record Now
+            </Button>
+            <Button onClick={() => setIsAddModalOpen(true)} variant="outline">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Item
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {content.map((item) => (
-            <Card key={item.id} className="flex flex-col h-full">
+            <Card key={item.id} className="flex flex-col h-full hover:shadow-md transition-shadow">
               <CardHeader className="flex-row items-start gap-4 space-y-0">
-                <span className="p-2 bg-muted rounded-full">
-                  {getIcon(item.icon)}
+                <span className={cn("p-2 rounded-full", item.content_type === 'recording' ? 'bg-red-100 dark:bg-red-900/20' : 'bg-muted')}>
+                  {getIcon(item.content_type || item.icon)}
                 </span>
-                <div className="flex-1">
+                <div className="flex-1 overflow-hidden">
                   <CardTitle className="text-base truncate" title={item.title}>
                     {item.title}
                   </CardTitle>
@@ -329,125 +342,84 @@ export function ProjectClientComponent({
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">
-                {/* --- FIX: Prettier note preview --- */}
                 <p className="text-sm text-muted-foreground line-clamp-2">
                   {item.description 
-                    ? item.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() // Strip HTML and normalize whitespace
+                    ? item.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() 
                     : 'No details available.'}
                 </p>
-                {/* --- END FIX --- */}
               </CardContent>
-              <CardFooter className="justify-end gap-2">
+              <CardFooter className="justify-end gap-2 pt-0 pb-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 text-destructive hover:text-destructive"
-                      disabled={isDeleting}
-                    >
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogTitle>Remove from project?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will remove "{item.title}" from this project. The
-                        item itself will not be deleted.
+                        This will remove "{item.title}" from this project view.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isDeleting}>
-                        Cancel
-                      </AlertDialogCancel>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        className={cn(
-                          buttonVariants({ variant: 'destructive' })
-                        )}
-                        disabled={isDeleting}
+                        className={buttonVariants({ variant: 'destructive' })}
                         onClick={() => handleRemoveItem(item.id, item.title)}
                       >
-                        {isDeleting && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
                         Remove
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
                 
-                {/* --- FIX: Change button for quiz --- */}
-                {item.content_type === 'quiz' ? (
-                  <Button asChild size="sm">
-                    <Link href={getHref(item.content_type, item.content_id)}>
-                      <Play className="w-4 h-4 mr-2" />
-                      Start Quiz
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={getHref(item.content_type, item.content_id)}>
-                      View
-                    </Link>
-                  </Button>
-                )}
-                {/* --- END FIX --- */}
+                <Button asChild size="sm" variant={item.content_type === 'quiz' ? 'default' : 'secondary'}>
+                  <Link href={getHref(item.content_type, item.content_id)}>
+                    {item.content_type === 'quiz' ? (
+                        <> <Play className="w-3 h-3 mr-2" /> Start </>
+                    ) : (
+                        "Open"
+                    )}
+                  </Link>
+                </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
       )}
 
-      {/* --- (Modals are unchanged) --- */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
+      {/* --- RECORDING MODAL --- */}
+      <Dialog open={isRecordModalOpen} onOpenChange={setIsRecordModalOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Project Details</DialogTitle>
+            <DialogTitle>Record Lecture</DialogTitle>
+            <DialogDescription>
+              Record your class or meeting. We will transcribe it and generate notes automatically.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleEditSave} className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-title">Title</Label>
-              <Input
-                id="edit-title"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-desc">Description</Label>
-              <Textarea
-                id="edit-desc"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                disabled={isSaving}
-                className="min-h-[100px]"
-              />
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost" disabled={isSaving}>
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={isSaving || !editTitle.trim()}>
-                {isSaving && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </form>
+          
+          <div className="py-4 flex justify-center">
+            <AudioRecorder 
+              projectId={project.id} 
+              onUploadComplete={handleRecordingComplete}
+            />
+          </div>
+
+          <DialogFooter className="sm:justify-start">
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">Close</Button>
+            </DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- ADD EXISTING ITEM MODAL --- */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Item to Project</DialogTitle>
-            <DialogDescription>
-              Select an existing item to add to this project.
-            </DialogDescription>
+            <DialogTitle>Add Existing Content</DialogTitle>
+            <DialogDescription>Link content you created previously.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddItem} className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -462,7 +434,7 @@ export function ProjectClientComponent({
                 disabled={isSaving}
               >
                 <SelectTrigger id="item-type">
-                  <SelectValue placeholder="Select a type..." />
+                  <SelectValue placeholder="Select type..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="document">Document</SelectItem>
@@ -473,51 +445,52 @@ export function ProjectClientComponent({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="item-select">Item</Label>
+              <Label htmlFor="item-select">Select Item</Label>
               <Select
                 value={selectedItemId}
                 onValueChange={setSelectedItemId}
                 disabled={isSaving || isFetchingItems || !addItemType}
               >
                 <SelectTrigger id="item-select">
-                  <SelectValue placeholder="Select an item..." />
+                  <SelectValue placeholder="Choose item..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {isFetchingItems ? (
-                    <div className="flex items-center justify-center p-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    </div>
-                  ) : availableItems.length > 0 ? (
+                  {availableItems.length > 0 ? (
                     availableItems.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.title}
-                      </SelectItem>
+                      <SelectItem key={item.id} value={item.id}>{item.title}</SelectItem>
                     ))
                   ) : (
-                    <div className="p-2 text-sm text-muted-foreground">
-                      No available {addItemType}s found.
-                    </div>
+                    <div className="p-2 text-sm text-muted-foreground">None found.</div>
                   )}
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost" disabled={isSaving}>
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button
-                type="submit"
-                disabled={isSaving || isFetchingItems || !selectedItemId}
-              >
-                {isSaving && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Add to Project
+              <Button type="submit" disabled={!selectedItemId || isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Add
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Modal (Preserved but hidden for brevity) */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent>
+             <DialogHeader><DialogTitle>Edit Project</DialogTitle></DialogHeader>
+             <form onSubmit={handleEditSave} className="grid gap-4 py-4">
+                 <div className="grid gap-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input id="title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                 </div>
+                 <div className="grid gap-2">
+                    <Label htmlFor="desc">Description</Label>
+                    <Textarea id="desc" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+                 </div>
+                 <DialogFooter>
+                    <Button type="submit">Save</Button>
+                 </DialogFooter>
+             </form>
         </DialogContent>
       </Dialog>
     </>

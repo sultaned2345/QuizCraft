@@ -1,90 +1,73 @@
-// components/projects/ProjectCard.tsx
 'use client';
 
-import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
-import { MoreHorizontal, Folder, Clock, ArrowRight } from 'lucide-react';
-import { Project } from '@/types/database';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { ArrowRight, BookOpen, FileText, BrainCircuit } from "lucide-react";
+import Link from "next/link";
+import { formatDistanceToNow } from "date-fns";
 
 interface ProjectCardProps {
-  project: Project;
-  onDelete: (id: string) => void;
+  project: {
+    id: string;
+    title: string;
+    description?: string | null;
+    updated_at?: Date | string | null;
+    _count?: {
+      links: number; // Count of documents/notes linked
+    };
+  };
 }
 
-export function ProjectCard({ project, onDelete }: ProjectCardProps) {
-  // Generate a consistent gradient based on the project ID (deterministic)
-  const gradients = [
-    'from-zinc-800 to-zinc-900',
-    'from-slate-800 to-zinc-900',
-    'from-neutral-800 to-stone-900',
-  ];
-  const gradient = gradients[project.id.charCodeAt(0) % gradients.length];
+export function ProjectCard({ project }: ProjectCardProps) {
+  // Mock mastery score for now (will connect to real stats later)
+  const masteryScore = 0; 
+  const lastActive = project.updated_at 
+    ? formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })
+    : 'Just now';
 
   return (
-    <div className="group relative flex flex-col gap-3 rounded-xl border border-white/5 bg-zinc-900/40 p-1 transition-all hover:bg-zinc-900/80 hover:border-white/10 hover:shadow-2xl">
-      {/* 1. Visual Cover (Minimal) */}
-      <Link
-        href={`/projects/${project.id}`}
-        className={`relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-gradient-to-br ${gradient} transition-all`}
-      >
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/40 backdrop-blur-[2px]">
-            <div className="flex items-center gap-2 text-white font-medium text-sm">
-                Open Project <ArrowRight className="w-4 h-4" />
+    <Link href={`/projects/${project.id}`}>
+      <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/50 cursor-pointer h-full flex flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors">
+                {project.title}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                {project.description || "No description"}
+              </p>
             </div>
-        </div>
-        
-        {/* Fallback Icon if no image (kept subtle) */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-30 group-hover:opacity-0 transition-opacity">
-           <Folder className="w-12 h-12 text-white" />
-        </div>
-      </Link>
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <BookOpen size={16} />
+            </div>
+          </div>
+        </CardHeader>
 
-      {/* 2. Metadata */}
-      <div className="flex flex-col gap-1 px-2 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
-            <h3 className="font-semibold text-zinc-100 truncate group-hover:text-white transition-colors">
-              {project.title}
-            </h3>
-          </Link>
+        <CardContent className="flex-1 pb-2">
+          <div className="flex gap-2 mb-4">
+             {/* Dynamic Badges based on content type would go here */}
+            <Badge variant="secondary" className="text-xs font-normal">
+              <FileText className="w-3 h-3 mr-1" />
+              {project._count?.links || 0} Items
+            </Badge>
+          </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 -mr-2 text-zinc-500 hover:text-zinc-200"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 bg-zinc-950 border-white/10">
-              <DropdownMenuItem 
-                onClick={() => onDelete(project.id)}
-                className="text-red-400 focus:text-red-300 focus:bg-red-950/30"
-              >
-                Delete Project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Mastery</span>
+              <span>{masteryScore}%</span>
+            </div>
+            <Progress value={masteryScore} className="h-1.5" />
+          </div>
+        </CardContent>
 
-        <div className="flex items-center gap-3 text-xs text-zinc-500 font-medium">
-           <span className="flex items-center gap-1">
-             <Clock className="w-3 h-3" />
-             {formatDistanceToNow(new Date(project.created_at), { addSuffix: true })}
-           </span>
-           {/* You can add item counts here later if available in data */}
-           {/* <span>• 3 Files</span> */}
-        </div>
-      </div>
-    </div>
+        <CardFooter className="pt-3 border-t bg-muted/20 text-xs text-muted-foreground flex justify-between">
+          <span>Active {lastActive}</span>
+          <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+        </CardFooter>
+      </Card>
+    </Link>
   );
 }

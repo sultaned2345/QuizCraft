@@ -1,10 +1,15 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2 } from 'lucide-react';
+import { Mic, Square, Loader2, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-export function AudioRecorder({ onTranscriptionComplete }: { onTranscriptionComplete: (text: string) => void }) {
+interface AudioRecorderProps {
+  projectId: string;
+  onUploadComplete?: (newRecording: any) => void;
+}
+
+export function AudioRecorder({ projectId, onUploadComplete }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -29,7 +34,8 @@ export function AudioRecorder({ onTranscriptionComplete }: { onTranscriptionComp
       mediaRecorderRef.current.start();
       setIsRecording(true);
     } catch (err) {
-      toast({ title: "Microphone Access Denied", variant: "destructive" });
+      console.error("Mic Error:", err);
+      toast({ title: "Microphone Access Denied", description: "Please allow microphone access to record.", variant: "destructive" });
     }
   };
 
@@ -37,7 +43,7 @@ export function AudioRecorder({ onTranscriptionComplete }: { onTranscriptionComp
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      // Stop all tracks to release microphone
+      // Stop all tracks to release microphone hardware
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
   };
@@ -45,36 +51,71 @@ export function AudioRecorder({ onTranscriptionComplete }: { onTranscriptionComp
   const handleUpload = async (audioBlob: Blob) => {
     setIsProcessing(true);
     const formData = new FormData();
-    formData.append('file', audioBlob, 'recording.webm');
+    // File name with timestamp
+    const fileName = `recording-${new Date().toISOString().slice(0,19).replace(/:/g, "-")}.webm`;
+    formData.append('file', audioBlob, fileName);
+    formData.append('projectId', projectId); // Link directly to project
 
     try {
-      // 1. Transcribe
-      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      // Use the Universal Source Upload API
+      const res = await fetch('/api/upload/source', { 
+        method: 'POST', 
+        body: formData 
+      });
+      
       const data = await res.json();
       
-      if (!data.text) throw new Error("Transcription failed");
+      if (!res.ok) throw new Error(data.error || "Upload failed");
 
-      // 2. Pass text to parent to generate notes
-      onTranscriptionComplete(data.text); 
+      toast({ title: "Lecture Saved", description: "Audio uploaded and transcription started." });
+
+      if (onUploadComplete) {
+        onUploadComplete(data.data); // Return the new recording object
+      }
       
-    } catch (error) {
-      toast({ title: "Error processing audio", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Error processing audio", description: error.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="flex gap-4 items-center">
-      {!isRecording ? (
-        <Button onClick={startRecording} disabled={isProcessing} variant="outline" className="gap-2">
-          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-          {isProcessing ? "Transcribing..." : "Record Lecture"}
-        </Button>
-      ) : (
-        <Button onClick={stopRecording} variant="destructive" className="gap-2 animate-pulse">
-          <Square className="w-4 h-4" /> Stop Recording
-        </Button>
+    <div className="flex flex-col items-center gap-4 p-6 border rounded-xl bg-muted/20">
+      <div className="flex gap-4 items-center">
+        {!isRecording ? (
+          <Button 
+            onClick={startRecording} 
+            disabled={isProcessing} 
+            size="lg"
+            className="gap-2 rounded-full w-48 transition-all hover:scale-105"
+          >
+            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mic className="w-5 h-5" />}
+            {isProcessing ? "Processing..." : "Start Recording"}
+          </Button>
+        ) : (
+          <Button 
+            onClick={stopRecording} 
+            variant="destructive" 
+            size="lg"
+            className="gap-2 rounded-full w-48 animate-pulse"
+          >
+            <Square className="w-5 h-5 fill-current" /> Stop
+          </Button>
+        )}
+      </div>
+      
+      {isRecording && (
+        <p className="text-sm text-red-500 animate-pulse font-medium">
+          Recording in progress...
+        </p>
+      )}
+      
+      {isProcessing && (
+        <p className="text-sm text-muted-foreground text-center">
+          Uploading and transcribing... <br/>
+          <span className="text-xs opacity-70">This may take a moment.</span>
+        </p>
       )}
     </div>
   );
