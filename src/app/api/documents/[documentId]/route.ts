@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 export const runtime = 'nodejs';
 const STORAGE_BUCKET_NAME = 'user_documents';
 
+// Helper: Get authenticated Supabase client for storage ops
 function getSupabaseClientForUser(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -22,7 +23,7 @@ function getSupabaseClientForUser(request: NextRequest) {
     });
 }
 
-// --- FIX: Add GET Handler ---
+// --- GET Handler: Retrieve document metadata ---
 export async function GET(
     request: NextRequest,
     { params }: { params: { documentId: string } }
@@ -36,7 +37,6 @@ export async function GET(
                 id: documentId,
                 user_id: user.id,
             },
-            // Select fields to return (exclude large extracted_text if not needed for list view)
             select: {
                 id: true,
                 file_name: true,
@@ -45,7 +45,7 @@ export async function GET(
                 created_at: true,
                 processing_status: true,
                 ai_summary: true,
-                // storage_path: true, // usually internal only
+                storage_path: true, // Needed for public URL generation
             }
         });
 
@@ -53,20 +53,23 @@ export async function GET(
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
-        // Convert BigInt for JSON serialization
+        // 1. Serialize BigInt (file_size) to string
+        // 2. Generate Public URL for frontend PDF viewer
         const safeDoc = {
             ...doc,
             file_size: doc.file_size?.toString(), 
+            publicUrl: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET_NAME}/${doc.storage_path}`
         };
 
         return NextResponse.json({ success: true, data: safeDoc });
 
     } catch (error: any) {
+        console.error("GET Document Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
-// --- END FIX ---
 
+// --- DELETE Handler: Remove document from DB and Storage ---
 export async function DELETE(
     request: NextRequest,
     { params }: { params: { documentId: string } }
@@ -79,6 +82,7 @@ export async function DELETE(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Document ID is required.' }, { status: 400 });
         }
 
+        // 1. Find document to get storage path
         const documentToDelete = await prisma.documents.findUnique({
             where: {
                 id: documentId,
@@ -95,17 +99,19 @@ export async function DELETE(
 
         const supabaseForUser = getSupabaseClientForUser(request);
 
+        // 2. Delete file from Storage
         if (documentToDelete.storage_path) {
             const { error: storageError } = await supabaseForUser.storage
                 .from(STORAGE_BUCKET_NAME)
                 .remove([documentToDelete.storage_path]);
 
             if (storageError) {
-                console.error(`Supabase storage error deleting file ${documentToDelete.storage_path}:`, storageError);
+                console.error(`Storage delete error:`, storageError);
                 throw new Error(`Storage delete failed: ${storageError.message}`);
             }
         }
 
+        // 3. Delete DB record and related embeddings
         await prisma.$transaction([
             prisma.content_embeddings.deleteMany({
                 where: {
@@ -135,12 +141,10 @@ export async function DELETE(
              if (error.code === 'P2023') { 
                  return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid Document ID format.' }, { status: 400 });
              }
-             console.error('Prisma Error deleting document:', { code: error.code, meta: error.meta });
-             return NextResponse.json<ApiResponse>({ success: false, error: 'Database error occurred while deleting document.' }, { status: 500 });
+             return NextResponse.json<ApiResponse>({ success: false, error: 'Database error occurred.' }, { status: 500 });
         }
 
-        console.error(`Unexpected error deleting document ${params.documentId}:`, error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to delete document';
-        return NextResponse.json<ApiResponse>({ success: false, error: errorMessage }, { status: 500 });
+        console.error(`Unexpected error deleting document:`, error);
+        return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 500 });
     }
 }

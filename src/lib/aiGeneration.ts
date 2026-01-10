@@ -1,18 +1,15 @@
 // src/lib/aiGeneration.ts
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { Question, QuestionType } from '@/types/database';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
-import Groq from "groq-sdk"; // Requires: npm install groq-sdk
+import Groq from "groq-sdk"; 
 
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-// --- UPDATED: Use the Flash-Lite model for speed and cost-efficiency ---
-const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
-
-// --- UPDATED: Increased input length to ~100k characters (~25k tokens) ---
-// The Flash model can handle up to 1M tokens, so this is safe.
-const MAX_INPUT_LENGTH = 100000; 
+// --- UPDATED: Use standard Flash model for stability ---
+const AI_MODEL_NAME = "gemini-1.5-flash"; 
+const MAX_INPUT_LENGTH = 30000; // Safe limit for standard Flash
 
 if (!API_KEY) {
     console.warn("Missing GOOGLE_AI_API_KEY environment variable. AI generation will fail.");
@@ -125,40 +122,46 @@ export async function callAIToGenerateQuiz(
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildQuizPrompt({ text: textSnippet, numQuestions, difficulty, questionType });
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const content = response.text();
-
-  if (!content) throw new Error('Empty response from Gemini');
-
-  let parsed: any;
   try {
-    parsed = JSON.parse(content);
-  } catch (parseError) {
-    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
-    } else {
-      throw new Error(`Invalid JSON structure. No JSON object found.`);
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
+
+    if (!content) throw new Error('Empty response from Gemini');
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      console.warn("JSON parse failed, attempting regex repair...", content.substring(0, 100));
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('Could not parse JSON from AI response');
+      }
     }
+
+    if (!parsed || !parsed.questions || !Array.isArray(parsed.questions)) {
+      throw new Error('Invalid JSON structure: missing questions array');
+    }
+
+    const sanitizedQuestions = parsed.questions.map((q: any) => ({
+      question_text: q.question_text || "Untitled Question",
+      question_type: q.question_type || "MULTIPLE_CHOICE",
+      correct_answer: q.correct_answer || "",
+      options: Array.isArray(q.options) ? q.options : (q.question_type === 'TRUE_FALSE' ? ["True", "False"] : Prisma.JsonNull),
+      prompts: Array.isArray(q.prompts) ? q.prompts : Prisma.JsonNull,
+      explanation: q.explanation || "",
+    }));
+
+    return { title: parsed.title || "Generated Quiz", questions: sanitizedQuestions };
+
+  } catch (error: any) {
+    console.error("Quiz Generation Error:", error);
+    // Return a safe fallback or rethrow depending on preference. Rethrowing lets the API handle the 500.
+    throw new Error(`AI Quiz Generation Failed: ${error.message}`);
   }
-
-  if (!parsed || !parsed.title || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    throw new Error('Gemini returned invalid or empty data structure (missing title or questions array).');
-  }
-
-  const sanitizedQuestions = parsed.questions.map((q: any) => ({
-    question_text: q.question_text || "Untitled Question",
-    question_type: q.question_type || "MULTIPLE_CHOICE",
-    correct_answer: q.correct_answer || "",
-    options: Array.isArray(q.options) ? q.options : (q.question_type === 'TRUE_FALSE' ? ["True", "False"] : Prisma.JsonNull),
-    prompts: Array.isArray(q.prompts) ? q.prompts : Prisma.JsonNull,
-    explanation: q.explanation || "",
-  }));
-
-  return { title: parsed.title, questions: sanitizedQuestions };
 }
 
 // ---------------------------------------------------------------------------
@@ -209,43 +212,36 @@ export async function callAIToGenerateNote(text: string): Promise<{ title: strin
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildNotePrompt({ text: textSnippet });
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const content = response.text();
-  
-  let parsed: any;
   try {
-    parsed = JSON.parse(content);
-  } catch (parseError) {
-    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
-    } else {
-      throw new Error(`Invalid JSON structure. No JSON object found.`);
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
+    
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+       const jsonMatch = content.match(/\{[\s\S]*\}/);
+       if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+       else throw new Error("Invalid JSON from AI");
     }
-  }
 
-  // Validations
-  if (
-    !parsed.notes || 
-    !Array.isArray(parsed.notes) || 
-    parsed.notes.length === 0 || 
-    !parsed.notes[0].title ||
-    typeof parsed.notes[0].content !== 'string'
-  ) {
-    console.warn("AI failed to return valid note structure with title/content keys:", parsed);
-    throw new Error("AI failed to return a valid note structure with title and content.");
-  }
+    // Validations
+    if (!parsed.notes || !Array.isArray(parsed.notes) || parsed.notes.length === 0) {
+      throw new Error("AI returned invalid note structure.");
+    }
 
-  // Check for meaningful content
-  if (!isContentMeaningful(parsed.notes[0].content)) {
-     console.warn(`AI returned a valid title ("${parsed.notes[0].title}") but content was empty or meaningless.`);
-     throw new Error("AI failed to generate meaningful content for this note.");
+    const note = parsed.notes[0];
+    if (!note.title || !note.content) {
+        throw new Error("Note missing title or content.");
+    }
+
+    return note;
+
+  } catch (error: any) {
+    console.error("Note Generation Error:", error);
+    throw new Error(`AI Note Generation Failed: ${error.message}`);
   }
-  
-  return parsed.notes[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -286,45 +282,40 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildFlashcardPrompt(textSnippet, numCards);
   
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const content = response.text();
-
-  let parsed: any;
   try {
-    parsed = JSON.parse(content);
-  } catch (parseError) {
-    console.error("Failed to parse AI response, trying fallback...", content.substring(0, 500));
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try { parsed = JSON.parse(jsonMatch[0]); }
-      catch (fallbackError) { throw new Error(`Invalid JSON structure, even after fallback.`); }
-    } else {
-      throw new Error(`Invalid JSON structure. No JSON object found.`);
-    }
-  }
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
 
-  if (!parsed.flashcards || !Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) {
-    throw new Error("AI failed to return valid flashcards.");
+    let parsed: any;
+    try {
+        parsed = JSON.parse(content);
+    } catch (e) {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+        else throw new Error("Invalid JSON");
+    }
+
+    if (!parsed.flashcards || !Array.isArray(parsed.flashcards)) {
+        throw new Error("Invalid flashcards structure.");
+    }
+    
+    return parsed.flashcards;
+
+  } catch (error: any) {
+    console.error("Flashcard Gen Error:", error);
+    throw new Error(`AI Flashcard Gen Failed: ${error.message}`);
   }
-  return parsed.flashcards;
 }
 
 // ---------------------------------------------------------------------------
 // 4. AUDIO PROCESSING (VOICE NOTES - GROQ)
 // ---------------------------------------------------------------------------
 
-/**
- * Processes an audio file using Groq:
- * 1. Transcribes using Whisper (distil-whisper-large-v3-en).
- * 2. Generates Title, Summary, and Suggestions using Llama3.
- */
 export async function callAIToProcessAudio(audioFile: File): Promise<{ title: string; transcript: string; summary: string; suggestions: string[] }> {
   if (!GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY environment variable");
 
   // 1. Transcribe (Whisper)
-  // Note: Groq SDK accepts File/Blob/Buffer directly in node depending on version, 
-  // but for Next.js Route Handlers receiving FormData, 'audioFile' (File) works well.
   const transcription = await groq.audio.transcriptions.create({
     file: audioFile,
     model: "distil-whisper-large-v3-en",
@@ -373,7 +364,7 @@ export async function callAIToProcessAudio(audioFile: File): Promise<{ title: st
 }
 
 // ---------------------------------------------------------------------------
-// 5. INSIGHTS GENERATION (NEW)
+// 5. INSIGHTS GENERATION
 // ---------------------------------------------------------------------------
 
 function buildInsightsPrompt(text: string): string {
@@ -403,31 +394,30 @@ export async function callAIToGenerateInsights(text: string): Promise<{ summary:
     },
   });
 
-  // Safety truncate
   const textSnippet = text.substring(0, MAX_INPUT_LENGTH);
   const prompt = buildInsightsPrompt(textSnippet);
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const content = response.text();
-
-  let parsed: any;
   try {
-    parsed = JSON.parse(content);
-  } catch (parseError) {
-    console.error("Failed to parse AI response for insights", content.substring(0, 500));
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        try { parsed = JSON.parse(jsonMatch[0]); }
-        catch (e) { throw new Error("Invalid JSON structure."); }
-    } else {
-        throw new Error("Invalid JSON structure.");
-    }
-  }
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
 
-  return {
-    summary: parsed.summary || "No summary available.",
-    key_insights: Array.isArray(parsed.key_insights) ? parsed.key_insights : [],
-    related_topics: Array.isArray(parsed.related_topics) ? parsed.related_topics : []
-  };
+    let parsed: any;
+    try {
+        parsed = JSON.parse(content);
+    } catch (e) {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+        else throw new Error("Invalid JSON");
+    }
+
+    return {
+        summary: parsed.summary || "No summary available.",
+        key_insights: Array.isArray(parsed.key_insights) ? parsed.key_insights : [],
+        related_topics: Array.isArray(parsed.related_topics) ? parsed.related_topics : []
+    };
+  } catch (error: any) {
+    console.error("Insights Gen Error:", error);
+    throw new Error(`AI Insights Failed: ${error.message}`);
+  }
 }
