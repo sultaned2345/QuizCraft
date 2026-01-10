@@ -1,21 +1,17 @@
-// src/app/providers.tsx
-'use client';
+"use client"
 
-import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { UpgradeModalProvider } from "@/components/UpgradeModalContext";
-import { PageProvider } from "@/contexts/PageContext";
+import * as React from "react"
+import { ThemeProvider as NextThemesProvider } from "next-themes"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
-      <ThemeProvider defaultTheme="system" storageKey="quizcraft-ui-theme">
-        <UpgradeModalProvider>
-          <PageProvider>
-            {children}
-          </PageProvider>
-        </UpgradeModalProvider>
-      </ThemeProvider>
-    </AuthProvider>
-  );
+    <NextThemesProvider 
+      attribute="class" 
+      defaultTheme="system" 
+      enableSystem
+      disableTransitionOnChange
+    >
+      {children}
+    </NextThemesProvider>
+  )
 }

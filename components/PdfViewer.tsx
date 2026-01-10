@@ -25,7 +25,7 @@ interface PdfPageProps {
   onTextSelect: (e: React.MouseEvent) => void;
 }
 
-// --- 1. Custom Hook for Visibility (The "Fix") ---
+// --- Custom Hook for Visibility (Lazy Rendering) ---
 function useInView(options: IntersectionObserverInit = {}) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [isInView, setIsInView] = React.useState(false);
@@ -50,7 +50,7 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   const textLayerRef = React.useRef<HTMLDivElement>(null);
   const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
 
-  // Use the hook: Load content when within 200px of viewport
+  // Load content when within 200px of viewport
   const { ref, isInView } = useInView({ rootMargin: '200px' });
 
   // 1. Always fetch the page proxy (lightweight) to get dimensions/rotation
@@ -86,7 +86,6 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
         await renderTask.promise;
         
         // Render Text Layer (if available)
-        // We check for the function because it was removed/changed in some pdfjs versions
         const pdfJsAny = pdfjs as any;
         if (typeof pdfJsAny.renderTextLayer === 'function' && textLayerRef.current) {
             const textContent = await page.getTextContent();
@@ -125,9 +124,9 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
         ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
     };
-  }, [page, width, isInView]); // Re-run when it comes into view
+  }, [page, width, isInView]);
 
-  // Loading State
+  // Loading State / Placeholder
   if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
 
   const aspectRatio = page.view[3] / page.view[2];
@@ -178,9 +177,15 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     return () => observer.disconnect();
   }, [isLoading]);
 
-  // 2. Load PDF Document
+  // 2. Load PDF Document (Robust Fix)
   React.useEffect(() => {
     const loadPdf = async () => {
+      // Guard: Ensure url is a valid string.
+      // This prevents "Invalid parameter" crash if url is null/undefined/object.
+      if (!url || typeof url !== 'string') {
+        return; 
+      }
+
       setIsLoading(true);
       setError(null);
       try {
@@ -194,7 +199,8 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
         setIsLoading(false);
       }
     };
-    if (url) loadPdf();
+
+    loadPdf();
   }, [url]);
 
   if (isLoading) {

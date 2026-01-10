@@ -7,34 +7,39 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* --- LIGHT MODE (High-Tech Clinical) --- */
-  --background: oklch(99% 0 0);
+  /* --- LIGHT MODE (Clean & Crisp) --- */
+  /* Background: Very subtle cool grey, not pure white */
+  --background: oklch(98.5% 0.005 240); 
   --foreground: oklch(20% 0.02 265); 
   
+  /* Cards: Pure white to pop against background */
   --card: oklch(100% 0 0);
   --card-foreground: oklch(20% 0.02 265);
   
   --popover: oklch(100% 0 0);
   --popover-foreground: oklch(20% 0.02 265);
   
-  /* Vibrant Electric Purple */
+  /* Primary: Vibrant Violet/Purple */
   --primary: oklch(55% 0.25 280); 
   --primary-foreground: oklch(99% 0 0);
   
-  --secondary: oklch(95% 0.02 265);
+  /* Secondary: Soft grey for buttons */
+  --secondary: oklch(96% 0.01 265);
   --secondary-foreground: oklch(20% 0.02 265);
   
-  --muted: oklch(95% 0.02 265);
+  /* Muted: Slightly darker grey for backgrounds */
+  --muted: oklch(94% 0.02 265);
   --muted-foreground: oklch(50% 0.05 265);
   
-  --accent: oklch(95% 0.05 265);
+  --accent: oklch(96% 0.01 265);
   --accent-foreground: oklch(20% 0.02 265);
   
   --destructive: oklch(60% 0.2 20);
   --destructive-foreground: oklch(99% 0 0);
 
-  --border: oklch(90% 0.02 265);
-  --input: oklch(90% 0.02 265);
+  /* Border: Clearly visible but soft */
+  --border: oklch(92% 0.02 265);
+  --input: oklch(92% 0.02 265);
   --ring: oklch(55% 0.25 280);
   
   --radius: 0.5rem;
@@ -128,12 +133,10 @@
     mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
   }
   
-  /* NEW: For TurboLoading Spinner */
   .direction-reverse {
     animation-direction: reverse;
   }
   
-  /* NEW: For Progress Bar Shimmer */
   .animate-shimmer {
     animation: shimmer 2s infinite linear;
   }

@@ -34,8 +34,7 @@ export default function Dashboard() {
     (url) => fetcher(url, session?.access_token || '')
   );
 
-  // FIX: Ensure documents.data is actually an array before filtering.
-  // API might return an error object or unexpected structure.
+  // Safe Array Check
   const safeDocs = Array.isArray(documents?.data) ? documents.data : [];
 
   const filteredDocs = safeDocs.filter((doc: any) => 
@@ -65,13 +64,13 @@ export default function Dashboard() {
           </AddDocumentDialog>
         </div>
 
-        {/* Filters & Search */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6 sticky top-16 z-20 bg-background/80 backdrop-blur-md py-2 -mx-2 px-2 rounded-lg">
+        {/* Filters & Search - IMPROVED FOR LIGHT MODE */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6 sticky top-16 z-20 bg-background/95 backdrop-blur-md py-3 -mx-2 px-2 rounded-lg border-b border-border/40 shadow-sm transition-all">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
               placeholder="Search documents..." 
-              className="pl-9 bg-muted/50 border-transparent focus:bg-background transition-all"
+              className="pl-9 bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 transition-all"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
