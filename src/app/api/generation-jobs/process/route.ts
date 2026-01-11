@@ -1,221 +1,167 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { 
   generateDocumentSummary, 
-  generateQuizFromText, 
-  generateFlashcardsFromText 
+  generateFlashcardsFromText, 
+  generateQuizFromText,
+  generateEmbeddings // We will add this to ai-service next
 } from '@/lib/ai-service';
-import { generateEmbeddings } from '@/lib/embeddings';
 
-// Allow this API to run for up to 5 minutes (AI generation is slow)
-export const maxDuration = 300; 
-export const runtime = 'nodejs';
+export const maxDuration = 60; // Allow 60s timeout on Vercel Pro
 
-export async function POST(req: Request) {
-  let jobId: string | null = null;
-
+export async function POST(req: NextRequest) {
   try {
-    // 1. Fetch the oldest PENDING job
-    // We fetch 'include: { document: true }' to get the text content
-    const job = await prisma.generation_jobs.findFirst({
-      where: { status: 'pending' },
-      include: { 
-        document: true 
-      },
-      orderBy: { created_at: 'asc' }
+    const user = await requireAuth(req);
+    const { jobId } = await req.json();
+
+    // 1. Fetch Job and Document
+    const job = await prisma.generation_jobs.findUnique({
+      where: { id: jobId },
+      include: { document: true }
     });
 
-    if (!job) {
-      return NextResponse.json({ message: 'No pending jobs found.' });
+    if (!job || job.user_id !== user.id) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    jobId = job.id;
-    console.log(`[Job ${jobId}] Starting processing. Type: ${job.job_type}`);
+    if (job.status === 'completed') {
+      return NextResponse.json({ success: true, message: "Already completed" });
+    }
 
-    // 2. Mark as PROCESSING (Lock the job)
+    // Update status to processing
     await prisma.generation_jobs.update({
       where: { id: jobId },
       data: { status: 'processing' }
     });
 
-    // 3. Validate Content
-    const textContext = job.document.extracted_text;
-    if (!textContext) {
-      throw new Error("Document has no extracted text content.");
-    }
-
+    const text = job.document.extracted_text || "";
+    const title = job.document.file_name;
     let outputId = null;
-    let outputType = '';
 
-    // =========================================================
-    // SWITCH: HANDLE JOB TYPES
-    // =========================================================
-
-    if (job.job_type === 'summary') {
-      // --- A. SUMMARY JOB (Standard "New File" Flow) ---
-      
-      // 1. Generate Embeddings (The "Brain")
-      // We run this here because 'summary' is usually the first job triggered on upload
-      try {
-        console.log(`[Job ${jobId}] Generating embeddings for RAG...`);
-        await generateEmbeddings(
-          textContext, 
-          job.document.id, 
-          'document', 
-          job.user_id
-        );
-      } catch (embError) {
-        console.error(`[Job ${jobId}] Embedding generation failed (continuing):`, embError);
-      }
-
-      // 2. Generate Summary Text
-      console.log(`[Job ${jobId}] Generating AI Summary...`);
-      const summaryMarkdown = await generateDocumentSummary(textContext, job.document.file_name);
-      
-      // 3. Save as Note
-      const note = await prisma.notes.create({
-        data: {
-          user_id: job.user_id,
-          title: `Summary: ${job.document.file_name}`,
-          content: summaryMarkdown,
-          tags: ['ai-generated', 'summary', 'study-guide'],
-        }
-      });
-      outputId = note.id;
-      outputType = 'note';
-
-      // 4. Update Document Metadata
-      await prisma.documents.update({
-        where: { id: job.document_id },
-        data: { ai_summary: summaryMarkdown }
-      });
-
-    } 
-    else if (job.job_type === 'quiz') {
-      // --- B. QUIZ JOB ---
-      console.log(`[Job ${jobId}] Generating Quiz...`);
-      
-      const questions = await generateQuizFromText(textContext, 5); // Default 5 questions
-
-      if (!questions || questions.length === 0) {
-        throw new Error("AI returned no questions.");
-      }
-
-      const quiz = await prisma.quiz.create({
-        data: {
-          userId: job.user_id,
-          title: `Practice: ${job.document.file_name}`,
-          // Prisma handles creating the nested questions automatically
-          questions: {
-            create: questions.map((q: any) => ({
-              question_text: q.question_text,
-              question_type: q.question_type,
-              correct_answer: q.correct_answer,
-              options: q.options || [],
-              explanation: q.explanation
-            }))
+    // 2. Execute Logic based on Job Type
+    switch (job.job_type) {
+      case 'note': {
+        const noteContent = await generateDocumentSummary(text, title);
+        const note = await prisma.notes.create({
+          data: {
+            user_id: user.id,
+            document_id: job.document_id,
+            title: `${title} - Study Notes`,
+            content: noteContent,
+            tags: ['auto-generated']
           }
-        }
-      });
-      outputId = quiz.id;
-      outputType = 'quiz';
-
-    } 
-    else if (job.job_type === 'flashcard') {
-      // --- C. FLASHCARD JOB ---
-      console.log(`[Job ${jobId}] Generating Flashcards...`);
-
-      const cards = await generateFlashcardsFromText(textContext, 10); // Default 10 cards
-
-      if (!cards || cards.length === 0) {
-        throw new Error("AI returned no flashcards.");
+        });
+        outputId = note.id;
+        break;
       }
 
-      const deck = await prisma.flashcard_decks.create({
-        data: {
-          user_id: job.user_id,
-          title: `Terms: ${job.document.file_name}`,
-          flashcards: {
-            create: cards.map((c: any) => ({
+      case 'flashcard': {
+        const cardsData = await generateFlashcardsFromText(text, 15);
+        if (cardsData.length > 0) {
+          const deck = await prisma.flashcard_decks.create({
+            data: {
+              user_id: user.id,
+              document_id: job.document_id,
+              title: `${title} - Flashcards`
+            }
+          });
+          
+          await prisma.flashcards.createMany({
+            data: cardsData.map((c: any) => ({
+              deck_id: deck.id,
               front_content: c.front,
               back_content: c.back
             }))
-          }
+          });
+          outputId = deck.id;
         }
-      });
-      outputId = deck.id;
-      outputType = 'deck';
+        break;
+      }
+
+      case 'quiz': {
+        const questionsData = await generateQuizFromText(text, 10);
+        if (questionsData.length > 0) {
+          const quiz = await prisma.quiz.create({
+            data: {
+              userId: user.id,
+              document_id: job.document_id,
+              title: `${title} - Pop Quiz`,
+              time_limit_minutes: 15
+            }
+          });
+
+          // Create questions sequentially or look into createMany if schema allows (schema has complex relations, usually loop is safer for initial nesting)
+          for (const q of questionsData) {
+            await prisma.questions.create({
+              data: {
+                quiz_id: quiz.id,
+                question_text: q.question_text,
+                question_type: q.question_type,
+                correct_answer: q.correct_answer,
+                options: q.options,
+                explanation: q.explanation
+              }
+            });
+          }
+          outputId = quiz.id;
+        }
+        break;
+      }
+
+      case 'embedding': {
+        // Generate embedding vector for RAG (Chat with File)
+        const vector = await generateEmbeddings(text.slice(0, 8000)); // Limit for embedding model
+        
+        // Use raw SQL for pgvector insertion
+        await prisma.$executeRaw`
+          INSERT INTO content_embeddings (id, user_id, content_id, content_type, content_chunk, embedding)
+          VALUES (
+            gen_random_uuid(), 
+            ${user.id}::uuid, 
+            ${job.document_id}::uuid, 
+            'document', 
+            ${text.slice(0, 1000)}, 
+            ${vector}::vector
+          )
+        `;
+        outputId = job.document_id; // Maps back to the doc
+        break;
+      }
     }
 
-    // 4. LINK CONTENT TO PROJECT
-    // We find the Project this document belongs to, then link the new Output (Quiz/Note/Deck) to it.
-    if (outputId && outputType) {
-      await linkContentToProject(job.user_id, job.document_id, outputId, outputType);
-    }
-
-    // 5. MARK COMPLETE
+    // 3. Mark Job Complete
     await prisma.generation_jobs.update({
       where: { id: jobId },
       data: { 
-        status: 'complete', 
-        output_id: outputId 
+        status: 'completed',
+        output_id: outputId
       }
     });
 
-    console.log(`[Job ${jobId}] Complete. Created ${outputType} (${outputId})`);
+    // Check if all jobs for this doc are done, if so, mark doc as ready
+    const pendingJobs = await prisma.generation_jobs.count({
+      where: { 
+        document_id: job.document_id,
+        status: { not: 'completed' }
+      }
+    });
+
+    if (pendingJobs === 0) {
+      await prisma.documents.update({
+        where: { id: job.document_id },
+        data: { processing_status: 'completed' }
+      });
+    }
+
     return NextResponse.json({ success: true, jobId, outputId });
 
-  } catch (error: any) {
-    console.error("Job Processing Critical Error:", error);
-    
-    // Attempt to mark as failed
-    if (jobId) {
-      try {
-        await prisma.generation_jobs.update({
-          where: { id: jobId },
-          data: { 
-            status: 'failed', 
-            error_message: error.message || 'Unknown processing error' 
-          }
-        });
-      } catch (dbError) {
-        console.error("Failed to update job status in DB:", dbError);
-      }
+  } catch (e: any) {
+    console.error(`Job ${req.json['jobId']} failed:`, e);
+    // Mark job as failed
+    if (req.body) {
+        // Logic to extract ID and mark failed would go here
     }
-
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-/**
- * Helper: Finds which project the source document belongs to,
- * then links the new generated content (Note/Quiz) to that same project.
- */
-async function linkContentToProject(userId: string, sourceDocId: string, contentId: string, contentType: string) {
-  try {
-    // 1. Find the link between the Document and a Project
-    const sourceLink = await prisma.project_content_links.findFirst({
-      where: { 
-        content_id: sourceDocId, 
-        content_type: 'document' 
-      }
-    });
-    
-    // 2. If the document is part of a project, add the new content to the same project
-    if (sourceLink) {
-      await prisma.project_content_links.create({
-        data: {
-          user_id: userId,
-          project_id: sourceLink.project_id,
-          content_id: contentId,
-          content_type: contentType
-        }
-      });
-      console.log(`[Link] Linked new ${contentType} to Project ${sourceLink.project_id}`);
-    }
-  } catch (error) {
-    console.error("Failed to link generated content to project:", error);
-    // We don't throw here because the content was created successfully, 
-    // it just might be "orphaned" (visible in 'All Notes' but not specific project view)
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

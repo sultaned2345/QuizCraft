@@ -1,14 +1,24 @@
+// src/lib/ai-service.ts
 import OpenAI from 'openai';
 
-// Initialize Client (Groq preferred for speed, falls back to OpenAI)
-const openai = new OpenAI({
+// 1. Initialize Main Client (Groq preferred for speed, falls back to OpenAI)
+// This client is used for Text Generation (Chat, Summaries, Quizzes)
+const chatClient = new OpenAI({
   apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.GROQ_API_KEY ? "https://api.groq.com/openai/v1" : undefined
 });
 
+// 2. Initialize Embedding Client (Strictly OpenAI)
+// This client is used ONLY for generating vectors. 
+// We create a separate instance to ensure we don't accidentally send embedding requests to Groq.
+const embeddingClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Requires OpenAI Key for embeddings
+});
+
 export const AI_MODELS = {
-  FAST: 'llama3-8b-8192', // Good for simple tasks (Flashcards)
-  SMART: 'llama3-70b-8192', // Good for complex tasks (Summaries, Mixed Quizzes)
+  FAST: 'llama3-8b-8192',       // Good for simple tasks (Flashcards)
+  SMART: 'llama3-70b-8192',     // Good for complex tasks (Summaries, Mixed Quizzes)
+  EMBEDDING: 'text-embedding-3-small' // OpenAI model for embeddings
 };
 
 /**
@@ -23,16 +33,16 @@ export async function generateDocumentSummary(text: string, title: string) {
     Structure your response as follows:
     # ${title} - Study Guide
     
-    ## 🎯 Core Concepts
+    ## 識 Core Concepts
     (Bulleted list of the most important ideas)
     
-    ## 📝 Detailed Analysis
+    ## 統 Detailed Analysis
     (Break down the content into logical sections with clear headings)
     
-    ## 🔑 Key Terminology
+    ## 泊 Key Terminology
     (Definition list of important terms found in the text)
     
-    ## 🧠 Summary Conclusion
+    ## ｧ Summary Conclusion
     (A brief wrap-up paragraph)
     
     TEXT TO ANALYZE:
@@ -40,7 +50,7 @@ export async function generateDocumentSummary(text: string, title: string) {
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await chatClient.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: AI_MODELS.SMART,
     });
@@ -70,7 +80,7 @@ export async function generateFlashcardsFromText(text: string, count: number = 1
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await chatClient.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: AI_MODELS.FAST,
       response_format: { type: "json_object" }
@@ -119,7 +129,7 @@ export async function generateQuizFromText(text: string, count: number = 5) {
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await chatClient.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: AI_MODELS.SMART, // Smart model required for complex JSON structures
       response_format: { type: "json_object" }
@@ -147,6 +157,32 @@ export async function generateQuizFromText(text: string, count: number = 5) {
 }
 
 /**
+ * Generates embeddings for Vector Search (RAG).
+ * * NOTE: This function specifically uses OpenAI's embedding model because
+ * Groq (llama3) does not support embedding endpoints natively in the same format.
+ * Ensure OPENAI_API_KEY is set in .env.local
+ */
+export async function generateEmbeddings(text: string): Promise<number[]> {
+  try {
+    // 1. Sanitize text (remove newlines to improve embedding quality)
+    const sanitizedText = text.replace(/\n/g, ' ');
+
+    // 2. Call OpenAI Embedding Endpoint
+    const response = await embeddingClient.embeddings.create({
+      model: AI_MODELS.EMBEDDING, // text-embedding-3-small
+      input: sanitizedText,
+      dimensions: 768, // CRITICAL: Must match your DB vector(768) column
+    });
+
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error("Embedding Generation Error:", error);
+    // Fallback: If OpenAI fails or key is missing, throw error to be handled by caller
+    throw new Error("Failed to generate embeddings. Check OPENAI_API_KEY.");
+  }
+}
+
+/**
  * (Optional) Grading Assistant Logic
  * Use this if you want to implement the "ProjectEssayGrader" later.
  */
@@ -161,7 +197,7 @@ export async function gradeUserEssay(essay: string, context: string) {
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await chatClient.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: AI_MODELS.SMART,
       response_format: { type: "json_object" }
