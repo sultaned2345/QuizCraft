@@ -1,120 +1,90 @@
+// src/components/layout/AppSidebar.tsx
 'use client';
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
-import {
-  LayoutDashboard,
-  Settings,
-  Sparkles,
+import Link from 'next/link';
+import { 
+  LayoutDashboard, 
+  FileText, 
+  BrainCircuit, 
+  Zap, 
+  Settings, 
   LogOut,
-  User,
-  Plus,
-  BookOpen
+  Layers,
+  GraduationCap
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 
-// TURBO AI: Focused Navigation
-const navItems = [
-  { href: '/dashboard', label: 'Library', icon: LayoutDashboard },
-  { href: '/account', label: 'Settings', icon: Settings },
+const navigation = [
+  { name: 'Workspace', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Library', href: '/documents', icon: FileText },
+  { name: 'Study Plans', href: '/projects', icon: Layers }, // Renamed for clarity
+  { name: 'Flashcards', href: '/flashcards', icon: Zap },
+  { name: 'Quizzes', href: '/quizzes', icon: BrainCircuit },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 z-40 w-16 flex flex-col items-center bg-zinc-950 border-r border-white/10 py-6">
-      {/* 1. Brand Icon */}
-      <Link href="/dashboard" className="mb-6">
-        <div className="h-10 w-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary hover:bg-primary/30 transition-colors border border-primary/20">
-          <BookOpen className="h-5 w-5" />
+    // FIX: Changed fixed colors (bg-zinc-900) to semantic colors (bg-card/bg-background)
+    <div className="flex flex-col h-full w-[250px] border-r border-border bg-card text-card-foreground transition-colors duration-300">
+      
+      {/* Logo Area */}
+      <div className="p-6 pb-2">
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-bold text-xl tracking-tight">QuizCraft</span>
         </div>
-      </Link>
-
-      {/* 2. New Document Action */}
-      <div className="mb-6">
-        <TooltipProvider delayDuration={0}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <AddDocumentDialog>
-                        <button className="h-10 w-10 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white transition-all">
-                            <Plus className="h-5 w-5" />
-                        </button>
-                    </AddDocumentDialog>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-zinc-900 border-white/10 text-xs">
-                    New Study Set
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
       </div>
 
-      {/* 3. Main Navigation */}
-      <nav className="flex-1 flex flex-col items-center gap-3 w-full px-2">
-        <TooltipProvider delayDuration={0}>
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200',
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                        : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'
-                    )}
-                  >
-                    <item.icon className="h-5 w-5" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-zinc-900 border-white/10 text-xs font-medium text-zinc-300">
-                  {item.label}
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </TooltipProvider>
+      {/* Navigation */}
+      <nav className="flex-1 px-4 space-y-1">
+        {navigation.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
+                isActive 
+                  ? "bg-primary/10 text-primary shadow-sm" 
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              <item.icon className={cn(
+                "w-4 h-4 transition-colors",
+                isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+              )} />
+              {item.name}
+            </Link>
+          );
+        })}
       </nav>
 
-      {/* 4. Bottom Actions (Logout/Profile) */}
-      <div className="flex flex-col items-center gap-4 mt-auto w-full">
-        <div className="h-px w-8 bg-white/10" />
-        
-        <TooltipProvider delayDuration={0}>
-          {/* Logout */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => signOut()}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="bg-zinc-900 border-white/10 text-xs font-medium text-zinc-300">
-                Sign Out
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        {/* User Avatar */}
-        <Link href="/account">
-            <div className="h-9 w-9 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xs text-zinc-400 font-medium hover:ring-2 hover:ring-primary/50 transition-all cursor-pointer">
-                {user?.email?.[0].toUpperCase() || <User className="w-4 h-4" />}
-            </div>
+      {/* Footer / Profile Actions */}
+      <div className="p-4 border-t border-border mt-auto">
+        <Link 
+          href="/settings"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all"
+        >
+          <Settings className="w-4 h-4" />
+          Settings
         </Link>
+        <button 
+          onClick={signOut}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition-all mt-1 text-left"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </button>
       </div>
-    </aside>
+    </div>
   );
 }

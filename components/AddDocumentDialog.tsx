@@ -1,7 +1,7 @@
 // src/components/AddDocumentDialog.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -17,12 +17,30 @@ import { Label } from '@/components/ui/label';
 import { Upload, Youtube, Plus, Loader2, FileText, Link as LinkIcon } from 'lucide-react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 
-export function AddDocumentDialog({ children }: { children?: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
+interface AddDocumentDialogProps {
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onUploadComplete?: () => void;
+}
+
+export function AddDocumentDialog({ 
+  children, 
+  open: controlledOpen, 
+  onOpenChange: setControlledOpen,
+  onUploadComplete 
+}: AddDocumentDialogProps) {
+  // Internal state for when the component is used uncontrolled
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('file');
   const [file, setFile] = useState<File | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   
+  // Determine if we are in controlled mode (props provided) or uncontrolled (internal state)
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalIsOpen;
+  const setIsOpen = isControlled ? setControlledOpen : setInternalIsOpen;
+
   // Connect to our new Turbo Hook
   const { generateStudySet, isProcessing, progress } = useTurboGenerator();
 
@@ -31,26 +49,47 @@ export function AddDocumentDialog({ children }: { children?: React.ReactNode }) 
   };
 
   const handleSubmit = async () => {
-    // 1. Determine Input Source
-    if (activeTab === 'file' && file) {
-      await generateStudySet(file, undefined); // Pass file
-    } else if (activeTab === 'youtube' && youtubeUrl) {
-      await generateStudySet(null, youtubeUrl); // Pass URL
+    try {
+      // 1. Determine Input Source
+      if (activeTab === 'file' && file) {
+        await generateStudySet(file, undefined); 
+      } else if (activeTab === 'youtube' && youtubeUrl) {
+        await generateStudySet(null, youtubeUrl); 
+      }
+
+      // 2. Cleanup and Notify
+      if (onUploadComplete) onUploadComplete();
+      
+      // Optional: Close dialog on success if not handled by the hook's redirect
+      // if (setIsOpen) setIsOpen(false); 
+      
+    } catch (error) {
+      console.error("Generation failed", error);
     }
-    
-    // Note: We don't close the dialog immediately so the user can see the progress steps.
-    // The hook will redirect the user when finished, or we can close it manually if we prefer.
   };
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFile(null);
+      setYoutubeUrl('');
+      // progress is managed by the hook, but we might want to reset activeTab
+      setActiveTab('file');
+    }
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        {children || (
-          <Button className="gap-2 shadow-lg hover:shadow-xl transition-all bg-primary text-primary-foreground">
-            <Plus className="w-4 h-4" /> New Study Set
-          </Button>
-        )}
-      </DialogTrigger>
+      {/* Only render Trigger if we are NOT in controlled mode or if children exist */}
+      {(!isControlled || children) && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button className="gap-2 shadow-lg hover:shadow-xl transition-all bg-primary text-primary-foreground">
+              <Plus className="w-4 h-4" /> New Study Set
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
@@ -133,7 +172,8 @@ export function AddDocumentDialog({ children }: { children?: React.ReactNode }) 
 
         {/* Actions */}
         <div className="flex justify-end gap-2 mt-2">
-          <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isProcessing}>
+          {/* Use setIsOpen to close, checking if it is defined */}
+          <Button variant="outline" onClick={() => setIsOpen && setIsOpen(false)} disabled={isProcessing}>
             Cancel
           </Button>
           
