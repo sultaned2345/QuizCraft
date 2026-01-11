@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js'; // Changed import
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,12 +12,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2, GraduationCap, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+// Initialize Supabase Client manually to avoid build-time static generation errors
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClientComponentClient();
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -34,11 +39,12 @@ export default function LoginPage() {
         throw error;
       }
 
-      // ✅ FIX: Redirect explicitly to Dashboard (Workspace)
-      router.push('/dashboard');
+      // Force a router refresh to update server components with the new session
       router.refresh();
+      router.push('/dashboard');
 
     } catch (error: any) {
+      console.error('Login error:', error);
       toast({
         variant: "destructive",
         title: "Login Failed",
