@@ -1,4 +1,3 @@
-// src/app/(app)/flashcards/FlashcardsClientComponent.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -56,12 +55,12 @@ import { Progress } from '@/components/ui/progress';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
 import { cn } from '@/lib/utils';
 
-// (Interfaces and StudyQueueCard remain the same)
 interface DeckWithStats extends FlashcardDeck {
   cardCount: number;
   dueCount: number;
   newCount: number;
 }
+
 interface PaginatedDecksData {
   decks: DeckWithStats[];
   count: number;
@@ -69,12 +68,14 @@ interface PaginatedDecksData {
   totalPages: number;
   currentPage: number;
 }
+
 interface FlashcardsPageData extends PaginatedDecksData {
   dueCount: number;
   firstDueDeckId: string | null;
 }
+
 interface FlashcardsClientComponentProps {
-  initialData: FlashcardsPageData;
+  initialData?: FlashcardsPageData; // <--- CHANGED: Made optional to prevent crash
 }
 
 function StudyQueueCard({
@@ -123,20 +124,32 @@ function StudyQueueCard({
 }
 
 export function FlashcardsClientComponent({ initialData }: FlashcardsClientComponentProps) {
-  const [decks, setDecks] = useState<DeckWithStats[]>(initialData.decks);
+  // --- ADDED: Defensive check for undefined initialData ---
+  const safeData: FlashcardsPageData = initialData || {
+    decks: [],
+    count: 0,
+    limit: Infinity,
+    totalPages: 1,
+    currentPage: 1,
+    dueCount: 0,
+    firstDueDeckId: null,
+  };
+  // --------------------------------------------------------
+
+  const [decks, setDecks] = useState<DeckWithStats[]>(safeData.decks);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [usage, setUsage] = useState<{ count: number; limit: number | typeof Infinity }>({
-    count: initialData.count,
-    limit: initialData.limit,
+    count: safeData.count,
+    limit: safeData.limit,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newDeckTitle, setNewDeckTitle] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [currentPage, setCurrentPage] = useState(initialData.currentPage);
-  const [totalPages, setTotalPages] = useState(initialData.totalPages);
+  const [currentPage, setCurrentPage] = useState(safeData.currentPage);
+  const [totalPages, setTotalPages] = useState(safeData.totalPages);
   const decksPerPage = 9;
-  const [dueCount, setDueCount] = useState(initialData.dueCount);
-  const [firstDueDeckId, setFirstDueDeckId] = useState(initialData.firstDueDeckId);
+  const [dueCount, setDueCount] = useState(safeData.dueCount);
+  const [firstDueDeckId, setFirstDueDeckId] = useState(safeData.firstDueDeckId);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingDeck, setEditingDeck] = useState<DeckWithStats | null>(null);
   const [editDeckTitle, setEditDeckTitle] = useState('');
@@ -434,7 +447,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                 </CardContent>
 
                 <CardFooter className="pt-2 pb-4 flex justify-between items-center gap-2 border-t bg-slate-50/50 dark:bg-slate-900/20">
-                  {/* WRAPPED with AlertDialog to fix DialogTrigger error */}
                   <AlertDialog>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -475,7 +487,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
                     </AlertDialogContent>
                   </AlertDialog>
 
-                  {/* CONSOLIDATED STUDY ACTIONS */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button 
@@ -524,7 +535,6 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
         </motion.div>
       )}
 
-      {/* (Load More and Edit Dialog remain the same) */}
       {totalPages > currentPage && (
         <div className="mt-8 text-center">
           <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
@@ -535,7 +545,7 @@ export function FlashcardsClientComponent({ initialData }: FlashcardsClientCompo
           </p>
         </div>
       )}
-      {/* ... Edit Dialog Code ... */}
+
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
          <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

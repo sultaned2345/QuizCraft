@@ -1,39 +1,27 @@
+// src/app/(app)/quizzes/QuizzesClientComponent.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
   MoreHorizontal, Edit, Trash2, Plus, FileQuestion, Loader2, 
-  Combine, History, Play, RefreshCw, Trophy, Brain 
+  Combine, History, Play, RefreshCw, Trophy 
 } from 'lucide-react';
 import { Quiz, QuizAttempt, ApiResponse } from '@/types/database';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-  DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, 
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,17 +42,24 @@ interface DashboardData {
   recentAttempts: QuizAttempt[];
 }
 interface QuizzesClientComponentProps {
-  initialData: DashboardData;
+  initialData?: DashboardData; // Make optional
 }
 
 export function QuizzesClientComponent({ initialData }: QuizzesClientComponentProps) { 
-  const [quizzes, setQuizzes] = useState<DashboardQuiz[]>(initialData.quizzes);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [totalQuizzes, setTotalQuizzes] = useState(initialData.totalQuizCount);
-  const [currentPage, setCurrentPage] = useState(initialData.quizzesCurrentPage);
-  const [totalPages, setTotalPages] = useState(initialData.quizzesTotalPages);
-  const quizzesPerPage = 9;
-  const [recentAttempts, setRecentAttempts] = useState(initialData.recentAttempts);
+  // Defensive default: Ensure we always have a valid object to read from
+  const safeData = initialData || {
+    quizzes: [],
+    totalQuizCount: 0,
+    quizzesTotalPages: 1,
+    quizzesCurrentPage: 1,
+    dueCardCount: 0,
+    recentAttempts: []
+  };
+
+  const [quizzes, setQuizzes] = useState<DashboardQuiz[]>(safeData.quizzes);
+  const [totalQuizzes, setTotalQuizzes] = useState(safeData.totalQuizCount);
+  const [recentAttempts, setRecentAttempts] = useState(safeData.recentAttempts);
+  
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([]);
   const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
   const [newCombineTitle, setNewCombineTitle] = useState('');
@@ -77,19 +72,12 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
 
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.05 },
-    },
+    visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
   };
 
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: { type: 'spring', stiffness: 100 }
-    },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
   };
 
   const refreshDashboard = () => {
@@ -99,10 +87,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
     setIsCombining(false);
     setIsCombineDialogOpen(false);
     setIsDeleting(false);
-  };
-
-  const handleLoadMore = () => {
-    toast({ title: "Info", description: "Pagination API integration required." });
   };
 
   const handleDeleteQuiz = async (quizId: string) => {
@@ -317,7 +301,6 @@ export function QuizzesClientComponent({ initialData }: QuizzesClientComponentPr
         </motion.div>
       )}
 
-      {/* Combine Dialog */}
       <Dialog open={isCombineDialogOpen} onOpenChange={setIsCombineDialogOpen}>
         <DialogContent>
           <DialogHeader>

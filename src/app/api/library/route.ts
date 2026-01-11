@@ -19,10 +19,9 @@ export async function GET(req: NextRequest) {
       ...(query && { [field]: { contains: query, mode: 'insensitive' } }),
     });
 
-    // Run parallel queries based on type filter
-    // If typeFilter is 'quiz', only fetch quizzes, etc.
     const promises = [];
 
+    // 1. Fetch Documents
     if (!typeFilter || typeFilter === 'document') {
       promises.push(
         prisma.documents.findMany({
@@ -33,16 +32,19 @@ export async function GET(req: NextRequest) {
       );
     } else { promises.push(Promise.resolve([])); }
 
+    // 2. Fetch Quizzes
     if (!typeFilter || typeFilter === 'quiz') {
       promises.push(
         prisma.quiz.findMany({
-          where: { userId: user.id, ...(query && { title: { contains: query, mode: 'insensitive' } }) }, // Note: userId (camelCase) vs user_id depending on schema
+          // Note: schema uses 'userId' (camelCase) for quizzes
+          where: { userId: user.id, ...(query && { title: { contains: query, mode: 'insensitive' } }) },
           select: { id: true, title: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         }).then(res => res.map(i => ({ ...i, type: 'quiz', created_at: i.createdAt })))
       );
     } else { promises.push(Promise.resolve([])); }
 
+    // 3. Fetch Notes
     if (!typeFilter || typeFilter === 'note') {
       promises.push(
         prisma.notes.findMany({
@@ -53,6 +55,7 @@ export async function GET(req: NextRequest) {
       );
     } else { promises.push(Promise.resolve([])); }
 
+    // 4. Fetch Flashcard Decks
     if (!typeFilter || typeFilter === 'deck') {
        promises.push(
         prisma.flashcard_decks.findMany({
@@ -63,10 +66,10 @@ export async function GET(req: NextRequest) {
       );
     } else { promises.push(Promise.resolve([])); }
 
-    // Execute all necessary queries
+    // Execute all queries
     const results = await Promise.all(promises);
     
-    // Flatten and Sort combined results by date
+    // Flatten and Sort combined results by date (newest first)
     const combinedContent = results.flat().sort((a, b) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
