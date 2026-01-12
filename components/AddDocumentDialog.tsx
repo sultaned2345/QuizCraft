@@ -25,11 +25,11 @@ import {
   FileText, 
   Link as LinkIcon, 
   Sparkles,
-  CheckCircle,
   Type
 } from 'lucide-react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext'; // Added: Auth Context for token
 import { cn } from '@/lib/utils';
 
 interface AddDocumentDialogProps {
@@ -57,13 +57,14 @@ export function AddDocumentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [isParsing, setIsParsing] = useState(false); // State for the file upload phase
+  const [isParsing, setIsParsing] = useState(false);
 
   // Hooks
   const { generate, isGenerating, progress, status } = useTurboGenerator();
   const { toast } = useToast();
+  const { session } = useAuth(); // Get active session
 
-  // Reset state when dialog opens/closes
+  // Reset state when dialog closes
   useEffect(() => {
     if (!isOpen) {
       // Small delay to allow animation to finish before clearing
@@ -78,7 +79,6 @@ export function AddDocumentDialog({
     }
   }, [isOpen]);
 
-  // --- HANDLERS ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) setFile(e.target.files[0]);
   };
@@ -86,28 +86,36 @@ export function AddDocumentDialog({
   const handleSubmit = async () => {
     try {
       let contentToProcess = '';
-      let sourceType = activeTab;
       let metadata = {};
 
       // 1. Prepare Content
       if (activeTab === 'file' && file) {
         setIsParsing(true);
-        // Upload and parse file via API to avoid client-side bloat/errors
         const formData = new FormData();
         formData.append('file', file);
         
+        // FIX: Add Authorization Header
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+           headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
         const parseRes = await fetch('/api/parse-file', {
           method: 'POST',
+          headers, // Pass headers to authorize request
           body: formData
         });
 
         if (!parseRes.ok) {
+           // Handle 401 specifically or generic errors
+           if (parseRes.status === 401) throw new Error("Unauthorized: Please sign in.");
            const err = await parseRes.json();
            throw new Error(err.error || 'Failed to parse file');
         }
 
         const data = await parseRes.json();
-        contentToProcess = data.content;
+        // The API returns { success: true, data: { text: "..." } } based on your route file
+        contentToProcess = data.data?.text || ''; 
         metadata = { fileName: file.name, fileType: file.type };
         setIsParsing(false);
 
@@ -116,7 +124,7 @@ export function AddDocumentDialog({
         metadata = { fileName: 'Untitled Notes', fileType: 'text/plain' };
 
       } else if (activeTab === 'youtube' && youtubeUrl) {
-        contentToProcess = youtubeUrl; // API will handle transcription
+        contentToProcess = youtubeUrl;
         metadata = { source: 'youtube' };
       }
 
@@ -124,8 +132,8 @@ export function AddDocumentDialog({
         throw new Error('Please provide content to process.');
       }
 
-      // 2. Start Generation (Quiz by default, logic can be expanded)
-      // The hook handles the API call to /api/generation-jobs/start
+      // 2. Start Generation
+      // Note: useTurboGenerator should also be updated to use the session token if it isn't already.
       await generate('quiz', contentToProcess, metadata);
 
       // 3. Success
@@ -153,7 +161,6 @@ export function AddDocumentDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={isBusy ? undefined : setIsOpen}>
-      {/* Trigger Button (if no children provided) */}
       {(!isControlled || children) && (
         <DialogTrigger asChild>
           {children || (

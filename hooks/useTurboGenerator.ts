@@ -1,12 +1,11 @@
-// hooks/useTurboGenerator.ts
+// src/hooks/useTurboGenerator.ts
 'use client';
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-// Removed 'supabase' (unused) and 'nanoid' (source of the "z is not a function" error)
+import { useAuth } from '@/contexts/AuthContext'; // Added Import
 
-// Define the generation types
 export type GenerationType = 'quiz' | 'notes' | 'flashcards';
 
 interface UseTurboGeneratorOptions {
@@ -16,10 +15,12 @@ interface UseTurboGeneratorOptions {
 
 export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0); // 0 to 100
+  const [progress, setProgress] = useState(0); 
   const [status, setStatus] = useState<string>('idle');
+  
   const router = useRouter();
   const { toast } = useToast();
+  const { session } = useAuth(); // Get Session
 
   const generate = useCallback(async (
     type: GenerationType, 
@@ -31,19 +32,20 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
     setStatus('Initializing AI...');
 
     try {
-      // 1. Create a Job ID for tracking
-      // FIX: Use native crypto.randomUUID() instead of nanoid to prevent minification errors
       const jobId = typeof crypto !== 'undefined' && crypto.randomUUID 
         ? crypto.randomUUID() 
-        : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        : Math.random().toString(36).substring(2, 15);
       
-      // 2. Start the server-side generation process
       setProgress(20);
       setStatus('Analyzing content...');
       
+      // FIX: Add Auth Header here too
       const response = await fetch('/api/generation-jobs/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
+        },
         body: JSON.stringify({
           jobId,
           type,
@@ -53,20 +55,23 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       });
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Authentication failed. Please sign in.");
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to start generation');
       }
 
       const { data } = await response.json();
-      const jobDbId = data.jobId; // The ID in the database
+      const jobDbId = data.jobId;
 
-      // 3. Poll for status (Simulated real-time)
       setStatus('Generating magic...');
       setProgress(40);
 
       const pollInterval = setInterval(async () => {
          try {
-            const statusRes = await fetch(`/api/generation-jobs/check?id=${jobDbId}`);
+            // FIX: Add Auth Header to status check
+            const statusRes = await fetch(`/api/generation-jobs/check?id=${jobDbId}`, {
+                headers: { 'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' }
+            });
             if (!statusRes.ok) return;
             
             const statusData = await statusRes.json();
@@ -76,11 +81,9 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
                 setProgress(100);
                 setStatus('Complete!');
                 
-                // Handle success
                 if (options.onSuccess) {
                     options.onSuccess(statusData.resultId, type);
                 } else {
-                    // Default behavior: redirect
                     if (type === 'quiz') router.push(`/quiz/${statusData.resultId}`);
                     if (type === 'notes') router.push(`/notes/${statusData.resultId}`);
                     if (type === 'flashcards') router.push(`/flashcards/${statusData.resultId}`);
@@ -90,15 +93,14 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
                 clearInterval(pollInterval);
                 throw new Error(statusData.error || 'Generation failed on server');
             } else {
-                // Still processing: Simulate progress increment
                 setProgress(prev => Math.min(prev + 5, 90));
             }
          } catch (e) {
-             // Ignore poll errors, just wait for next tick or timeout
+             // Ignore poll errors
          }
       }, 2000);
 
-      // Timeout safety (60 seconds)
+      // Timeout safety (60s)
       setTimeout(() => {
           if (isGenerating) {
              clearInterval(pollInterval);
@@ -123,7 +125,7 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
         });
       }
     }
-  }, [router, toast, options, isGenerating]);
+  }, [router, toast, options, isGenerating, session]); // Add session dependency
 
   return {
     generate,
