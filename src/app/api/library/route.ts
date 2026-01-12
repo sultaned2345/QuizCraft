@@ -10,25 +10,21 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth(req);
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('q')?.toLowerCase() || '';
-    const typeFilter = searchParams.get('type'); // 'document', 'quiz', 'note', 'deck'
+    const typeFilter = searchParams.get('type'); 
 
-    // Common filter for user ownership and search
-    // Note: We construct specific filters for each query because fields differ (file_name vs title)
-    
-    // Helper to safely execute queries without crashing the whole request
     const safeQuery = async <T>(name: string, promise: Promise<T[]>, mapper: (item: T) => any) => {
       try {
         const results = await promise;
         return results.map(mapper);
       } catch (error) {
         console.error(`[API /library] Error fetching ${name}:`, error);
-        return []; // Return empty array on failure instead of crashing
+        return []; 
       }
     };
 
     const tasks = [];
 
-    // 1. Fetch Documents (field: file_name)
+    // 1. Fetch Documents
     if (!typeFilter || typeFilter === 'document') {
       tasks.push(
         safeQuery('documents', 
@@ -45,17 +41,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. Fetch Quizzes (Model: Quiz, field: title, userId camelCase)
+    // 2. Fetch Quizzes
     if (!typeFilter || typeFilter === 'quiz') {
-      // Check if prisma.quiz exists (handle case sensitivity issues)
       const quizDelegate = prisma.quiz || (prisma as any).Quiz;
-      
       if (quizDelegate) {
         tasks.push(
           safeQuery('quizzes',
             quizDelegate.findMany({
               where: {
-                userId: user.id, // Schema uses @map("user_id") but client uses userId
+                userId: user.id,
                 ...(query && { title: { contains: query, mode: 'insensitive' } }),
               },
               select: { id: true, title: true, createdAt: true },
@@ -64,12 +58,10 @@ export async function GET(req: NextRequest) {
             (i: any) => ({ ...i, type: 'quiz', created_at: i.createdAt })
           )
         );
-      } else {
-        console.error('[API /library] Prisma Quiz model not found on client');
       }
     }
 
-    // 3. Fetch Notes (field: title)
+    // 3. Fetch Notes
     if (!typeFilter || typeFilter === 'note') {
       tasks.push(
         safeQuery('notes',
@@ -86,7 +78,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 4. Fetch Flashcard Decks (field: title)
+    // 4. Fetch Decks
     if (!typeFilter || typeFilter === 'deck') {
       tasks.push(
         safeQuery('decks',
@@ -103,10 +95,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Execute all safe queries
     const results = await Promise.all(tasks);
     
-    // Flatten and Sort
     const combinedContent = results.flat().sort((a, b) => {
       const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -119,6 +109,12 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error: any) {
+    // FIX: Check if the error is actually a Response object (thrown by requireAuth)
+    if (error instanceof Response) {
+      return error;
+    }
+
+    // Only log actual critical errors
     console.error('[API /library] Critical Error:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Failed to load library content.' },
