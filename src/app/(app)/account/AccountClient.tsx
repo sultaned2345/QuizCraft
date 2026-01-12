@@ -15,7 +15,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
-import { Check, Infinity, Zap, AlertCircle, Loader2, User as UserIcon, Settings, CreditCard, BarChart3, ShieldAlert } from 'lucide-react';
+import { Check, Infinity, Zap, AlertCircle, Loader2, User as UserIcon, Settings, CreditCard, BarChart3, ShieldAlert, LogOut, Laptop } from 'lucide-react';
 import { getUserUsage } from '@/lib/usage-limits';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -81,7 +81,7 @@ function UsageBar({
 
 export function AccountClient({ initialData, user }: AccountClientProps) {
   const { openModal } = useUpgradeModal();
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -127,6 +127,15 @@ export function AccountClient({ initialData, user }: AccountClientProps) {
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsUpdatingPlan(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+    } catch (error) {
+      toast({ title: "Error signing out", variant: "destructive" });
     }
   };
 
@@ -252,6 +261,24 @@ export function AccountClient({ initialData, user }: AccountClientProps) {
         {/* --- TAB: SETTINGS --- */}
         <TabsContent value="settings" className="space-y-6">
           
+           {/* Session Management (Moved from Sidebar) */}
+           <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Laptop className="h-4 w-4"/> Session Management
+              </CardTitle>
+              <CardDescription>Manage your current session.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Currently signed in as <span className="font-medium text-foreground">{user.email}</span>
+              </div>
+              <Button variant="outline" onClick={handleSignOut} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 border-red-200 dark:border-red-900">
+                <LogOut className="mr-2 h-4 w-4" /> Sign Out
+              </Button>
+            </CardContent>
+           </Card>
+
            {/* Developer Tools */}
            <Card>
             <CardHeader className="pb-3">
