@@ -1,148 +1,303 @@
-// components/AddDocumentDialog.tsx
+// src/components/AddDocumentDialog.tsx
 'use client';
 
-import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+import { useState, useEffect } from 'react';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogFooter
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Sparkles, Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { 
+  Upload, 
+  Youtube, 
+  Plus, 
+  Loader2, 
+  FileText, 
+  Link as LinkIcon, 
+  Sparkles,
+  CheckCircle,
+  Type
+} from 'lucide-react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { useToast } from '@/hooks/use-toast';
-// REMOVED: import { parseFile } from '@/lib/file-parser'; (Unused and dangerous in client component)
+import { cn } from '@/lib/utils';
 
 interface AddDocumentDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onUploadComplete?: () => void;
 }
 
-export function AddDocumentDialog({ open, onOpenChange }: AddDocumentDialogProps) {
-  const [activeTab, setActiveTab] = useState('upload');
+export function AddDocumentDialog({ 
+  children, 
+  open: controlledOpen, 
+  onOpenChange: setControlledOpen,
+  onUploadComplete 
+}: AddDocumentDialogProps) {
+  // --- STATE ---
+  // Internal state for uncontrolled usage
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalIsOpen;
+  const setIsOpen = isControlled ? setControlledOpen : setInternalIsOpen;
+
+  // Form State
+  const [activeTab, setActiveTab] = useState('file');
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  
-  const { generate, isGenerating, status } = useTurboGenerator();
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [isParsing, setIsParsing] = useState(false); // State for the file upload phase
+
+  // Hooks
+  const { generate, isGenerating, progress, status } = useTurboGenerator();
   const { toast } = useToast();
 
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      // Small delay to allow animation to finish before clearing
+      const timer = setTimeout(() => {
+        setFile(null);
+        setText('');
+        setYoutubeUrl('');
+        setIsParsing(false);
+        setActiveTab('file');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  // --- HANDLERS ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0]);
+    if (e.target.files?.[0]) setFile(e.target.files[0]);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      let contentToProcess = '';
+      let sourceType = activeTab;
+      let metadata = {};
+
+      // 1. Prepare Content
+      if (activeTab === 'file' && file) {
+        setIsParsing(true);
+        // Upload and parse file via API to avoid client-side bloat/errors
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const parseRes = await fetch('/api/parse-file', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!parseRes.ok) {
+           const err = await parseRes.json();
+           throw new Error(err.error || 'Failed to parse file');
+        }
+
+        const data = await parseRes.json();
+        contentToProcess = data.content;
+        metadata = { fileName: file.name, fileType: file.type };
+        setIsParsing(false);
+
+      } else if (activeTab === 'text' && text) {
+        contentToProcess = text;
+        metadata = { fileName: 'Untitled Notes', fileType: 'text/plain' };
+
+      } else if (activeTab === 'youtube' && youtubeUrl) {
+        contentToProcess = youtubeUrl; // API will handle transcription
+        metadata = { source: 'youtube' };
+      }
+
+      if (!contentToProcess) {
+        throw new Error('Please provide content to process.');
+      }
+
+      // 2. Start Generation (Quiz by default, logic can be expanded)
+      // The hook handles the API call to /api/generation-jobs/start
+      await generate('quiz', contentToProcess, metadata);
+
+      // 3. Success
+      if (onUploadComplete) onUploadComplete();
+      
+      // Close dialog only if successful
+      if (setIsOpen) setIsOpen(false);
+      
+    } catch (error: any) {
+      console.error("Generation failed", error);
+      toast({
+        title: "Error",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive"
+      });
+      setIsParsing(false);
     }
   };
 
-  const handleMagic = async () => {
-     setIsProcessing(true);
-     try {
-       let contentToProcess = '';
-       
-       if (activeTab === 'upload' && file) {
-          // 1. Upload/Parse File
-          const formData = new FormData();
-          formData.append('file', file);
-          
-          const parseRes = await fetch('/api/parse-file', {
-             method: 'POST',
-             body: formData
-          });
-          
-          if (!parseRes.ok) throw new Error('Failed to parse file');
-          const data = await parseRes.json();
-          contentToProcess = data.content;
-       } else if (activeTab === 'text') {
-          contentToProcess = text;
-       }
-       
-       if (!contentToProcess) throw new Error('No content provided');
-
-       // 2. Trigger Generation
-       await generate('quiz', contentToProcess, { source: activeTab });
-       
-       // Close dialog
-       onOpenChange(false);
-
-     } catch (error: any) {
-        toast({
-           title: "Error",
-           description: error.message,
-           variant: "destructive"
-        });
-     } finally {
-        setIsProcessing(false);
-     }
-  };
+  const isBusy = isParsing || isGenerating;
+  const canSubmit = 
+    (activeTab === 'file' && !!file) ||
+    (activeTab === 'text' && !!text.trim()) ||
+    (activeTab === 'youtube' && !!youtubeUrl.trim());
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+    <Dialog open={isOpen} onOpenChange={isBusy ? undefined : setIsOpen}>
+      {/* Trigger Button (if no children provided) */}
+      {(!isControlled || children) && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button className="gap-2 shadow-lg hover:shadow-primary/25 transition-all bg-primary text-primary-foreground">
+              <Plus className="w-4 h-4" /> New Study Set
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
+      
+      <DialogContent className="sm:max-w-[500px] bg-background/95 backdrop-blur-xl border-border">
         <DialogHeader>
-          <DialogTitle>Add Knowledge Source</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            Create Study Set
+          </DialogTitle>
           <DialogDescription>
-            Upload a PDF, paste text, or provide a link to generate study materials.
+            Upload content to generate Quizzes, Notes, and Flashcards instantly.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="upload" value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* --- TABS --- */}
+        <Tabs defaultValue="file" value={activeTab} onValueChange={setActiveTab} className="w-full mt-2">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upload">File Upload</TabsTrigger>
-            <TabsTrigger value="text">Paste Text</TabsTrigger>
-            <TabsTrigger value="link" disabled>Link (Coming Soon)</TabsTrigger>
+            <TabsTrigger value="file" disabled={isBusy}>
+              <Upload className="w-4 h-4 mr-2" /> File
+            </TabsTrigger>
+            <TabsTrigger value="text" disabled={isBusy}>
+              <Type className="w-4 h-4 mr-2" /> Text
+            </TabsTrigger>
+            <TabsTrigger value="youtube" disabled={isBusy}>
+              <Youtube className="w-4 h-4 mr-2" /> YouTube
+            </TabsTrigger>
           </TabsList>
-          
-          <TabsContent value="upload" className="space-y-4 py-4">
-             <div className="grid w-full max-w-sm items-center gap-1.5">
-                <Label htmlFor="file">PDF / DOCX</Label>
-                <Input id="file" type="file" accept=".pdf,.docx,.txt" onChange={handleFileChange} />
-             </div>
-             {file && (
-                <div className="text-sm text-muted-foreground">
-                   Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+
+          {/* Tab 1: File Upload */}
+          <TabsContent value="file" className="space-y-4 py-4">
+            <div className="grid w-full items-center gap-3">
+              <Label htmlFor="file">Document (PDF, DOCX, TXT)</Label>
+              <div className={cn(
+                  "flex items-center gap-3 border-2 border-dashed rounded-xl p-6 transition-colors",
+                  file ? "border-primary/50 bg-primary/5" : "border-muted-foreground/20 hover:border-primary/30 hover:bg-muted/30"
+                )}>
+                <div className="h-10 w-10 rounded-lg bg-background flex items-center justify-center border shadow-sm shrink-0">
+                  {file ? <FileText className="w-5 h-5 text-primary" /> : <Upload className="w-5 h-5 text-muted-foreground" />}
                 </div>
-             )}
+                <div className="flex-1 min-w-0">
+                  {file ? (
+                     <div className="space-y-1">
+                       <p className="text-sm font-medium truncate">{file.name}</p>
+                       <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                     </div>
+                  ) : (
+                    <div className="relative">
+                       <p className="text-sm text-muted-foreground font-medium">Click to browse or drop file</p>
+                       <Input 
+                        id="file" 
+                        type="file" 
+                        accept=".pdf,.docx,.txt,.md"
+                        onChange={handleFileChange}
+                        disabled={isBusy}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                       />
+                    </div>
+                  )}
+                </div>
+                {file && (
+                  <Button variant="ghost" size="icon" onClick={() => setFile(null)} disabled={isBusy}>
+                     <span className="sr-only">Remove</span>
+                     <div className="w-4 h-4 rounded-full bg-muted-foreground/30 hover:bg-destructive hover:text-white transition-colors flex items-center justify-center">×</div>
+                  </Button>
+                )}
+              </div>
+            </div>
           </TabsContent>
-          
+
+          {/* Tab 2: Raw Text */}
           <TabsContent value="text" className="space-y-4 py-4">
-             <div className="grid w-full gap-1.5">
-                <Label htmlFor="text">Study Notes / Content</Label>
+             <div className="space-y-2">
+                <Label htmlFor="text-content">Paste Notes or Essay</Label>
                 <Textarea 
-                   id="text" 
-                   placeholder="Paste your lecture notes or essay here..." 
-                   className="min-h-[200px]"
+                   id="text-content"
+                   placeholder="Paste your lecture notes, essay, or summary here..."
+                   className="min-h-[150px] resize-none"
                    value={text}
                    onChange={(e) => setText(e.target.value)}
+                   disabled={isBusy}
                 />
              </div>
           </TabsContent>
+
+          {/* Tab 3: YouTube */}
+          <TabsContent value="youtube" className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="youtube-url">Video URL</Label>
+              <div className="relative">
+                <LinkIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="youtube-url" 
+                  placeholder="https://youtube.com/watch?v=..." 
+                  className="pl-9"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  disabled={isBusy}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Only English videos with captions are currently supported.
+              </p>
+            </div>
+          </TabsContent>
         </Tabs>
 
-        <DialogFooter>
-           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-           <Button 
-              onClick={handleMagic} 
-              disabled={isProcessing || isGenerating || (activeTab === 'upload' && !file) || (activeTab === 'text' && !text)}
-              className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 shadow-lg hover:shadow-primary/20 transition-all"
-           >
-              {isProcessing || isGenerating ? (
-                 <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {status === 'idle' ? 'Processing...' : status}
-                 </>
-              ) : (
-                 <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate Magic
-                 </>
-              )}
-           </Button>
+        {/* --- PROGRESS SECTION --- */}
+        {isBusy && (
+          <div className="py-4 space-y-3 bg-muted/30 rounded-lg px-4 border border-border/50 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="flex items-center gap-2 text-primary font-medium">
+                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                 {isParsing ? 'Parsing Document...' : status}
+              </span>
+              <span className="text-muted-foreground text-xs font-mono">{Math.round(progress)}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        )}
+
+        {/* --- FOOTER --- */}
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button 
+            variant="outline" 
+            onClick={() => setIsOpen && setIsOpen(false)} 
+            disabled={isBusy}
+          >
+            Cancel
+          </Button>
+          
+          <Button 
+            onClick={handleSubmit} 
+            disabled={isBusy || !canSubmit}
+            className="min-w-[140px] shadow-md transition-all hover:shadow-primary/20"
+          >
+            {isBusy ? 'Processing...' : 'Generate Magic'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
