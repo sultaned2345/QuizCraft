@@ -1,25 +1,48 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-// Removed Supabase client import as we are not using it here anymore
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // You can still use middleware for other things like:
-  // - Setting request headers
-  // - Redirects based on path
-  // - Handling geolocation or A/B testing logic
+  // 1. Create an initial response
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 
-  // For now, we'll just let the request pass through.
-  // Authentication will be handled by Server Components (getServerSession)
-  // and API Routes (requireAuth).
+  // 2. Setup Supabase client to handle cookies
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          // Update the request cookies
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)
+          })
+          // Create a new response to carry the updated cookies
+          response = NextResponse.next({
+            request,
+          })
+          // Update the response cookies
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
 
-  // console.log(`Middleware running for: ${request.nextUrl.pathname}`); // Optional: Add logging if needed
+  // 3. Refresh the session if needed
+  // This updates the cookie if the token is expired
+  await supabase.auth.getUser()
 
-  return NextResponse.next();
+  return response
 }
 
-// Update the matcher if you only want middleware to run on specific paths,
-// or remove it entirely if you want it to run on all requests (not recommended).
-// Keeping it limited to API routes might still be useful for future rate limiting, etc.
 export const config = {
   matcher: [
     /*
@@ -27,9 +50,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-    // '/api/:path*', // Or keep matching only API routes if preferred
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-};
+}
