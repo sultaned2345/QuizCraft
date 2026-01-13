@@ -22,7 +22,8 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
   const { toast } = useToast();
   const { session } = useAuth();
 
-  // Renamed 'content' to 'documentId' to match API requirement
+  // FIX: Renamed 'content' to 'documentId' to clarify usage.
+  // Ideally, calling code should pass (type, documentId, optionalParams).
   const generate = useCallback(async (
     type: GenerationType, 
     documentId: string, 
@@ -33,9 +34,8 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
     setStatus('Initializing AI...');
 
     try {
-      // Note: Server generates the DB Job ID, but we can generate a trace ID if needed.
-      // The server snippet provided does not use this client-side ID, but we keep logic consistent.
-      
+      if (!documentId) throw new Error("Document ID is required.");
+
       setProgress(20);
       setStatus('Analyzing content...');
       
@@ -45,11 +45,11 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        // FIX: Map client arguments to server expected fields
+        // FIX: Ensure keys match server expectations (documentId, jobType)
         body: JSON.stringify({
-          documentId: documentId, // Server expects 'documentId'
-          jobType: type,          // Server expects 'jobType'
-          metadata                // Optional, passed along if needed
+          documentId, 
+          jobType: type,
+          metadata
         })
       });
 
@@ -66,25 +66,11 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
 
       const pollInterval = setInterval(async () => {
          try {
-            const statusRes = await fetch(`/api/generation-jobs/process?id=${jobId}`, { // Check endpoint usually matches logic, ensuring route exists
+            // FIX: Using '/api/generation-jobs/process' based on your file list
+            const statusRes = await fetch(`/api/generation-jobs/process?id=${jobId}`, {
                 headers: { 'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' }
             });
             
-            // Note: The original code used '/api/generation-jobs/check', but typical patterns use 'process' or specific status endpoints.
-            // If you get a 404 here, ensure the 'check' or 'process' route exists.
-            // Based on your file list, you have 'src/app/api/generation-jobs/process/route.ts'.
-            // I have updated the URL below to likely match your existing file structure or the original code if 'check' exists.
-            // Assuming strict adherence to provided file list, 'process' might be the worker or status check.
-            // If 'check' was a typo in original code, ensure this matches your actual API.
-            
-            // Reverting to original URL path for safety unless file list confirms otherwise.
-            // File list shows: src/app/api/generation-jobs/process/route.ts
-            // Use that if 'check' fails. For now, I'll keep the logic generic or use the previous valid path.
-            
-            // NOTE: The previous code used `/api/generation-jobs/check`. 
-            // If that route is missing, please rename `src/app/api/generation-jobs/process/route.ts` or adjust this URL.
-            // I will use `/api/generation-jobs/process` based on your file list.
-             
             if (!statusRes.ok) return;
             
             const statusData = await statusRes.json();
@@ -95,11 +81,13 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
                 setStatus('Complete!');
                 
                 if (options.onSuccess) {
-                    options.onSuccess(statusData.resultId, type);
+                    options.onSuccess(statusData.resultId || statusData.outputId, type);
                 } else {
-                    if (type === 'quiz') router.push(`/quiz/${statusData.resultId}`);
-                    if (type === 'notes') router.push(`/notes/${statusData.resultId}`);
-                    if (type === 'flashcards') router.push(`/flashcards/${statusData.resultId}`);
+                    // Fallback navigation if onSuccess not provided
+                    const resultId = statusData.resultId || statusData.outputId;
+                    if (type === 'quiz') router.push(`/quiz/${resultId}`);
+                    if (type === 'notes') router.push(`/notes/${resultId}`);
+                    if (type === 'flashcards') router.push(`/flashcards/${resultId}`);
                 }
                 setIsGenerating(false);
             } else if (statusData.status === 'failed') {
