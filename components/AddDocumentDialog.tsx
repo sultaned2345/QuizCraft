@@ -1,7 +1,7 @@
 // src/components/AddDocumentDialog.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -19,17 +19,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { 
   Upload, 
+  UploadCloud,
   Youtube, 
   Plus, 
   Loader2, 
   FileText, 
   Link as LinkIcon, 
   Sparkles,
-  Type
+  Type,
+  X
 } from 'lucide-react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext'; // Added: Auth Context for token
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
 interface AddDocumentDialogProps {
@@ -58,29 +60,62 @@ export function AddDocumentDialog({
   const [text, setText] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  
+  // Drag & Drop State
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hooks
   const { generate, isGenerating, progress, status } = useTurboGenerator();
   const { toast } = useToast();
-  const { session } = useAuth(); // Get active session
+  const { session } = useAuth(); 
 
   // Reset state when dialog closes
   useEffect(() => {
     if (!isOpen) {
-      // Small delay to allow animation to finish before clearing
       const timer = setTimeout(() => {
         setFile(null);
         setText('');
         setYoutubeUrl('');
         setIsParsing(false);
         setActiveTab('file');
+        setIsDragging(false);
       }, 300);
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- HANDLERS ---
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) {
+        setFile(droppedFile);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) setFile(e.target.files[0]);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const handleSubmit = async () => {
@@ -94,7 +129,7 @@ export function AddDocumentDialog({
         const formData = new FormData();
         formData.append('file', file);
         
-        // FIX: Add Authorization Header
+        // Add Authorization Header
         const headers: Record<string, string> = {};
         if (session?.access_token) {
            headers['Authorization'] = `Bearer ${session.access_token}`;
@@ -102,19 +137,17 @@ export function AddDocumentDialog({
 
         const parseRes = await fetch('/api/parse-file', {
           method: 'POST',
-          headers, // Pass headers to authorize request
+          headers, 
           body: formData
         });
 
         if (!parseRes.ok) {
-           // Handle 401 specifically or generic errors
            if (parseRes.status === 401) throw new Error("Unauthorized: Please sign in.");
            const err = await parseRes.json();
            throw new Error(err.error || 'Failed to parse file');
         }
 
         const data = await parseRes.json();
-        // The API returns { success: true, data: { text: "..." } } based on your route file
         contentToProcess = data.data?.text || ''; 
         metadata = { fileName: file.name, fileType: file.type };
         setIsParsing(false);
@@ -133,7 +166,6 @@ export function AddDocumentDialog({
       }
 
       // 2. Start Generation
-      // Note: useTurboGenerator should also be updated to use the session token if it isn't already.
       await generate('quiz', contentToProcess, metadata);
 
       // 3. Success
@@ -196,44 +228,76 @@ export function AddDocumentDialog({
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: File Upload */}
+          {/* Tab 1: File Upload (New Drag & Drop UI) */}
           <TabsContent value="file" className="space-y-4 py-4">
-            <div className="grid w-full items-center gap-3">
-              <Label htmlFor="file">Document (PDF, DOCX, TXT)</Label>
-              <div className={cn(
-                  "flex items-center gap-3 border-2 border-dashed rounded-xl p-6 transition-colors",
-                  file ? "border-primary/50 bg-primary/5" : "border-muted-foreground/20 hover:border-primary/30 hover:bg-muted/30"
-                )}>
-                <div className="h-10 w-10 rounded-lg bg-background flex items-center justify-center border shadow-sm shrink-0">
-                  {file ? <FileText className="w-5 h-5 text-primary" /> : <Upload className="w-5 h-5 text-muted-foreground" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {file ? (
-                     <div className="space-y-1">
-                       <p className="text-sm font-medium truncate">{file.name}</p>
-                       <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                     </div>
-                  ) : (
-                    <div className="relative">
-                       <p className="text-sm text-muted-foreground font-medium">Click to browse or drop file</p>
-                       <Input 
-                        id="file" 
-                        type="file" 
-                        accept=".pdf,.docx,.txt,.md"
-                        onChange={handleFileChange}
-                        disabled={isBusy}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                       />
-                    </div>
+            <div className="space-y-2">
+              <Label htmlFor="file-drop">Upload Document</Label>
+              
+              {!file ? (
+                // --- DROP ZONE ---
+                <div
+                  onClick={() => !isBusy && fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={cn(
+                    "relative group cursor-pointer flex flex-col items-center justify-center w-full h-40 rounded-xl border-2 border-dashed transition-all duration-200 ease-in-out",
+                    isDragging 
+                      ? "border-primary bg-primary/5 ring-4 ring-primary/10" 
+                      : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50",
+                    isBusy ? "opacity-50 cursor-not-allowed" : ""
                   )}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept=".pdf,.docx,.txt,.md"
+                    disabled={isBusy}
+                  />
+
+                  <div className="flex flex-col items-center justify-center space-y-3 text-center p-4">
+                    <div className={cn(
+                      "p-3 rounded-full transition-colors",
+                      isDragging ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    )}>
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">
+                        Click to upload or drag and drop
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PDF, DOCX, TXT or MD (max 10MB)
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                {file && (
-                  <Button variant="ghost" size="icon" onClick={() => setFile(null)} disabled={isBusy}>
-                     <span className="sr-only">Remove</span>
-                     <div className="w-4 h-4 rounded-full bg-muted-foreground/30 hover:bg-destructive hover:text-white transition-colors flex items-center justify-center">×</div>
-                  </Button>
-                )}
-              </div>
+              ) : (
+                // --- FILE SELECTED STATE ---
+                <div className="flex items-center justify-between p-4 border rounded-xl bg-card animate-in fade-in zoom-in-95 duration-200">
+                   <div className="flex items-center gap-4 overflow-hidden">
+                     <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                       <FileText className="w-6 h-6" />
+                     </div>
+                     <div className="min-w-0 space-y-1">
+                       <p className="text-sm font-medium truncate max-w-[200px] sm:max-w-[260px]">{file.name}</p>
+                       <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                     </div>
+                   </div>
+                   <Button 
+                     variant="ghost" 
+                     size="icon" 
+                     onClick={() => setFile(null)} 
+                     disabled={isBusy}
+                     className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                   >
+                     <X className="w-5 h-5" />
+                   </Button>
+                </div>
+              )}
             </div>
           </TabsContent>
 
