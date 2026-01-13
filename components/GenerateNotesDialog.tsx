@@ -16,8 +16,8 @@ import {
   DialogDescription,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, AlertCircle, Youtube } from 'lucide-react'; // <-- 1. IMPORT Youtube ICON
-import { ApiResponse, Note } from '@/types/database'; 
+import { Loader2, AlertCircle, Youtube } from 'lucide-react';
+import { ApiResponse } from '@/types/database'; 
 import { useUpgradeModal } from '@/components/UpgradeModalContext'; 
 
 interface GenerateNotesDialogProps {
@@ -25,15 +25,15 @@ interface GenerateNotesDialogProps {
     onClose: () => void;
     onSuccess: (newNotes: { count: number }) => void;
     onError: (message: string) => void;
+    documentId?: string; // <-- ADDED: Optional document context
 }
 
-export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: GenerateNotesDialogProps) {
-    // --- 2. UPDATE STATE ---
+export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, documentId }: GenerateNotesDialogProps) {
     const [sourceType, setSourceType] = useState<'text' | 'url' | 'youtube'>('text');
     const [textContent, setTextContent] = useState('');
     const [urlContent, setUrlContent] = useState('');
-    const [youtubeUrl, setYoutubeUrl] = useState(''); // <-- Add new state
-    // ---
+    const [youtubeUrl, setYoutubeUrl] = useState('');
+    
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState('');
 
@@ -47,7 +47,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             onError("Authentication error. Please log in again.");
             return;
         }
-        // --- 3. UPDATE VALIDATION ---
+
         if (sourceType === 'text' && !textContent.trim()) {
             setError("Please paste some text content.");
             return;
@@ -56,17 +56,15 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             setError("Please enter a valid URL.");
             return;
         }
-        if (sourceType === 'youtube' && !youtubeUrl.trim()) { // <-- Add new validation
+        if (sourceType === 'youtube' && !youtubeUrl.trim()) {
             setError("Please enter a valid YouTube URL.");
             return;
         }
-        // ---
 
         setIsGenerating(true);
 
         try {
-            // --- 4. UPDATE BODY LOGIC ---
-            let body = {};
+            let body: any = {};
             if (sourceType === 'text') {
                 body = { text: textContent.trim() };
             } else if (sourceType === 'url') {
@@ -74,7 +72,11 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
             } else if (sourceType === 'youtube') {
                 body = { youtubeUrl: youtubeUrl.trim() };
             }
-            // ---
+
+            // <-- ADDED: Include documentId in payload if present
+            if (documentId) {
+                body.documentId = documentId;
+            }
 
             const response = await fetch('/api/generate-notes', {
                 method: 'POST',
@@ -95,11 +97,10 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                 throw new Error(result.error || `Failed to generate notes (Status: ${response.status})`);
             }
 
-            // --- 5. CLEAR ALL INPUTS ON SUCCESS ---
             setTextContent('');
             setUrlContent('');
             setYoutubeUrl('');
-            // ---
+            
             onSuccess(result.data || { count: 0 }); 
 
         } catch (err: any) {
@@ -113,19 +114,17 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
         }
     };
 
-    // Reset state when dialog opens/closes
     const handleOpenChange = (open: boolean) => {
         if (!open) {
             setTextContent('');
             setUrlContent('');
-            setYoutubeUrl(''); // <-- Clear new state
+            setYoutubeUrl('');
             setError('');
             setIsGenerating(false);
-            setSourceType('text'); // <-- Reset to default tab
+            setSourceType('text');
         }
-        onClose(); // Call original onClose handler
+        onClose();
     };
-
 
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -138,7 +137,6 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
                     <div className="grid gap-4 py-4">
-                         {/* --- 6. UPDATE SOURCE TYPE TOGGLE --- */}
                         <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
                             <Button type="button" variant={sourceType === "text" ? "secondary" : "ghost"} onClick={() => setSourceType('text')} className="w-24 h-8 text-xs">Text</Button>
                             <Button type="button" variant={sourceType === "url" ? "secondary" : "ghost"} onClick={() => setSourceType('url')} className="w-24 h-8 text-xs">URL</Button>
@@ -147,10 +145,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                                 YouTube
                             </Button>
                         </div>
-                        {/* --- END TOGGLE UPDATE --- */}
 
-
-                         {/* Text Input */}
                          {sourceType === 'text' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="text-content">Paste Text</Label>
@@ -166,7 +161,6 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                             </div>
                          )}
 
-                         {/* URL Input */}
                          {sourceType === 'url' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="url-content">Enter URL</Label>
@@ -183,7 +177,6 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                             </div>
                          )}
 
-                         {/* --- 7. ADD YOUTUBE URL INPUT --- */}
                          {sourceType === 'youtube' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="youtube-url-content">YouTube URL</Label>
@@ -199,8 +192,6 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                                 <p className="text-xs text-muted-foreground">Note: This only works for videos that have transcripts available.</p>
                             </div>
                          )}
-                         {/* --- END YOUTUBE INPUT --- */}
-
 
                          {error && (
                             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -212,9 +203,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError }: Gen
                      <DialogFooter>
                          <DialogClose asChild>
                             <Button type="button" variant="ghost" disabled={isGenerating}>Cancel</Button>
-                         </DialogClose
-                        >
-                        {/* --- 8. UPDATE SUBMIT BUTTON DISABLED LOGIC --- */}
+                         </DialogClose>
                         <Button 
                             type="submit" 
                             disabled={
