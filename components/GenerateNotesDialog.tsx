@@ -25,7 +25,7 @@ interface GenerateNotesDialogProps {
     onClose: () => void;
     onSuccess: (newNotes: { count: number }) => void;
     onError: (message: string) => void;
-    documentId?: string; // <-- ADDED: Optional document context
+    documentId?: string; // Optional: Link generated notes to this document
 }
 
 export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, documentId }: GenerateNotesDialogProps) {
@@ -65,6 +65,8 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
 
         try {
             let body: any = {};
+            
+            // Set source content based on selected type
             if (sourceType === 'text') {
                 body = { text: textContent.trim() };
             } else if (sourceType === 'url') {
@@ -73,7 +75,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
                 body = { youtubeUrl: youtubeUrl.trim() };
             }
 
-            // <-- ADDED: Include documentId in payload if present
+            // Pass documentId if present to link this note
             if (documentId) {
                 body.documentId = documentId;
             }
@@ -97,6 +99,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
                 throw new Error(result.error || `Failed to generate notes (Status: ${response.status})`);
             }
 
+            // Clear inputs on success
             setTextContent('');
             setUrlContent('');
             setYoutubeUrl('');
@@ -116,6 +119,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
 
     const handleOpenChange = (open: boolean) => {
         if (!open) {
+            // Reset state when closing
             setTextContent('');
             setUrlContent('');
             setYoutubeUrl('');
@@ -137,15 +141,36 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
                     <div className="grid gap-4 py-4">
+                        {/* Source Type Toggle */}
                         <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
-                            <Button type="button" variant={sourceType === "text" ? "secondary" : "ghost"} onClick={() => setSourceType('text')} className="w-24 h-8 text-xs">Text</Button>
-                            <Button type="button" variant={sourceType === "url" ? "secondary" : "ghost"} onClick={() => setSourceType('url')} className="w-24 h-8 text-xs">URL</Button>
-                            <Button type="button" variant={sourceType === "youtube" ? "secondary" : "ghost"} onClick={() => setSourceType('youtube')} className="w-24 h-8 text-xs">
+                            <Button 
+                                type="button" 
+                                variant={sourceType === "text" ? "secondary" : "ghost"} 
+                                onClick={() => setSourceType('text')} 
+                                className="w-24 h-8 text-xs"
+                            >
+                                Text
+                            </Button>
+                            <Button 
+                                type="button" 
+                                variant={sourceType === "url" ? "secondary" : "ghost"} 
+                                onClick={() => setSourceType('url')} 
+                                className="w-24 h-8 text-xs"
+                            >
+                                URL
+                            </Button>
+                            <Button 
+                                type="button" 
+                                variant={sourceType === "youtube" ? "secondary" : "ghost"} 
+                                onClick={() => setSourceType('youtube')} 
+                                className="w-24 h-8 text-xs"
+                            >
                                 <Youtube className="w-4 h-4 mr-1" />
                                 YouTube
                             </Button>
                         </div>
 
+                         {/* Text Input */}
                          {sourceType === 'text' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="text-content">Paste Text</Label>
@@ -161,6 +186,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
                             </div>
                          )}
 
+                         {/* URL Input */}
                          {sourceType === 'url' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="url-content">Enter URL</Label>
@@ -177,6 +203,7 @@ export function GenerateNotesDialog({ isOpen, onClose, onSuccess, onError, docum
                             </div>
                          )}
 
+                         {/* YouTube Input */}
                          {sourceType === 'youtube' && (
                              <div className="grid gap-2">
                                 <Label htmlFor="youtube-url-content">YouTube URL</Label>
