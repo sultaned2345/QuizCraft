@@ -22,9 +22,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // Fix: Use a more permissive UUID regex (ignores specific version/variant bits)
+    // This allows v7 UUIDs and other valid formats that Supabase might use
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
     if (!uuidRegex.test(documentId)) {
+       console.error(`[Job Validation] Invalid UUID received: ${documentId}`);
        return NextResponse.json(
         { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
