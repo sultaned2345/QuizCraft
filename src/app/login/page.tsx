@@ -8,20 +8,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Sparkles, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
-
-// --- Visual Effects (Reused from Signup) ---
-function AuroraBackground() {
-  return (
-    <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-zinc-950">
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/30 blur-[120px] animate-aurora-1 opacity-80" />
-      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] rounded-full bg-blue-500/20 blur-[100px] animate-aurora-2 opacity-70" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[50%] rounded-full bg-purple-500/25 blur-[120px] animate-aurora-3 opacity-70" />
-    </div>
-  );
-}
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -76,7 +65,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="grid gap-4 relative z-10">
+    <div className="grid gap-6 relative z-10">
       <form onSubmit={handleLogin} className="grid gap-4">
         <div className="grid gap-2">
           <Label htmlFor="email">Email</Label>
@@ -88,7 +77,7 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="bg-background/50 backdrop-blur-sm"
+            className="h-11 bg-background"
           />
         </div>
         <div className="grid gap-2">
@@ -109,7 +98,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="bg-background/50 backdrop-blur-sm"
+            className="h-11 bg-background"
           />
         </div>
 
@@ -122,7 +111,7 @@ function LoginForm() {
 
         <Button
           type="submit"
-          className="w-full shadow-lg hover:shadow-primary/20 transition-all"
+          className="w-full h-11"
           disabled={loading || googleLoading}
         >
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -133,10 +122,10 @@ function LoginForm() {
       {/* --- DIVIDER --- */}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-muted" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
+          <span className="bg-background px-2 text-muted-foreground font-medium">
             Or continue with
           </span>
         </div>
@@ -145,7 +134,7 @@ function LoginForm() {
       {/* --- GOOGLE BUTTON --- */}
       <Button 
         variant="outline" 
-        className="w-full bg-background/50 backdrop-blur-sm" 
+        className="w-full h-11"
         onClick={handleGoogleLogin} 
         disabled={loading || googleLoading}
       >
@@ -165,16 +154,16 @@ function LoginForm() {
 // --- Main Page Layout ---
 export default function LoginPage() {
   return (
-    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans selection:bg-primary/20">
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans">
        <SpotlightCursor />
 
        {/* LEFT COLUMN: Form */}
        <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative bg-background">
         <Link href="/" className="absolute top-8 left-8 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors z-20">
-           <ArrowLeft className="w-4 h-4" /> Back to Home
+           <ArrowLeft className="w-4 h-4" /> <span className="text-sm font-medium">Back to Home</span>
         </Link>
 
-        <div className="mx-auto grid w-full max-w-sm gap-6 relative z-10">
+        <div className="mx-auto grid w-full max-w-sm gap-8 relative z-10">
           <div className="grid gap-2 text-center">
             <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
             <p className="text-muted-foreground">
@@ -186,7 +175,7 @@ export default function LoginPage() {
             <LoginForm />
           </Suspense>
 
-          <div className="mt-4 text-center text-sm text-muted-foreground">
+          <div className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
             <Link href="/signup" className="text-primary underline-offset-4 hover:underline font-semibold">
               Sign Up
@@ -195,31 +184,26 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Brand & Aurora */}
-      <div className="hidden lg:flex items-center justify-center relative overflow-hidden p-10 flex-col gap-6 text-white">
-        {/* Background Layer */}
-        <div className="absolute inset-0 bg-zinc-900 z-0">
-           <AuroraBackground />
-        </div>
+      {/* RIGHT COLUMN: Brand (Clean Solid) */}
+      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-muted/40 text-foreground">
         
-        {/* Glass Overlay for Text */}
-        <div className="relative z-10 flex flex-col items-center justify-center max-w-lg text-center">
-            <Link href="/" className="flex items-center gap-3 mb-8 group">
-                <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white p-3 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-xl">
+        <div className="flex flex-col items-center justify-center max-w-lg text-center">
+            <Link href="/" className="flex items-center gap-3 mb-10">
+                <div className="bg-primary text-primary-foreground p-3 rounded-xl shadow-sm">
                     <Sparkles className="w-8 h-8" />
                 </div>
-                <span className="text-4xl font-bold tracking-tight drop-shadow-md">QuizCraft</span>
+                <span className="text-4xl font-bold tracking-tight">QuizCraft</span>
             </Link>
             
-            <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-2xl shadow-2xl">
-                <p className="text-xl italic text-white/90 leading-relaxed">
+            <div className="p-8">
+                <p className="text-xl italic text-muted-foreground leading-relaxed font-light">
                     &ldquo;The AI grading feature saved me hours of manual review. It's like having a TA in your pocket.&rdquo;
                 </p>
-                <div className="flex items-center justify-center gap-3 mt-6">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-teal-400" />
+                <div className="flex items-center justify-center gap-4 mt-8">
+                    <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-800" />
                     <div className="text-left">
-                        <p className="font-semibold text-white">Marcus T.</p>
-                        <p className="text-sm text-white/60">Medical Student</p>
+                        <p className="font-semibold text-foreground text-lg">Marcus T.</p>
+                        <p className="text-sm text-muted-foreground">Medical Student</p>
                     </div>
                 </div>
             </div>

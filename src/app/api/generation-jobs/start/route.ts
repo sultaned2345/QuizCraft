@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     // 2. Parse Request Body
     const body = await req.json();
-    const { documentId, jobType } = body;
+    let { documentId, jobType } = body;
 
     // 3. Validation
     if (!documentId || !jobType) {
@@ -22,14 +22,21 @@ export async function POST(req: Request) {
       );
     }
 
+    // CLEANUP: Ensure documentId is a string and trim whitespace
+    if (typeof documentId === 'string') {
+        documentId = documentId.trim();
+    }
+
     // Fix: Use a more permissive UUID regex (ignores specific version/variant bits)
-    // This allows v7 UUIDs and other valid formats that Supabase might use
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     
-    if (!uuidRegex.test(documentId)) {
-       console.error(`[Job Validation] Invalid UUID received: ${documentId}`);
+    // Check type explicitly to catch objects/arrays passed by mistake
+    if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
+       const receivedValue = typeof documentId === 'string' ? documentId : typeof documentId;
+       console.error(`[Job Validation] Invalid UUID received: "${receivedValue}"`);
+       
        return NextResponse.json(
-        { error: 'Invalid documentId format. Must be a valid UUID.' }, 
+        { error: `Invalid documentId format. Must be a valid UUID. Received: "${receivedValue}"` }, 
         { status: 400 }
       );
     }
@@ -44,7 +51,6 @@ export async function POST(req: Request) {
     }
 
     // 4. Verify Document Ownership
-    // Ensure the user actually owns the document they are trying to process
     const doc = await prisma.documents.findUnique({
       where: { 
         id: documentId,
@@ -60,7 +66,6 @@ export async function POST(req: Request) {
     }
 
     // 5. Create the Job Record
-    // The 'status' defaults to 'pending' in the schema
     const job = await prisma.generation_jobs.create({
       data: {
         user_id: session.user.id,

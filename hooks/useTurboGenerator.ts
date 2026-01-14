@@ -22,8 +22,6 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
   const { toast } = useToast();
   const { session } = useAuth();
 
-  // FIX: Renamed 'content' to 'documentId' to clarify usage.
-  // Ideally, calling code should pass (type, documentId, optionalParams).
   const generate = useCallback(async (
     type: GenerationType, 
     documentId: string, 
@@ -36,6 +34,9 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
     try {
       if (!documentId) throw new Error("Document ID is required.");
 
+      // DEBUG: Log the payload to catch "undefined" or object issues
+      console.log(`[TurboGenerator] Starting ${type} job for doc: "${documentId}"`);
+
       setProgress(20);
       setStatus('Analyzing content...');
       
@@ -45,9 +46,8 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        // FIX: Ensure keys match server expectations (documentId, jobType)
         body: JSON.stringify({
-          documentId, 
+          documentId: documentId?.trim(), // Ensure clean ID on client side too
           jobType: type,
           metadata
         })
@@ -59,14 +59,13 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
         throw new Error(errorData.error || 'Failed to start generation');
       }
 
-      const { jobId } = await response.json(); // Server returns { success: true, jobId: '...' }
+      const { jobId } = await response.json();
       
       setStatus('Generating magic...');
       setProgress(40);
 
       const pollInterval = setInterval(async () => {
          try {
-            // FIX: Using '/api/generation-jobs/process' based on your file list
             const statusRes = await fetch(`/api/generation-jobs/process?id=${jobId}`, {
                 headers: { 'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' }
             });
@@ -83,7 +82,6 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
                 if (options.onSuccess) {
                     options.onSuccess(statusData.resultId || statusData.outputId, type);
                 } else {
-                    // Fallback navigation if onSuccess not provided
                     const resultId = statusData.resultId || statusData.outputId;
                     if (type === 'quiz') router.push(`/quiz/${resultId}`);
                     if (type === 'notes') router.push(`/notes/${resultId}`);
@@ -101,7 +99,6 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
          }
       }, 2000);
 
-      // Timeout safety (60s)
       setTimeout(() => {
           if (isGenerating) {
              clearInterval(pollInterval);
