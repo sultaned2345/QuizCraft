@@ -1,111 +1,75 @@
-// src/app/api/documents/[documentId]/route.ts
+// src/app/api/documents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
-import { ApiResponse } from '@/types/database';
-import { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
+
+// Bucket name must match what you use in other routes (e.g., [documentId]/route.ts)
 const STORAGE_BUCKET_NAME = 'user_documents';
 
-// Helper to get authenticated Supabase client
-function getSupabaseClientForUser(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) throw new Error("Missing auth token for storage operation");
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+export async function POST(req: NextRequest) {
+  try {
+    const user = await requireAuth(req);
     
-    return createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${token}` } }
+    // Parse JSON body from AddDocumentDialog
+    const body = await req.json();
+    const { title, content, fileType } = body;
+
+    if (!title || !content) {
+        return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
+    }
+
+    // 1. Upload content to Supabase Storage
+    // We create a file even for text/youtube to satisfy 'storage_path' unique constraint
+    // and to have a source of truth file.
+    const cleanFileName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const extension = fileType === 'application/pdf' ? 'pdf' : 'txt';
+    const filePath = `uploads/${user.id}/${Date.now()}_${cleanFileName}.${extension}`;
+
+    // Convert string content to Buffer for upload
+    const fileBuffer = Buffer.from(content, 'utf-8');
+
+    const { error: uploadError } = await supabaseAdmin.storage
+        .from(STORAGE_BUCKET_NAME)
+        .upload(filePath, fileBuffer, {
+            contentType: fileType || 'text/plain',
+            upsert: false
+        });
+
+    if (uploadError) {
+        console.error("Storage Upload Error:", uploadError);
+        throw new Error("Failed to upload content to storage.");
+    }
+
+    // 2. Create Document Record in Database
+    const doc = await prisma.documents.create({
+        data: {
+            user_id: user.id,
+            file_name: title,
+            file_type: fileType || 'text/plain',
+            // Rough size estimation for text
+            file_size: BigInt(Buffer.byteLength(content)),
+            extracted_text: content, // We already have the text
+            storage_path: filePath,
+            processing_status: 'completed', // Text is already ready
+            ai_summary: null, // To be generated later
+        }
     });
-}
 
-// --- FIX: Added GET Handler ---
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { documentId: string } }
-) {
-    try {
-        const user = await requireAuth(request);
-        const { documentId } = params;
-
-        const doc = await prisma.documents.findUnique({
-            where: { id: documentId, user_id: user.id },
-            select: {
-                id: true,
-                file_name: true,
-                file_type: true,
-                file_size: true,
-                created_at: true,
-                processing_status: true,
-                ai_summary: true,
-                storage_path: true, // Needed for PDF viewer
-            }
-        });
-
-        if (!doc) {
-            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    // 3. Return the Document ID (and other info)
+    return NextResponse.json({
+        success: true,
+        data: {
+            id: doc.id,
+            file_name: doc.file_name,
+            file_type: doc.file_type
         }
+    });
 
-        // Serialize BigInt safely
-        const safeDoc = {
-            ...doc,
-            file_size: doc.file_size?.toString(),
-            // Generate a public URL for the PDF Viewer if needed
-            publicUrl: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET_NAME}/${doc.storage_path}`
-        };
-
-        return NextResponse.json({ success: true, data: safeDoc });
-
-    } catch (error: any) {
-        console.error("Fetch Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-}
-// ------------------------------
-
-export async function DELETE(
-    request: NextRequest,
-    { params }: { params: { documentId: string } }
-) {
-    try {
-        const user = await requireAuth(request);
-        const { documentId } = params;
-
-        if (!documentId) return NextResponse.json<ApiResponse>({ success: false, error: 'Document ID is required.' }, { status: 400 });
-
-        const documentToDelete = await prisma.documents.findUnique({
-            where: { id: documentId, user_id: user.id },
-            select: { storage_path: true },
-        });
-
-        if (!documentToDelete) return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or access denied.' }, { status: 404 });
-
-        const supabaseForUser = getSupabaseClientForUser(request);
-
-        if (documentToDelete.storage_path) {
-            const { error: storageError } = await supabaseForUser.storage
-                .from(STORAGE_BUCKET_NAME)
-                .remove([documentToDelete.storage_path]);
-
-            if (storageError) throw new Error(`Storage delete failed: ${storageError.message}`);
-        }
-
-        await prisma.$transaction([
-            prisma.content_embeddings.deleteMany({ where: { content_id: documentId, user_id: user.id } }),
-            prisma.documents.delete({ where: { id: documentId } })
-        ]);
-
-        return NextResponse.json<ApiResponse>({ success: true, message: 'Document deleted successfully.' });
-
-    } catch (error: any) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found.' }, { status: 404 });
-        }
-        console.error(`Unexpected error deleting document ${params.documentId}:`, error);
-        return NextResponse.json<ApiResponse>({ success: false, error: error.message }, { status: 500 });
-    }
+  } catch (error: any) {
+    console.error("Create Document Error:", error);
+    return NextResponse.json({ error: error.message || "Failed to create document" }, { status: 500 });
+  }
 }

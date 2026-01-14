@@ -48,7 +48,6 @@ export function AddDocumentDialog({
   onUploadComplete 
 }: AddDocumentDialogProps) {
   // --- STATE ---
-  // Internal state for uncontrolled usage
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : internalIsOpen;
@@ -59,14 +58,17 @@ export function AddDocumentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [isParsing, setIsParsing] = useState(false);
+  
+  // Status State
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processStatus, setProcessStatus] = useState(''); // Local status for parsing/saving
   
   // Drag & Drop State
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hooks
-  const { generate, isGenerating, progress, status } = useTurboGenerator();
+  const { generate, isGenerating, progress, status: genStatus } = useTurboGenerator();
   const { toast } = useToast();
   const { session } = useAuth(); 
 
@@ -77,7 +79,8 @@ export function AddDocumentDialog({
         setFile(null);
         setText('');
         setYoutubeUrl('');
-        setIsParsing(false);
+        setIsProcessing(false);
+        setProcessStatus('');
         setActiveTab('file');
         setIsDragging(false);
       }, 300);
@@ -120,20 +123,22 @@ export function AddDocumentDialog({
 
   const handleSubmit = async () => {
     try {
-      let contentToProcess = '';
-      let metadata = {};
+      setIsProcessing(true);
+      
+      let content = '';
+      let title = '';
+      let type = 'text/plain';
+      let source = 'user_upload';
 
-      // 1. Prepare Content
+      // 1. Prepare Content based on Tab
       if (activeTab === 'file' && file) {
-        setIsParsing(true);
+        setProcessStatus('Parsing file...');
+        
         const formData = new FormData();
         formData.append('file', file);
         
-        // Add Authorization Header
         const headers: Record<string, string> = {};
-        if (session?.access_token) {
-           headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
         const parseRes = await fetch('/api/parse-file', {
           method: 'POST',
@@ -142,54 +147,88 @@ export function AddDocumentDialog({
         });
 
         if (!parseRes.ok) {
-           if (parseRes.status === 401) throw new Error("Unauthorized: Please sign in.");
            const err = await parseRes.json();
            throw new Error(err.error || 'Failed to parse file');
         }
 
         const data = await parseRes.json();
-        contentToProcess = data.data?.text || ''; 
-        metadata = { fileName: file.name, fileType: file.type };
-        setIsParsing(false);
+        content = data.data?.text || ''; 
+        title = file.name;
+        type = file.type;
 
       } else if (activeTab === 'text' && text) {
-        contentToProcess = text;
-        metadata = { fileName: 'Untitled Notes', fileType: 'text/plain' };
+        content = text;
+        title = 'Study Notes';
+        type = 'text/plain';
 
       } else if (activeTab === 'youtube' && youtubeUrl) {
-        contentToProcess = youtubeUrl;
-        metadata = { source: 'youtube' };
+        content = youtubeUrl;
+        title = 'YouTube Video';
+        type = 'youtube';
+        source = 'youtube';
       }
 
-      if (!contentToProcess) {
+      if (!content) {
         throw new Error('Please provide content to process.');
       }
 
-      // 2. Start Generation
-      await generate('quiz', contentToProcess, metadata);
-
-      // 3. Success
-      if (onUploadComplete) onUploadComplete();
+      // 2. Save Document to Database to get ID
+      setProcessStatus('Saving to library...');
       
-      // Close dialog only if successful
+      const saveHeaders: Record<string, string> = {
+          'Content-Type': 'application/json'
+      };
+      if (session?.access_token) saveHeaders['Authorization'] = `Bearer ${session.access_token}`;
+
+      const saveRes = await fetch('/api/documents', {
+          method: 'POST',
+          headers: saveHeaders,
+          body: JSON.stringify({
+              title,
+              content,
+              fileType: type,
+              source
+          })
+      });
+
+      if (!saveRes.ok) {
+          throw new Error('Failed to save document to library');
+      }
+
+      const savedDoc = await saveRes.json();
+      const documentId = savedDoc.id || savedDoc.data?.id;
+
+      if (!documentId) {
+          throw new Error('Server did not return a Document ID');
+      }
+
+      // 3. Start Generation using the ID
+      // We pass the clean UUID to the generator hook
+      await generate('quiz', documentId, { fileName: title });
+
+      // 4. Cleanup & Success
+      if (onUploadComplete) onUploadComplete();
       if (setIsOpen) setIsOpen(false);
       
     } catch (error: any) {
-      console.error("Generation failed", error);
+      console.error("Process failed", error);
       toast({
         title: "Error",
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive"
       });
-      setIsParsing(false);
+      setIsProcessing(false);
     }
   };
 
-  const isBusy = isParsing || isGenerating;
+  const isBusy = isProcessing || isGenerating;
   const canSubmit = 
     (activeTab === 'file' && !!file) ||
     (activeTab === 'text' && !!text.trim()) ||
     (activeTab === 'youtube' && !!youtubeUrl.trim());
+
+  // Use the hook's status if generating, otherwise local status
+  const currentStatus = isGenerating ? genStatus : processStatus;
 
   return (
     <Dialog open={isOpen} onOpenChange={isBusy ? undefined : setIsOpen}>
@@ -228,13 +267,12 @@ export function AddDocumentDialog({
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: File Upload (New Drag & Drop UI) */}
+          {/* Tab 1: File Upload */}
           <TabsContent value="file" className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="file-drop">Upload Document</Label>
               
               {!file ? (
-                // --- DROP ZONE ---
                 <div
                   onClick={() => !isBusy && fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
@@ -256,7 +294,6 @@ export function AddDocumentDialog({
                     accept=".pdf,.docx,.txt,.md"
                     disabled={isBusy}
                   />
-
                   <div className="flex flex-col items-center justify-center space-y-3 text-center p-4">
                     <div className={cn(
                       "p-3 rounded-full transition-colors",
@@ -264,7 +301,6 @@ export function AddDocumentDialog({
                     )}>
                       <UploadCloud className="w-6 h-6" />
                     </div>
-                    
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-foreground">
                         Click to upload or drag and drop
@@ -276,7 +312,6 @@ export function AddDocumentDialog({
                   </div>
                 </div>
               ) : (
-                // --- FILE SELECTED STATE ---
                 <div className="flex items-center justify-between p-4 border rounded-xl bg-card animate-in fade-in zoom-in-95 duration-200">
                    <div className="flex items-center gap-4 overflow-hidden">
                      <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
@@ -344,7 +379,7 @@ export function AddDocumentDialog({
             <div className="flex justify-between items-center text-sm">
               <span className="flex items-center gap-2 text-primary font-medium">
                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                 {isParsing ? 'Parsing Document...' : status}
+                 {currentStatus}
               </span>
               <span className="text-muted-foreground text-xs font-mono">{Math.round(progress)}%</span>
             </div>
