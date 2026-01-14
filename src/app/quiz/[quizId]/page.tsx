@@ -398,12 +398,16 @@ export default function TakeQuizPage() {
   const quizId = params.quizId as string;
   const { session } = useAuth();
 
+  // FIX: Validate quizId is not "null" (string) or undefined
+  const isValidQuizId = quizId && quizId !== 'null' && quizId !== 'undefined';
+
   const {
     data: apiResponse,
     error,
     isLoading,
   } = useSWR<ApiResponse<QuizData>>(
-    session ? `/api/quiz/${quizId}` : null,
+    // Conditionally fetch only if ID is valid
+    session && isValidQuizId ? `/api/quiz/${quizId}` : null,
     (url: string) =>
       fetcher(url, {
         headers: { Authorization: `Bearer ${session!.access_token}` },
@@ -521,7 +525,7 @@ export default function TakeQuizPage() {
       setShowHint(false);
     } else {
       setIsFinished(true);
-      if (session) {
+      if (session && isValidQuizId) {
         fetch('/api/quiz/attempt', {
           method: 'POST',
           headers: {
@@ -555,6 +559,20 @@ export default function TakeQuizPage() {
     }
     return 'border-white/5 opacity-50';
   };
+
+  // FIX: Handle Invalid ID explicitly immediately
+  if (!isValidQuizId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-background text-red-500">
+        <AlertCircle className="h-12 w-12 mb-4 opacity-50" />
+        <h2 className="text-xl font-mono font-bold">INVALID MISSION ID</h2>
+        <p className="text-muted-foreground font-mono text-sm mt-2">Target ID is null or corrupted.</p>
+        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-6 font-mono text-xs">
+          RETURN TO BASE
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -658,148 +676,151 @@ export default function TakeQuizPage() {
               transition={{ duration: 0.3 }}
               className="w-full"
             >
-              <Card className="bg-zinc-900/80 backdrop-blur-xl border-white/10 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
-                <CardContent className="p-8">
-                  <div className="mb-8">
-                    <span className="text-xs font-mono text-primary/70 uppercase tracking-widest mb-3 block">
-                        Query Sequence 0{currentQuestionIndex + 1}
-                    </span>
-                    <h3 className="text-xl md:text-2xl font-semibold leading-relaxed text-white">
-                        {currentQuestion.question_text}
-                    </h3>
-                  </div>
+              {/* Ensure currentQuestion exists before rendering to avoid runtime crashes during fast transitions */}
+              {currentQuestion && (
+                <Card className="bg-zinc-900/80 backdrop-blur-xl border-white/10 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
+                  <CardContent className="p-8">
+                    <div className="mb-8">
+                      <span className="text-xs font-mono text-primary/70 uppercase tracking-widest mb-3 block">
+                          Query Sequence 0{currentQuestionIndex + 1}
+                      </span>
+                      <h3 className="text-xl md:text-2xl font-semibold leading-relaxed text-white">
+                          {currentQuestion.question_text}
+                      </h3>
+                    </div>
 
-                  <div className="space-y-3">
-                    {/* Multiple Choice / True False */}
-                    {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
-                      (currentQuestion.options as string[]).map((option) => (
-                        <Button
-                          key={option}
-                          variant="outline"
-                          className={cn(
-                            'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal text-base transition-all duration-200',
-                            answerStatus !== 'unanswered' && 'pointer-events-none opacity-100',
-                            getOptionClass(option)
-                          )}
-                          onClick={() => handleAnswerSelect(option)}
-                        >
-                          <span className="flex-1 font-sans">{option}</span>
-                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-5 h-5 ml-2 text-green-400" />}
-                          {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-5 h-5 ml-2 text-red-400" />}
-                        </Button>
-                    ))}
-                    
-                    {/* Fill in Blank */}
-                    {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                        <div className="space-y-4">
-                            <Input 
-                                placeholder="ENTER DATA VALUE..." 
-                                className="bg-black/50 border-white/20 h-14 font-mono text-lg text-white"
-                                value={selectedAnswer || ''}
-                                onChange={(e) => setSelectedAnswer(e.target.value)}
-                                disabled={answerStatus !== 'unanswered'}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
-                                      handleAnswerSelect(selectedAnswer.trim());
-                                    }
-                                }}
-                            />
-                            <Button 
-                                className="w-full h-12 font-mono uppercase tracking-widest bg-white text-black hover:bg-white/90" 
-                                disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()} 
-                                onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
-                            >
-                                Verify Data
-                            </Button>
-                        </div>
-                    )}
-
-                     {/* Complex Types */}
-                     {currentQuestion.question_type === 'MATCHING' && (
-                        <MatchingQuestionUI 
-                            question={currentQuestion} 
-                            answerStatus={answerStatus} 
-                            onQuestionComplete={handleComplexQuestionComplete} 
-                        />
-                     )}
-                     
-                     {currentQuestion.question_type === 'ORDERING' && (
-                        <OrderingQuestionUI 
-                            question={currentQuestion} 
-                            answerStatus={answerStatus} 
-                            onQuestionComplete={handleComplexQuestionComplete} 
-                        />
-                     )}
-
-                  </div>
-
-                  {/* Feedback Overlay */}
-                  <AnimatePresence>
-                    {answerStatus !== 'unanswered' && (
-                        <motion.div 
-                            initial={{ height: 0, opacity: 0 }} 
-                            animate={{ height: 'auto', opacity: 1 }}
+                    <div className="space-y-3">
+                      {/* Multiple Choice / True False */}
+                      {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
+                        (currentQuestion.options as string[]).map((option) => (
+                          <Button
+                            key={option}
+                            variant="outline"
                             className={cn(
-                                "mt-8 p-6 rounded-lg border-l-4 font-mono text-sm",
-                                answerStatus === 'correct' ? "bg-green-500/10 border-green-500 text-green-400" : "bg-red-500/10 border-red-500 text-red-400"
+                              'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal text-base transition-all duration-200',
+                              answerStatus !== 'unanswered' && 'pointer-events-none opacity-100',
+                              getOptionClass(option)
                             )}
-                        >
-                            <div className="flex items-center gap-2 font-bold mb-2 uppercase tracking-wider text-base">
-                                {answerStatus === 'correct' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                                {answerStatus === 'correct' ? 'Data Verified' : 'Corruption Detected'}
-                            </div>
-                            
-                            {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                                <div className="mb-2 text-white/80">
-                                    Expected: <span className="text-white font-bold">{Array.isArray(currentQuestion.options) ? currentQuestion.options[0] : currentQuestion.correct_answer}</span>
-                                </div>
-                            )}
+                            onClick={() => handleAnswerSelect(option)}
+                          >
+                            <span className="flex-1 font-sans">{option}</span>
+                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-5 h-5 ml-2 text-green-400" />}
+                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-5 h-5 ml-2 text-red-400" />}
+                          </Button>
+                      ))}
+                      
+                      {/* Fill in Blank */}
+                      {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                          <div className="space-y-4">
+                              <Input 
+                                  placeholder="ENTER DATA VALUE..." 
+                                  className="bg-black/50 border-white/20 h-14 font-mono text-lg text-white"
+                                  value={selectedAnswer || ''}
+                                  onChange={(e) => setSelectedAnswer(e.target.value)}
+                                  disabled={answerStatus !== 'unanswered'}
+                                  onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
+                                        handleAnswerSelect(selectedAnswer.trim());
+                                      }
+                                  }}
+                              />
+                              <Button 
+                                  className="w-full h-12 font-mono uppercase tracking-widest bg-white text-black hover:bg-white/90" 
+                                  disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()} 
+                                  onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
+                              >
+                                  Verify Data
+                              </Button>
+                          </div>
+                      )}
 
-                            <p className="opacity-90 font-sans leading-relaxed text-zinc-300">
-                                {currentQuestion.explanation || (answerStatus === 'incorrect' ? "Check your source material for further analysis." : "Logic sound. Proceed to next query.")}
-                            </p>
-                        </motion.div>
-                    )}
-                  </AnimatePresence>
-                </CardContent>
-                
-                <CardFooter className="bg-black/40 p-6 border-t border-white/5 flex justify-between items-center">
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setShowHint(true)} 
-                        disabled={answerStatus !== 'unanswered' || showHint || !currentQuestion.explanation} 
-                        className={cn(
-                            "text-yellow-500/70 hover:text-yellow-500 hover:bg-yellow-500/10 transition-all",
-                            (answerStatus !== 'unanswered' || showHint) && "opacity-0"
-                        )}
-                    >
-                        <Lightbulb className="w-4 h-4 mr-2" /> HINT
-                    </Button>
+                      {/* Complex Types */}
+                      {currentQuestion.question_type === 'MATCHING' && (
+                          <MatchingQuestionUI 
+                              question={currentQuestion} 
+                              answerStatus={answerStatus} 
+                              onQuestionComplete={handleComplexQuestionComplete} 
+                          />
+                      )}
+                      
+                      {currentQuestion.question_type === 'ORDERING' && (
+                          <OrderingQuestionUI 
+                              question={currentQuestion} 
+                              answerStatus={answerStatus} 
+                              onQuestionComplete={handleComplexQuestionComplete} 
+                          />
+                      )}
 
+                    </div>
+
+                    {/* Feedback Overlay */}
                     <AnimatePresence>
-                        {showHint && answerStatus === 'unanswered' && (
-                            <motion.div 
-                                initial={{ opacity: 0, y: 10 }} 
-                                animate={{ opacity: 1, y: 0 }}
-                                className="absolute bottom-20 left-8 right-8 bg-yellow-950/90 border border-yellow-500/30 p-4 rounded-lg text-yellow-200 text-sm shadow-xl backdrop-blur-md z-20"
-                            >
-                                <div className="font-bold flex items-center gap-2 mb-1"><Lightbulb className="w-4 h-4" /> Hint Decrypted:</div>
-                                {currentQuestion.explanation}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                      {answerStatus !== 'unanswered' && (
+                          <motion.div 
+                              initial={{ height: 0, opacity: 0 }} 
+                              animate={{ height: 'auto', opacity: 1 }}
+                              className={cn(
+                                  "mt-8 p-6 rounded-lg border-l-4 font-mono text-sm",
+                                  answerStatus === 'correct' ? "bg-green-500/10 border-green-500 text-green-400" : "bg-red-500/10 border-red-500 text-red-400"
+                              )}
+                          >
+                              <div className="flex items-center gap-2 font-bold mb-2 uppercase tracking-wider text-base">
+                                  {answerStatus === 'correct' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                                  {answerStatus === 'correct' ? 'Data Verified' : 'Corruption Detected'}
+                              </div>
+                              
+                              {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                                  <div className="mb-2 text-white/80">
+                                      Expected: <span className="text-white font-bold">{Array.isArray(currentQuestion.options) ? currentQuestion.options[0] : currentQuestion.correct_answer}</span>
+                                  </div>
+                              )}
 
-                    <Button 
-                        onClick={handleNext} 
-                        disabled={answerStatus === 'unanswered'} 
-                        className="bg-white text-black hover:bg-white/90 font-mono text-xs uppercase font-bold px-8 h-10"
-                    >
-                        {currentQuestionIndex === quizQuestions.length - 1 ? 'FINALIZE' : 'NEXT_QUERY'} <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
-                    </Button>
-                </CardFooter>
-              </Card>
+                              <p className="opacity-90 font-sans leading-relaxed text-zinc-300">
+                                  {currentQuestion.explanation || (answerStatus === 'incorrect' ? "Check your source material for further analysis." : "Logic sound. Proceed to next query.")}
+                              </p>
+                          </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </CardContent>
+                  
+                  <CardFooter className="bg-black/40 p-6 border-t border-white/5 flex justify-between items-center">
+                      <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setShowHint(true)} 
+                          disabled={answerStatus !== 'unanswered' || showHint || !currentQuestion.explanation} 
+                          className={cn(
+                              "text-yellow-500/70 hover:text-yellow-500 hover:bg-yellow-500/10 transition-all",
+                              (answerStatus !== 'unanswered' || showHint) && "opacity-0"
+                          )}
+                      >
+                          <Lightbulb className="w-4 h-4 mr-2" /> HINT
+                      </Button>
+
+                      <AnimatePresence>
+                          {showHint && answerStatus === 'unanswered' && (
+                              <motion.div 
+                                  initial={{ opacity: 0, y: 10 }} 
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="absolute bottom-20 left-8 right-8 bg-yellow-950/90 border border-yellow-500/30 p-4 rounded-lg text-yellow-200 text-sm shadow-xl backdrop-blur-md z-20"
+                              >
+                                  <div className="font-bold flex items-center gap-2 mb-1"><Lightbulb className="w-4 h-4" /> Hint Decrypted:</div>
+                                  {currentQuestion.explanation}
+                              </motion.div>
+                          )}
+                      </AnimatePresence>
+
+                      <Button 
+                          onClick={handleNext} 
+                          disabled={answerStatus === 'unanswered'} 
+                          className="bg-white text-black hover:bg-white/90 font-mono text-xs uppercase font-bold px-8 h-10"
+                      >
+                          {currentQuestionIndex === quizQuestions.length - 1 ? 'FINALIZE' : 'NEXT_QUERY'} <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
+                      </Button>
+                  </CardFooter>
+                </Card>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

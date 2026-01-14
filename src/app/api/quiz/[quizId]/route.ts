@@ -5,21 +5,20 @@ import { prisma } from '@/lib/prisma';
 import { Question, Quiz, ApiResponse } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
-// --- NEWLY ADDED GET HANDLER ---
+// --- GET HANDLER ---
 export async function GET(
   request: NextRequest,
   { params }: { params: { quizId: string } }
 ) {
   try {
     // 1. Authenticate the user
-    // The client-side (page.tsx) SWR hook only runs if a session exists,
-    // so this route should require authentication.
     const user = await requireAuth(request);
     const { quizId } = params;
 
-    if (!quizId) {
+    // FIX: Explicitly check for "null" string or undefined to prevent 500 crashes
+    if (!quizId || quizId === 'null' || quizId === 'undefined') {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Quiz ID is required.' },
+        { success: false, error: 'Quiz ID is missing or invalid.' },
         { status: 400 }
       );
     }
@@ -63,9 +62,7 @@ export async function GET(
         share_link: quizData.share_link || null,
         time_limit_minutes: quizData.time_limit_minutes || null,
         created_at: quizData.createdAt?.toISOString() || '',
-        // We rename createdAt to created_at to match the type
-        // but the client-side type might be `createdAt`. Let's just send the object.
-      } as Quiz, // Cast to the Quiz type (assuming createdAt maps ok)
+      } as Quiz, 
       questions: questions.map((q) => ({
         ...q,
         // Ensure options/prompts are null if undefined, and serialize dates
@@ -94,7 +91,6 @@ export async function GET(
         questions: responseData.questions
     };
 
-
     return NextResponse.json<ApiResponse<QuizData>>({
       success: true,
       data: finalResponseData,
@@ -103,9 +99,10 @@ export async function GET(
     if (error instanceof Response) return error; // Auth error
     console.error(`Error fetching quiz ${params.quizId}:`, error);
 
+    // Handle Prisma errors regarding invalid UUIDs
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2023'
+      (error.code === 'P2023' || error.code === '22P02')
     ) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid Quiz ID format.' },
@@ -119,8 +116,8 @@ export async function GET(
     );
   }
 }
-// --- END NEW GET HANDLER ---
 
+// --- PUT HANDLER ---
 export async function PUT(
   request: NextRequest,
   { params }: { params: { quizId: string } }
@@ -150,13 +147,12 @@ export async function PUT(
     }
 
     // --- Verify Ownership ---
-    // Use findFirst to check for ID *and* userId
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: quizId,
         userId: user.id,
       },
-      select: { id: true }, // Just need to know if it exists and is owned by user
+      select: { id: true },
     });
 
     if (!quiz) {
@@ -167,8 +163,6 @@ export async function PUT(
     }
 
     // --- Prepare Question data for creation ---
-    // This strips any 'id' or 'quiz_id' fields from the incoming questions,
-    // as we want Prisma to generate new IDs.
     const questionsToCreate: Prisma.questionsCreateManyInput[] = questions.map(
       (q) => ({
         question_text: q.question_text,
@@ -182,8 +176,6 @@ export async function PUT(
     );
 
     // --- Database Transaction ---
-    // This ensures that if *any* part fails, the whole operation is rolled back.
-    // We update the title, delete all old questions, and create all new questions.
     const transaction = await prisma.$transaction([
       // 1. Update the quiz title
       prisma.quiz.update({
@@ -202,13 +194,11 @@ export async function PUT(
       prisma.questions.createMany({
         data: questionsToCreate.map((q) => ({
           ...q,
-          quiz_id: quizId, // Manually link each new question to the quiz
+          quiz_id: quizId,
         })),
       }),
     ]);
 
-    // The result of the transaction is an array of results
-    // We can return the updated quiz title
     const updatedQuiz = transaction[0];
 
     return NextResponse.json<ApiResponse<Quiz>>({
@@ -225,11 +215,10 @@ export async function PUT(
     });
   } catch (error) {
     if (error instanceof Response) {
-      return error; // Handle requireAuth 401
+      return error;
     }
     console.error('Error updating quiz:', error);
 
-    // Handle Prisma errors
     if (error instanceof Prisma.PrismaClientValidationError) {
       return NextResponse.json(
         { success: false, error: 'Invalid data format for questions.' },
@@ -242,9 +231,9 @@ export async function PUT(
       { status: 500 }
     );
   }
-} // <-- The PUT function ends here
+}
 
-// --- The DELETE function starts here, *after* the PUT function ---
+// --- DELETE HANDLER ---
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { quizId: string } }
@@ -261,11 +250,6 @@ export async function DELETE(
     }
 
     // --- Secure Deletion using Prisma ---
-    // We use deleteMany which allows a compound `where` clause.
-    // This ensures we only delete the quiz if the ID matches AND
-    // the quiz is owned by the currently authenticated user.
-    // The `onDelete: Cascade` in your schema.prisma will handle
-    // deleting all associated questions and quiz_attempts.
     const deleteResult = await prisma.quiz.deleteMany({
       where: {
         id: quizId,
@@ -273,31 +257,26 @@ export async function DELETE(
       },
     });
 
-    // Check if any quiz was actually deleted
     if (deleteResult.count === 0) {
-      // This means no quiz matched both the ID and the user ID
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Quiz not found or access denied.' },
         { status: 404 }
       );
     }
 
-    // --- Success ---
     return NextResponse.json<ApiResponse>({
       success: true,
       message: 'Quiz deleted successfully.',
     });
   } catch (error) {
     if (error instanceof Response) {
-      return error; // Handle requireAuth 401
+      return error;
     }
 
     console.error('Error deleting quiz:', error);
 
-    // Handle specific Prisma errors, like an invalid UUID format
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2023') {
-        // Invalid UUID
         return NextResponse.json<ApiResponse>(
           { success: false, error: 'Invalid Quiz ID format.' },
           { status: 400 }
@@ -310,4 +289,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} // <-- The DELETE function ends here
+}
