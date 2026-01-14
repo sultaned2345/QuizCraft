@@ -32,10 +32,28 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
     setStatus('Initializing AI...');
 
     try {
+      // 1. Validate Inputs
       if (!documentId) throw new Error("Document ID is required.");
 
-      // DEBUG: Log the payload to catch "undefined" or object issues
-      console.log(`[TurboGenerator] Starting ${type} job for doc: "${documentId}"`);
+      const cleanedId = documentId.trim();
+      
+      // UUID Regex (V4 and others)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      // Check if it's NOT a UUID (and likely text content)
+      if (!uuidRegex.test(cleanedId)) {
+        console.error("❌ [TurboGenerator Error] Invalid Document ID format.");
+        console.error("Received:", cleanedId.substring(0, 100) + "...");
+        console.error("Expected a UUID (e.g., '550e8400-e29b-41d4-a716-446655440000')");
+        
+        throw new Error(
+            cleanedId.length > 50 
+            ? "Implementation Error: You are passing file CONTENT instead of the document ID." 
+            : `Invalid Document ID: ${cleanedId}`
+        );
+      }
+
+      console.log(`[TurboGenerator] Starting ${type} job for ID: ${cleanedId}`);
 
       setProgress(20);
       setStatus('Analyzing content...');
@@ -47,7 +65,7 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
         body: JSON.stringify({
-          documentId: documentId?.trim(), // Ensure clean ID on client side too
+          documentId: cleanedId, 
           jobType: type,
           metadata
         })
@@ -64,6 +82,7 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       setStatus('Generating magic...');
       setProgress(40);
 
+      // Polling Logic
       const pollInterval = setInterval(async () => {
          try {
             const statusRes = await fetch(`/api/generation-jobs/process?id=${jobId}`, {
@@ -118,7 +137,7 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       } else {
         toast({
             title: "Generation failed",
-            description: error.message || "An unexpected error occurred.",
+            description: error.message,
             variant: "destructive"
         });
       }

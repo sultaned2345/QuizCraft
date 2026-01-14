@@ -22,26 +22,27 @@ export async function POST(req: Request) {
       );
     }
 
-    // CLEANUP: Ensure documentId is a string and trim whitespace
     if (typeof documentId === 'string') {
         documentId = documentId.trim();
     }
 
-    // Fix: Use a more permissive UUID regex (ignores specific version/variant bits)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     
-    // Check type explicitly to catch objects/arrays passed by mistake
     if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
-       const receivedValue = typeof documentId === 'string' ? documentId : typeof documentId;
-       console.error(`[Job Validation] Invalid UUID received: "${receivedValue}"`);
+       // FIX: Truncate the log to prevent massive console output
+       const invalidVal = String(documentId);
+       const truncatedVal = invalidVal.length > 50 
+         ? `${invalidVal.substring(0, 50)}... [length: ${invalidVal.length}]` 
+         : invalidVal;
+
+       console.error(`[Job Validation] Invalid UUID received: "${truncatedVal}"`);
        
        return NextResponse.json(
-        { error: `Invalid documentId format. Must be a valid UUID. Received: "${receivedValue}"` }, 
+        { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
       );
     }
 
-    // Enforce valid job types to prevent bad data
     const validJobTypes = ['quiz', 'flashcard', 'summary', 'note'];
     if (!validJobTypes.includes(jobType)) {
       return NextResponse.json(

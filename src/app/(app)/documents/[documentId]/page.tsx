@@ -7,23 +7,28 @@ import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, BookOpen, BrainCircuit, Layers, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, BrainCircuit, Layers, Loader2, Sparkles } from 'lucide-react';
 
-// Sub-components (Ensure these are exported correctly from your project)
-// You may need to create simple wrappers if these components expect different props.
 import { NoteEditor } from '@/components/NoteEditor'; 
 import { PdfViewer } from '@/components/PdfViewer';
-// Assuming you have list components, otherwise we can build simple ones
 import { QuizzesClientComponent } from '@/app/(app)/quizzes/QuizzesClientComponent'; 
 import { FlashcardsClientComponent } from '@/app/(app)/flashcards/FlashcardsClientComponent';
+import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function DocumentHubPage() {
   const { documentId } = useParams();
   const { session } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("notes");
+  
+  const { generate, isGenerating, status } = useTurboGenerator();
 
-  // Fetch Document Metadata
   const { data: docData, isLoading } = useSWR(
     session && documentId ? `/api/documents/${documentId}` : null,
     (url) => fetcher(url, session?.access_token || '')
@@ -43,6 +48,13 @@ export default function DocumentHubPage() {
     return <div className="p-8 text-center">Document not found</div>;
   }
 
+  const handleTurboGen = (type: 'quiz' | 'flashcards' | 'notes') => {
+      // FIX: Pass the ID, not the content. The server fetches content using the ID.
+      // Ensure documentId is a string (handle array case just in case of Next.js params quirk)
+      const docId = Array.isArray(documentId) ? documentId[0] : documentId;
+      generate(type, docId); 
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       
@@ -56,6 +68,30 @@ export default function DocumentHubPage() {
             <h1 className="text-lg font-semibold truncate max-w-md">{document.file_name}</h1>
             <p className="text-xs text-muted-foreground">{document.file_type} • {new Date(document.created_at).toLocaleDateString()}</p>
           </div>
+        </div>
+
+        {/* Turbo Actions */}
+        <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground mr-2">{status !== 'idle' && status}</span>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={isGenerating} className="gap-2">
+                        {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        Generate
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleTurboGen('quiz')}>
+                        New Quiz
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleTurboGen('flashcards')}>
+                        Flashcard Deck
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleTurboGen('notes')}>
+                        Summarize Notes
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
       </div>
 
@@ -105,8 +141,6 @@ export default function DocumentHubPage() {
 
           {/* TAB 2: QUIZZES */}
           <TabsContent value="quizzes" className="flex-1 m-0 p-6 overflow-y-auto data-[state=inactive]:hidden">
-             {/* Pass documentId to filter quizzes for this specific doc */}
-             {/* If your QuizzesClientComponent doesn't support props yet, we will need to refactor it next. */}
              <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                    <h2 className="text-xl font-semibold">Practice Tests</h2>
@@ -114,8 +148,7 @@ export default function DocumentHubPage() {
                      Generate New Quiz
                    </Button>
                 </div>
-                {/* Placeholder: Replace with <QuizzesClientComponent documentId={document.id} /> */}
-                <QuizzesClientComponent documentId={document.id} />
+                <QuizzesClientComponent />
              </div>
           </TabsContent>
 
@@ -128,8 +161,7 @@ export default function DocumentHubPage() {
                      Generate Deck
                    </Button>
                 </div>
-                {/* Placeholder: Replace with <FlashcardsClientComponent documentId={document.id} /> */}
-                <FlashcardsClientComponent documentId={document.id} />
+                <FlashcardsClientComponent />
              </div>
           </TabsContent>
 
