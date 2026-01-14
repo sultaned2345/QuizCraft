@@ -1,19 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, BookOpen, BrainCircuit, Layers, Loader2, Sparkles } from 'lucide-react';
-
-import { NoteEditor } from '@/components/NoteEditor'; 
-import { PdfViewer } from '@/components/PdfViewer';
-import { QuizzesClientComponent } from '@/app/(app)/quizzes/QuizzesClientComponent'; 
-import { FlashcardsClientComponent } from '@/app/(app)/flashcards/FlashcardsClientComponent';
-import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+import { 
+    ArrowLeft, 
+    BookOpen, 
+    BrainCircuit, 
+    Layers, 
+    Loader2, 
+    Sparkles,
+    MoreVertical 
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +23,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+import { NoteEditor } from '@/components/NoteEditor'; 
+import { PdfViewer } from '@/components/PdfViewer';
+import { QuizzesClientComponent } from '@/app/(app)/quizzes/QuizzesClientComponent'; 
+import { FlashcardsClientComponent } from '@/app/(app)/flashcards/FlashcardsClientComponent';
+
+// 1. Import the hook
+import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+
 export default function DocumentHubPage() {
   const { documentId } = useParams();
   const { session } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("notes");
-  
+
+  // 2. Initialize the hook
   const { generate, isGenerating, status } = useTurboGenerator();
 
   const { data: docData, isLoading } = useSWR(
@@ -48,11 +59,14 @@ export default function DocumentHubPage() {
     return <div className="p-8 text-center">Document not found</div>;
   }
 
+  // 3. Add Handler
   const handleTurboGen = (type: 'quiz' | 'flashcards' | 'notes') => {
-      // FIX: Pass the ID, not the content. The server fetches content using the ID.
-      // Ensure documentId is a string (handle array case just in case of Next.js params quirk)
-      const docId = Array.isArray(documentId) ? documentId[0] : documentId;
-      generate(type, docId); 
+      // CRITICAL FIX: Pass 'document.id' (UUID), NEVER 'document.content'
+      if (document?.id) {
+          generate(type, document.id);
+      } else {
+          console.error("Missing document ID");
+      }
   };
 
   return (
@@ -70,25 +84,31 @@ export default function DocumentHubPage() {
           </div>
         </div>
 
-        {/* Turbo Actions */}
+        {/* 4. Turbo Actions UI */}
         <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground mr-2">{status !== 'idle' && status}</span>
+            {/* Show Status Text if doing something */}
+            {status !== 'idle' && (
+                <span className="text-xs text-muted-foreground font-mono mr-2 animate-pulse">
+                    {status}
+                </span>
+            )}
+            
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button disabled={isGenerating} className="gap-2">
+                    <Button disabled={isGenerating} className="gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0">
                         {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        Generate
+                        Magic Generate
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleTurboGen('quiz')}>
-                        New Quiz
+                        <BrainCircuit className="w-4 h-4 mr-2" /> New Quiz
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleTurboGen('flashcards')}>
-                        Flashcard Deck
+                        <Layers className="w-4 h-4 mr-2" /> Flashcard Deck
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleTurboGen('notes')}>
-                        Summarize Notes
+                        <BookOpen className="w-4 h-4 mr-2" /> Summarize Notes
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -113,22 +133,16 @@ export default function DocumentHubPage() {
             </TabsList>
           </div>
 
-          {/* TAB 1: NOTES (Split View: PDF + Editor) */}
+          {/* TAB 1: NOTES */}
           <TabsContent value="notes" className="flex-1 m-0 h-full overflow-hidden data-[state=inactive]:hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 h-full">
-              
-              {/* Left: Source Material (PDF or Video) */}
               <div className="h-full border-r bg-zinc-100 dark:bg-zinc-900 overflow-hidden relative">
                  {document.file_path ? (
                     <PdfViewer url={document.publicUrl || ''} onTextSelect={() => {}} />
                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                       Source content not available
-                    </div>
+                    <div className="flex items-center justify-center h-full text-muted-foreground">Source content not available</div>
                  )}
               </div>
-
-              {/* Right: AI Notes Editor */}
               <div className="h-full overflow-y-auto bg-background">
                  <NoteEditor 
                     initialContent={document.content || ''} 
@@ -144,8 +158,8 @@ export default function DocumentHubPage() {
              <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                    <h2 className="text-xl font-semibold">Practice Tests</h2>
-                   <Button onClick={() => router.push(`/quiz/generate?docId=${document.id}`)}>
-                     Generate New Quiz
+                   <Button variant="outline" onClick={() => handleTurboGen('quiz')} disabled={isGenerating}>
+                     <Sparkles className="w-4 h-4 mr-2" /> Auto-Generate
                    </Button>
                 </div>
                 <QuizzesClientComponent />
@@ -157,8 +171,8 @@ export default function DocumentHubPage() {
              <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                    <h2 className="text-xl font-semibold">Flashcard Decks</h2>
-                   <Button onClick={() => router.push(`/flashcards/generate?docId=${document.id}`)}>
-                     Generate Deck
+                   <Button variant="outline" onClick={() => handleTurboGen('flashcards')} disabled={isGenerating}>
+                     <Sparkles className="w-4 h-4 mr-2" /> Auto-Generate
                    </Button>
                 </div>
                 <FlashcardsClientComponent />
