@@ -1,4 +1,4 @@
-// src/app/(app)/documents/page.tsx
+// src/app/(app)/dashboard/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -9,11 +9,9 @@ import {
   Search, 
   Filter, 
   FileText, 
-  BrainCircuit, 
   StickyNote, 
-  Layers, 
+  PenTool, // Icon for Essay Grader
   Loader2, 
-  Plus,
   MoreVertical,
   Calendar,
   Trash2
@@ -21,7 +19,6 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,32 +29,35 @@ import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function LibraryPage() {
+export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string | null>(null); // null = all
   
-  // Debounce search could be added here, currently just passing query directly for simplicity
+  // Fetch data from library API
   const { data, isLoading, mutate } = useSWR(
     `/api/library?q=${searchQuery}${activeFilter ? `&type=${activeFilter}` : ''}`, 
     fetcher
   );
 
-  const content = data?.data || [];
+  // Filter out any leftover quizzes/decks from the "All" view
+  const rawContent = data?.data || [];
+  const content = rawContent.filter((item: any) => 
+    item.type !== 'quiz' && item.type !== 'deck'
+  );
 
+  // Updated Filters: Removed Quiz/Flashcard, Added Essay
   const filters = [
     { id: null, label: 'All', icon: null },
     { id: 'document', label: 'Documents', icon: FileText },
-    { id: 'quiz', label: 'Quizzes', icon: BrainCircuit },
     { id: 'note', label: 'Notes', icon: StickyNote },
-    { id: 'deck', label: 'Flashcards', icon: Layers },
+    { id: 'essay', label: 'Essays', icon: PenTool }, 
   ];
 
   const getIcon = (type: string) => {
     switch (type) {
       case 'document': return <FileText className="w-5 h-5 text-blue-500" />;
-      case 'quiz': return <BrainCircuit className="w-5 h-5 text-purple-500" />;
       case 'note': return <StickyNote className="w-5 h-5 text-yellow-500" />;
-      case 'deck': return <Layers className="w-5 h-5 text-green-500" />;
+      case 'essay': return <PenTool className="w-5 h-5 text-pink-500" />;
       default: return <FileText className="w-5 h-5" />;
     }
   };
@@ -65,9 +65,8 @@ export default function LibraryPage() {
   const getUrl = (item: any) => {
     switch (item.type) {
       case 'document': return `/documents/${item.id}`;
-      case 'quiz': return `/quiz/${item.id}`;
       case 'note': return `/notes/${item.id}`;
-      case 'deck': return `/flashcards/${item.id}`; // Assuming deck page
+      case 'essay': return `/essay-grader/${item.id}`; // Assuming individual essay view exists
       default: return '#';
     }
   };
@@ -78,8 +77,8 @@ export default function LibraryPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Library</h1>
-          <p className="text-muted-foreground mt-1">Manage all your study materials in one place.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Manage your documents, notes, and essays.</p>
         </div>
         <AddDocumentDialog onUploadSuccess={() => mutate()} />
       </div>
@@ -119,7 +118,7 @@ export default function LibraryPage() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading your library...</p>
+          <p className="text-sm text-muted-foreground">Loading your content...</p>
         </div>
       ) : content.length === 0 ? (
         <div className="text-center py-20 border-2 border-dashed border-border/50 rounded-xl bg-muted/5">

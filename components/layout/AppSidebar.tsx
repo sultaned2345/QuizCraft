@@ -1,77 +1,84 @@
-// src/components/layout/AppSidebar.tsx
 'use client';
 
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { 
   LayoutDashboard, 
   FileText, 
-  BrainCircuit, 
-  Zap, 
-  Settings, 
-  Layers,
-  GraduationCap
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-const navigation = [
-  { name: 'Workspace', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Library', href: '/documents', icon: FileText },
-  { name: 'Study Plans', href: '/projects', icon: Layers },
-  { name: 'Flashcards', href: '/flashcards', icon: Zap },
-  { name: 'Quizzes', href: '/quizzes', icon: BrainCircuit },
-];
+  StickyNote, 
+  PenTool, // New Icon
+  Settings,
+  LogOut,
+  User
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const pathname = usePathname();
 
-  return (
-    <div className="flex flex-col h-full w-[250px] border-r border-border bg-card text-card-foreground transition-colors duration-300">
-      
-      {/* Logo Area */}
-      <div className="p-6 pb-2">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <GraduationCap className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-xl tracking-tight">QuizCraft</span>
-        </div>
-      </div>
+  const routes = [
+    {
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      href: "/dashboard",
+      active: pathname === "/dashboard",
+    },
+    {
+      label: "Documents",
+      icon: FileText,
+      href: "/documents",
+      active: pathname.startsWith("/documents"),
+    },
+    {
+      label: "Notes",
+      icon: StickyNote,
+      href: "/notes",
+      active: pathname.startsWith("/notes"),
+    },
+    // REPLACED: Removed Quizzes & Flashcards, Added Essay Grader
+    {
+      label: "Essay Grader",
+      icon: PenTool,
+      href: "/essay-grader",
+      active: pathname.startsWith("/essay-grader"),
+    },
+  ];
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href;
-          return (
+  return (
+    <div className="space-y-4 py-4 flex flex-col h-full bg-secondary/10 border-r border-border">
+      <div className="px-3 py-2">
+        <Link href="/dashboard" className="flex items-center pl-3 mb-14">
+           {/* You can add your logo here */}
+           <h1 className="text-2xl font-bold">QuizCraft</h1>
+        </Link>
+        <div className="space-y-1">
+          {routes.map((route) => (
             <Link
-              key={item.name}
-              href={item.href}
+              key={route.href}
+              href={route.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
-                isActive 
-                  ? "bg-primary/10 text-primary shadow-sm" 
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-primary hover:bg-primary/10 rounded-lg transition",
+                route.active ? "text-primary bg-primary/10" : "text-muted-foreground"
               )}
             >
-              <item.icon className={cn(
-                "w-4 h-4 transition-colors",
-                isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-              )} />
-              {item.name}
+              <div className="flex items-center flex-1">
+                <route.icon className={cn("h-5 w-5 mr-3", route.active ? "text-primary" : "text-muted-foreground")} />
+                {route.label}
+              </div>
             </Link>
-          );
-        })}
-      </nav>
-
-      {/* Footer / Settings Link */}
-      <div className="p-4 border-t border-border mt-auto">
-        <Link 
-          href="/account"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all"
-        >
-          <Settings className="w-4 h-4" />
-          Settings
-        </Link>
+          ))}
+        </div>
+      </div>
+      
+      {/* Bottom Actions */}
+      <div className="mt-auto px-3 py-2 space-y-1">
+         <Link href="/account">
+            <Button variant="ghost" className="w-full justify-start gap-3">
+               <Settings className="h-5 w-5" />
+               Settings
+            </Button>
+         </Link>
       </div>
     </div>
   );

@@ -43,8 +43,6 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       // Check if it's NOT a UUID (and likely text content)
       if (!uuidRegex.test(cleanedId)) {
         console.error("❌ [TurboGenerator Error] Invalid Document ID format.");
-        console.error("Received:", cleanedId.substring(0, 100) + "...");
-        console.error("Expected a UUID (e.g., '550e8400-e29b-41d4-a716-446655440000')");
         
         throw new Error(
             cleanedId.length > 50 
@@ -58,7 +56,8 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       setProgress(20);
       setStatus('Analyzing content...');
       
-      const response = await fetch('/api/generation-jobs/start', {
+      // 2. Start Job (Create Record)
+      const startResponse = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -71,65 +70,60 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
         })
       });
 
-      if (!response.ok) {
-        if (response.status === 401) throw new Error("Authentication failed. Please sign in.");
-        const errorData = await response.json();
+      if (!startResponse.ok) {
+        if (startResponse.status === 401) throw new Error("Authentication failed. Please sign in.");
+        const errorData = await startResponse.json();
         throw new Error(errorData.error || 'Failed to start generation');
       }
 
-      const { jobId } = await response.json();
+      const { jobId } = await startResponse.json();
       
       setStatus('Generating magic...');
       setProgress(40);
 
-      // Polling Logic
-      const pollInterval = setInterval(async () => {
-         try {
-            const statusRes = await fetch(`/api/generation-jobs/process?id=${jobId}`, {
-                headers: { 'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' }
-            });
-            
-            if (!statusRes.ok) return;
-            
-            const statusData = await statusRes.json();
-            
-            if (statusData.status === 'completed' || statusData.status === 'success') {
-                clearInterval(pollInterval);
-                setProgress(100);
-                setStatus('Complete!');
-                
-                if (options.onSuccess) {
-                    options.onSuccess(statusData.resultId || statusData.outputId, type);
-                } else {
-                    const resultId = statusData.resultId || statusData.outputId;
-                    if (type === 'quiz') router.push(`/quiz/${resultId}`);
-                    if (type === 'notes') router.push(`/notes/${resultId}`);
-                    if (type === 'flashcards') router.push(`/flashcards/${resultId}`);
-                }
-                setIsGenerating(false);
-            } else if (statusData.status === 'failed') {
-                clearInterval(pollInterval);
-                throw new Error(statusData.error || 'Generation failed on server');
-            } else {
-                setProgress(prev => Math.min(prev + 5, 90));
-            }
-         } catch (e) {
-             // Ignore poll errors
-         }
-      }, 2000);
+      // 3. Process Job (Synchronous Execution)
+      // Since the server route processes the job synchronously, we await the POST request.
+      // We use a timer just to simulate visual progress while waiting.
+      const progressTimer = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + 5;
+        });
+      }, 1000);
 
-      setTimeout(() => {
-          if (isGenerating) {
-             clearInterval(pollInterval);
-             setIsGenerating(false);
-             setStatus('Timeout');
-             toast({ title: "Generation timed out", variant: "destructive" });
-          }
-      }, 60000);
+      const processResponse = await fetch('/api/generation-jobs/process', {
+        method: 'POST', // Fix: Changed from default GET to POST
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
+        },
+        body: JSON.stringify({ jobId }) // Fix: Send ID in body, not query param
+      });
+
+      clearInterval(progressTimer);
+
+      if (!processResponse.ok) {
+         const errorData = await processResponse.json();
+         throw new Error(errorData.error || 'Generation process failed');
+      }
+
+      const result = await processResponse.json();
+
+      // 4. Completion
+      setProgress(100);
+      setStatus('Complete!');
+      
+      if (options.onSuccess) {
+          options.onSuccess(result.outputId, type);
+      } else {
+          const resultId = result.outputId;
+          if (type === 'quiz') router.push(`/quiz/${resultId}`);
+          if (type === 'notes') router.push(`/notes/${resultId}`);
+          if (type === 'flashcards') router.push(`/flashcards/${resultId}`);
+      }
 
     } catch (error: any) {
       console.error('Generation failed', error);
-      setIsGenerating(false);
       setStatus('error');
       
       if (options.onError) {
@@ -141,8 +135,10 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
             variant: "destructive"
         });
       }
+    } finally {
+      setIsGenerating(false);
     }
-  }, [router, toast, options, isGenerating, session]);
+  }, [router, toast, options, session]);
 
   return {
     generate,
