@@ -25,10 +25,10 @@ import {
   Plus, 
   Loader2, 
   FileText, 
-  Link as LinkIcon, 
-  Sparkles,
-  Type,
-  X
+  Sparkles, 
+  Type, 
+  X,
+  Link as LinkIcon 
 } from 'lucide-react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { useToast } from '@/hooks/use-toast';
@@ -180,7 +180,7 @@ export function AddDocumentDialog({
         throw new Error('Please provide content to process.');
       }
 
-      // 2. Save Document to Database
+      // 2. Save Document to Database to get ID
       setProcessStatus('Saving to library...');
       
       const saveHeaders: Record<string, string> = {
@@ -211,16 +211,16 @@ export function AddDocumentDialog({
       }
 
       // 3. Start ALL Generations (Parallel)
-      // We launch all three jobs. The hook handles the API calls.
+      // Using singular types ('note', 'flashcard') to match backend expectation
       setProcessStatus('Igniting engines...');
       
       await Promise.all([
         generate('quiz', documentId, { fileName: title }),
-        generate('notes', documentId, { fileName: title }),
-        generate('flashcards', documentId, { fileName: title })
+        generate('note' as any, documentId, { fileName: title }),     
+        generate('flashcard' as any, documentId, { fileName: title }) 
       ]);
 
-      // 4. Success & Redirect to Workspace
+      // 4. Cleanup & Success
       toast({ 
         title: "Workspace Ready", 
         description: "Redirecting you to your new study session..." 
@@ -229,6 +229,7 @@ export function AddDocumentDialog({
       if (onUploadComplete) onUploadComplete();
       if (setIsOpen) setIsOpen(false);
       
+      // Redirect to the Workspace page
       router.push(`/documents/${documentId}`);
       
     } catch (error: any) {
@@ -270,7 +271,7 @@ export function AddDocumentDialog({
             Create Study Set
           </DialogTitle>
           <DialogDescription>
-            Upload content to generate your full study workspace.
+            Upload content to generate Quizzes, Notes, and Flashcards instantly.
           </DialogDescription>
         </DialogHeader>
 
