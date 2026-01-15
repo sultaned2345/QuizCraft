@@ -6,58 +6,47 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { 
-  Search, 
-  Filter, 
+  BookOpen, 
+  BrainCircuit, 
   FileText, 
-  StickyNote, 
-  PenTool, // Icon for Essay Grader
-  Loader2, 
-  MoreVertical,
-  Calendar,
-  Trash2
+  LayoutDashboard, 
+  PenTool, 
+  Plus, 
+  Sparkles, 
+  StickyNote,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { AddDocumentDialog } from '@/components/AddDocumentDialog';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { AddDocumentDialog } from '@/components/AddDocumentDialog'; // ✅ EXCLUSIVE USAGE
+import { Skeleton } from '@/components/ui/skeleton';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function DashboardPage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string | null>(null); // null = all
+  const { data, isLoading, mutate } = useSWR('/api/library', fetcher);
   
-  // Fetch data from library API
-  const { data, isLoading, mutate } = useSWR(
-    `/api/library?q=${searchQuery}${activeFilter ? `&type=${activeFilter}` : ''}`, 
-    fetcher
-  );
+  const allContent = data?.data || [];
+  
+  // 1. Stats
+  const stats = {
+    documents: allContent.filter((i: any) => i.type === 'document').length,
+    quizzes: allContent.filter((i: any) => i.type === 'quiz').length,
+    notes: allContent.filter((i: any) => i.type === 'note').length,
+  };
 
-  // Filter out any leftover quizzes/decks from the "All" view
-  const rawContent = data?.data || [];
-  const content = rawContent.filter((item: any) => 
-    item.type !== 'quiz' && item.type !== 'deck'
-  );
-
-  // Updated Filters: Removed Quiz/Flashcard, Added Essay
-  const filters = [
-    { id: null, label: 'All', icon: null },
-    { id: 'document', label: 'Documents', icon: FileText },
-    { id: 'note', label: 'Notes', icon: StickyNote },
-    { id: 'essay', label: 'Essays', icon: PenTool }, 
-  ];
+  // 2. Recents (Top 3)
+  const recentItems = [...allContent]
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 3);
 
   const getIcon = (type: string) => {
     switch (type) {
       case 'document': return <FileText className="w-5 h-5 text-blue-500" />;
       case 'note': return <StickyNote className="w-5 h-5 text-yellow-500" />;
-      case 'essay': return <PenTool className="w-5 h-5 text-pink-500" />;
+      case 'quiz': return <BrainCircuit className="w-5 h-5 text-purple-500" />;
       default: return <FileText className="w-5 h-5" />;
     }
   };
@@ -66,120 +55,133 @@ export default function DashboardPage() {
     switch (item.type) {
       case 'document': return `/documents/${item.id}`;
       case 'note': return `/notes/${item.id}`;
-      case 'essay': return `/essay-grader/${item.id}`; // Assuming individual essay view exists
+      case 'quiz': return `/quiz/${item.id}`;
+      case 'deck': return `/flashcards/${item.id}`;
       default: return '#';
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-8 max-w-7xl">
+        <Skeleton className="h-12 w-48 mb-6" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+           {[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-8 max-w-7xl animate-in fade-in duration-500">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* 1. Header & Primary Action */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/40 pb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Manage your documents, notes, and essays.</p>
-        </div>
-        <AddDocumentDialog onUploadSuccess={() => mutate()} />
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-col md:flex-row gap-4 items-center bg-card/50 p-2 rounded-xl border border-border/40 backdrop-blur-sm">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search title..." 
-            className="pl-9 bg-background/50 border-transparent focus:border-primary transition-all"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <LayoutDashboard className="w-8 h-8 text-primary" /> 
+            Command Center
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Track your progress and start new learning sessions.
+          </p>
         </div>
         
-        <div className="flex gap-1 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-          {filters.map((f) => {
-            const Icon = f.icon;
-            return (
-              <Button
-                key={f.label}
-                variant={activeFilter === f.id ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveFilter(f.id)}
-                className={`gap-2 rounded-full px-4 ${activeFilter === f.id ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'text-muted-foreground'}`}
-              >
-                {Icon && <Icon className="w-4 h-4" />}
-                {f.label}
-              </Button>
-            );
-          })}
-        </div>
+        {/* ✅ THE MAIN "CREATE" BUTTON */}
+        <AddDocumentDialog onUploadSuccess={() => mutate()}>
+            <Button size="lg" className="gap-2 shadow-lg shadow-primary/20">
+                <Plus className="w-5 h-5" /> New Study Set
+            </Button>
+        </AddDocumentDialog>
       </div>
 
-      {/* Content Grid */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading your content...</p>
-        </div>
-      ) : content.length === 0 ? (
-        <div className="text-center py-20 border-2 border-dashed border-border/50 rounded-xl bg-muted/5">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <Filter className="w-8 h-8 text-muted-foreground/50" />
-          </div>
-          <h3 className="text-lg font-semibold">No content found</h3>
-          <p className="text-muted-foreground mb-6">
-            {searchQuery ? "Try adjusting your search or filters." : "Upload a document to get started!"}
-          </p>
-          {!searchQuery && <AddDocumentDialog onUploadSuccess={() => mutate()} />}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {content.map((item: any) => (
-            <div 
-              key={`${item.type}-${item.id}`}
-              className="group relative flex flex-col bg-card border border-border/50 rounded-xl hover:shadow-md transition-all duration-200 hover:-translate-y-1 overflow-hidden"
-            >
-              <Link href={getUrl(item)} className="absolute inset-0 z-0" />
-              
-              <div className="p-4 flex items-start justify-between gap-3 relative z-10 pointer-events-none">
-                <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center shrink-0 border border-primary/10">
-                  {getIcon(item.type)}
-                </div>
-                {/* Actions Dropdown */}
-                <div className="pointer-events-auto">
-                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 text-muted-foreground hover:text-foreground">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer">
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* 2. Left Column: Stats & Quick Actions */}
+        <div className="space-y-6">
+            {/* Quick Actions Card */}
+            <Card className="bg-gradient-to-br from-primary/5 via-primary/10 to-transparent border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary" /> 
+                    Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                 <AddDocumentDialog onUploadSuccess={() => mutate()}>
+                    <Button variant="secondary" className="w-full justify-start bg-background/50 hover:bg-background">
+                        <FileText className="w-4 h-4 mr-2 text-blue-500" /> Upload Document
+                    </Button>
+                 </AddDocumentDialog>
+                 <Button variant="secondary" className="w-full justify-start bg-background/50 hover:bg-background" asChild>
+                    <Link href="/create">
+                        <BrainCircuit className="w-4 h-4 mr-2 text-purple-500" /> Generate Quiz
+                    </Link>
+                 </Button>
+                 <Button variant="secondary" className="w-full justify-start bg-background/50 hover:bg-background" asChild>
+                    <Link href="/notes/new">
+                        <PenTool className="w-4 h-4 mr-2 text-pink-500" /> Write Notes
+                    </Link>
+                 </Button>
+              </CardContent>
+            </Card>
 
-              <div className="px-4 pb-4 flex-1 flex flex-col pointer-events-none">
-                <h3 className="font-semibold text-base line-clamp-2 mb-1 group-hover:text-primary transition-colors">
-                  {item.title}
-                </h3>
-                
-                <div className="mt-auto pt-4 flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="capitalize bg-muted px-2 py-0.5 rounded-md font-medium">
-                    {item.type}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-                  </span>
-                </div>
-              </div>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 gap-4">
+                <Card>
+                    <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold">{stats.documents}</span>
+                        <span className="text-xs text-muted-foreground uppercase font-medium mt-1">Docs</span>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold">{stats.quizzes}</span>
+                        <span className="text-xs text-muted-foreground uppercase font-medium mt-1">Quizzes</span>
+                    </CardContent>
+                </Card>
             </div>
-          ))}
         </div>
-      )}
+
+        {/* 3. Right Column: Recent Activity */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Clock className="w-5 h-5 text-muted-foreground" />
+              Jump Back In
+            </h2>
+            <Link href="/documents" className="text-sm text-primary hover:underline flex items-center">
+                View Library <ArrowRight className="w-4 h-4 ml-1" />
+            </Link>
+          </div>
+
+          <div className="grid gap-3">
+            {recentItems.length === 0 ? (
+               <div className="p-12 text-center border rounded-xl bg-muted/20 border-dashed">
+                 <p className="text-muted-foreground">No recent activity. Create a study set to get started!</p>
+               </div>
+            ) : (
+              recentItems.map((item: any) => (
+                <Link key={item.id} href={getUrl(item)}>
+                  <div className="group flex items-center gap-4 p-4 rounded-xl border border-border/60 bg-card hover:border-primary/50 hover:shadow-md transition-all">
+                    <div className="p-3 rounded-lg bg-muted group-hover:bg-primary/5 transition-colors">
+                      {getIcon(item.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold truncate group-hover:text-primary transition-colors">{item.title}</h4>
+                      <p className="text-sm text-muted-foreground capitalize flex items-center gap-2">
+                        {item.type} • <span className="text-xs">{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</span>
+                      </p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
