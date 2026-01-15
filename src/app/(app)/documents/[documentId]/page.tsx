@@ -1,186 +1,178 @@
+// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import useSWR from 'swr';
-import { fetcher } from '@/lib/fetcher';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from '@/components/ui/button';
 import { 
-    ArrowLeft, 
-    BookOpen, 
-    BrainCircuit, 
-    Layers, 
-    Loader2, 
-    Sparkles,
-    MoreVertical 
+  ResizableHandle, 
+  ResizablePanel, 
+  ResizablePanelGroup 
+} from '@/components/ui/resizable';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  MessageSquare, 
+  BrainCircuit, 
+  StickyNote, 
+  Layers, 
+  FileText, 
+  ChevronLeft 
 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import Link from 'next/link';
 
-import { NoteEditor } from '@/components/NoteEditor'; 
-import { PdfViewer } from '@/components/PdfViewer';
-import { QuizzesClientComponent } from '@/app/(app)/quizzes/QuizzesClientComponent'; 
-import { FlashcardsClientComponent } from '@/app/(app)/flashcards/FlashcardsClientComponent';
+// Components
+import { ChatInterface } from '@/components/ChatInterface'; // Ensure this exists
+import { PdfViewer } from '@/components/PdfViewer'; // Ensure this exists
 
-// 1. Import the hook
-import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function DocumentHubPage() {
-  const { documentId } = useParams();
-  const { session } = useAuth();
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("notes");
+export default function DocumentWorkspacePage() {
+  const params = useParams();
+  const documentId = params.documentId as string;
+  const [activeTab, setActiveTab] = useState('chat');
 
-  // 2. Initialize the hook
-  const { generate, isGenerating, status } = useTurboGenerator();
-
-  const { data: docData, isLoading } = useSWR(
-    session && documentId ? `/api/documents/${documentId}` : null,
-    (url) => fetcher(url, session?.access_token || '')
+  // 1. Fetch Document Data
+  const { data: docData, isLoading: docLoading } = useSWR(
+    documentId ? `/api/documents/${documentId}` : null, 
+    fetcher
   );
+
+  // 2. Fetch Related Content (Quiz, Notes, Flashcards) linked to this doc
+  const { data: relatedData, isLoading: relatedLoading } = useSWR(
+    documentId ? `/api/documents/${documentId}/related` : null,
+    fetcher
+  );
+
+  // Helper to safely get the file URL
+  const fileUrl = docData?.data?.storage_path 
+    ? `/api/files/${docData.data.storage_path}` // Adjust based on your actual file serving route
+    : null;
+
+  if (docLoading) {
+    return <div className="h-screen flex items-center justify-center">Loading Workspace...</div>;
+  }
 
   const document = docData?.data;
 
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!document) {
-    return <div className="p-8 text-center">Document not found</div>;
-  }
-
-  // 3. Add Handler
-  const handleTurboGen = (type: 'quiz' | 'flashcards' | 'notes') => {
-      // CRITICAL FIX: Pass 'document.id' (UUID), NEVER 'document.content'
-      if (document?.id) {
-          generate(type, document.id);
-      } else {
-          console.error("Missing document ID");
-      }
-  };
-
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      
-      {/* Header / Toolbar */}
-      <div className="border-b px-6 py-3 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold truncate max-w-md">{document.file_name}</h1>
-            <p className="text-xs text-muted-foreground">{document.file_type} • {new Date(document.created_at).toLocaleDateString()}</p>
-          </div>
-        </div>
-
-        {/* 4. Turbo Actions UI */}
+    <div className="h-[calc(100vh-4rem)] overflow-hidden bg-background">
+      {/* Top Bar for Context */}
+      <div className="h-12 border-b flex items-center px-4 justify-between bg-card/50 backdrop-blur-sm">
         <div className="flex items-center gap-2">
-            {/* Show Status Text if doing something */}
-            {status !== 'idle' && (
-                <span className="text-xs text-muted-foreground font-mono mr-2 animate-pulse">
-                    {status}
-                </span>
-            )}
-            
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button disabled={isGenerating} className="gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0">
-                        {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        Magic Generate
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleTurboGen('quiz')}>
-                        <BrainCircuit className="w-4 h-4 mr-2" /> New Quiz
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleTurboGen('flashcards')}>
-                        <Layers className="w-4 h-4 mr-2" /> Flashcard Deck
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleTurboGen('notes')}>
-                        <BookOpen className="w-4 h-4 mr-2" /> Summarize Notes
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <span className="font-medium truncate max-w-[200px]">{document?.title || 'Untitled Document'}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider font-mono">
+                {document?.file_type || 'DOC'}
+            </span>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          
-          <div className="px-6 py-2 border-b bg-muted/20">
-            <TabsList className="grid w-full max-w-md grid-cols-3">
-              <TabsTrigger value="notes" className="gap-2">
-                <BookOpen className="w-4 h-4" /> Notes
-              </TabsTrigger>
-              <TabsTrigger value="quizzes" className="gap-2">
-                <BrainCircuit className="w-4 h-4" /> Quizzes
-              </TabsTrigger>
-              <TabsTrigger value="flashcards" className="gap-2">
-                <Layers className="w-4 h-4" /> Flashcards
-              </TabsTrigger>
-            </TabsList>
+      <ResizablePanelGroup direction="horizontal" className="h-[calc(100%-3rem)]">
+        
+        {/* --- LEFT PANEL: DOCUMENT VIEWER --- */}
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <div className="h-full bg-muted/30 p-2 md:p-4">
+             <Card className="h-full border-none shadow-sm overflow-hidden bg-white/50 dark:bg-black/20">
+                {document?.file_type === 'pdf' ? (
+                    <PdfViewer url={fileUrl} /> 
+                ) : (
+                    <ScrollArea className="h-full p-6 whitespace-pre-wrap font-serif text-lg leading-relaxed text-foreground/80">
+                        {document?.extracted_text || "No text content available."}
+                    </ScrollArea>
+                )}
+             </Card>
           </div>
+        </ResizablePanel>
 
-          {/* TAB 1: NOTES */}
-          <TabsContent value="notes" className="flex-1 m-0 h-full overflow-hidden data-[state=inactive]:hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 h-full">
-              <div className="h-full border-r bg-zinc-100 dark:bg-zinc-900 overflow-hidden relative">
-                 {document.file_path ? (
-                    <PdfViewer url={document.publicUrl || ''} onTextSelect={() => {}} />
-                 ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">Source content not available</div>
-                 )}
+        <ResizableHandle withHandle />
+
+        {/* --- RIGHT PANEL: AI TOOLS --- */}
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <div className="h-full flex flex-col bg-background">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              
+              {/* Tab Navigation */}
+              <div className="border-b px-4 bg-muted/10">
+                <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
+                   <TabsTrigger value="chat" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
+                      <MessageSquare className="w-4 h-4" /> Chat
+                   </TabsTrigger>
+                   <TabsTrigger value="quiz" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
+                      <BrainCircuit className="w-4 h-4" /> Quiz
+                   </TabsTrigger>
+                   <TabsTrigger value="notes" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
+                      <StickyNote className="w-4 h-4" /> Notes
+                   </TabsTrigger>
+                   <TabsTrigger value="flashcards" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
+                      <Layers className="w-4 h-4" /> Flashcards
+                   </TabsTrigger>
+                </TabsList>
               </div>
-              <div className="h-full overflow-y-auto bg-background">
-                 <NoteEditor 
-                    initialContent={document.content || ''} 
-                    documentId={document.id}
-                    isReadOnly={false} 
-                 />
+
+              {/* Tab Content Areas */}
+              <div className="flex-1 overflow-hidden relative">
+                
+                {/* 1. Chat Tab */}
+                <TabsContent value="chat" className="h-full m-0 data-[state=active]:flex flex-col">
+                   <ChatInterface documentId={documentId} initialContext={document?.extracted_text} />
+                </TabsContent>
+
+                {/* 2. Quiz Tab */}
+                <TabsContent value="quiz" className="h-full m-0 p-4 overflow-y-auto">
+                   {relatedLoading ? <Skeleton className="h-40 w-full" /> : (
+                      relatedData?.quizId ? (
+                         // Embed the Quiz Component here directly instead of an iframe
+                         // For now, linking to it or embedding logic is best.
+                         <div className="flex flex-col items-center justify-center h-full space-y-4 text-center">
+                            <BrainCircuit className="w-12 h-12 text-primary/50" />
+                            <h3 className="text-lg font-semibold">Quiz Ready</h3>
+                            <p className="text-muted-foreground max-w-xs">Test your knowledge on this document.</p>
+                            <Button asChild>
+                                <Link href={`/quiz/${relatedData.quizId}`}>Start Full Quiz</Link>
+                            </Button>
+                         </div>
+                      ) : (
+                         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                            <p>Generating Quiz...</p>
+                         </div>
+                      )
+                   )}
+                </TabsContent>
+
+                {/* 3. Notes Tab */}
+                <TabsContent value="notes" className="h-full m-0 p-6 overflow-y-auto prose dark:prose-invert max-w-none">
+                   {relatedLoading ? <div className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /></div> : (
+                      relatedData?.noteId ? (
+                         <div dangerouslySetInnerHTML={{ __html: relatedData.noteContent }} />
+                      ) : <p className="text-muted-foreground text-center mt-10">Generating Notes...</p>
+                   )}
+                </TabsContent>
+
+                {/* 4. Flashcards Tab */}
+                <TabsContent value="flashcards" className="h-full m-0 p-4 overflow-y-auto">
+                    {/* Placeholder for Flashcard Component */}
+                    <div className="flex flex-col items-center justify-center h-full space-y-4">
+                        <Layers className="w-12 h-12 text-primary/50" />
+                        <h3 className="text-lg font-semibold">Flashcards</h3>
+                        {relatedData?.deckId && (
+                           <Button asChild variant="secondary">
+                              <Link href={`/flashcards/${relatedData.deckId}`}>Review Deck</Link>
+                           </Button>
+                        )}
+                    </div>
+                </TabsContent>
+
               </div>
-            </div>
-          </TabsContent>
-
-          {/* TAB 2: QUIZZES */}
-          <TabsContent value="quizzes" className="flex-1 m-0 p-6 overflow-y-auto data-[state=inactive]:hidden">
-             <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                   <h2 className="text-xl font-semibold">Practice Tests</h2>
-                   <Button variant="outline" onClick={() => handleTurboGen('quiz')} disabled={isGenerating}>
-                     <Sparkles className="w-4 h-4 mr-2" /> Auto-Generate
-                   </Button>
-                </div>
-                <QuizzesClientComponent />
-             </div>
-          </TabsContent>
-
-          {/* TAB 3: FLASHCARDS */}
-          <TabsContent value="flashcards" className="flex-1 m-0 p-6 overflow-y-auto data-[state=inactive]:hidden">
-             <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                   <h2 className="text-xl font-semibold">Flashcard Decks</h2>
-                   <Button variant="outline" onClick={() => handleTurboGen('flashcards')} disabled={isGenerating}>
-                     <Sparkles className="w-4 h-4 mr-2" /> Auto-Generate
-                   </Button>
-                </div>
-                <FlashcardsClientComponent />
-             </div>
-          </TabsContent>
-
-        </Tabs>
-      </div>
+            </Tabs>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Dialog, 
   DialogContent, 
@@ -47,6 +48,8 @@ export function AddDocumentDialog({
   onOpenChange: setControlledOpen,
   onUploadComplete 
 }: AddDocumentDialogProps) {
+  const router = useRouter();
+  
   // --- STATE ---
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -61,14 +64,19 @@ export function AddDocumentDialog({
   
   // Status State
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processStatus, setProcessStatus] = useState(''); // Local status for parsing/saving
+  const [processStatus, setProcessStatus] = useState(''); 
   
   // Drag & Drop State
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hooks
-  const { generate, isGenerating, progress, status: genStatus } = useTurboGenerator();
+  // We pass a no-op onSuccess so individual generate calls don't trigger redirects.
+  // We will handle the redirect manually after all promises resolve.
+  const { generate, isGenerating, progress, status: genStatus } = useTurboGenerator({
+    onSuccess: () => {} 
+  });
+  
   const { toast } = useToast();
   const { session } = useAuth(); 
 
@@ -172,7 +180,7 @@ export function AddDocumentDialog({
         throw new Error('Please provide content to process.');
       }
 
-      // 2. Save Document to Database to get ID
+      // 2. Save Document to Database
       setProcessStatus('Saving to library...');
       
       const saveHeaders: Record<string, string> = {
@@ -202,13 +210,26 @@ export function AddDocumentDialog({
           throw new Error('Server did not return a Document ID');
       }
 
-      // 3. Start Generation using the ID
-      // We pass the clean UUID to the generator hook
-      await generate('quiz', documentId, { fileName: title });
+      // 3. Start ALL Generations (Parallel)
+      // We launch all three jobs. The hook handles the API calls.
+      setProcessStatus('Igniting engines...');
+      
+      await Promise.all([
+        generate('quiz', documentId, { fileName: title }),
+        generate('notes', documentId, { fileName: title }),
+        generate('flashcards', documentId, { fileName: title })
+      ]);
 
-      // 4. Cleanup & Success
+      // 4. Success & Redirect to Workspace
+      toast({ 
+        title: "Workspace Ready", 
+        description: "Redirecting you to your new study session..." 
+      });
+
       if (onUploadComplete) onUploadComplete();
       if (setIsOpen) setIsOpen(false);
+      
+      router.push(`/documents/${documentId}`);
       
     } catch (error: any) {
       console.error("Process failed", error);
@@ -249,7 +270,7 @@ export function AddDocumentDialog({
             Create Study Set
           </DialogTitle>
           <DialogDescription>
-            Upload content to generate Quizzes, Notes, and Flashcards instantly.
+            Upload content to generate your full study workspace.
           </DialogDescription>
         </DialogHeader>
 
@@ -402,7 +423,7 @@ export function AddDocumentDialog({
             disabled={isBusy || !canSubmit}
             className="min-w-[140px] shadow-md transition-all hover:shadow-primary/20"
           >
-            {isBusy ? 'Processing...' : 'Generate Magic'}
+            {isBusy ? 'Processing...' : 'Generate Workspace'}
           </Button>
         </DialogFooter>
       </DialogContent>

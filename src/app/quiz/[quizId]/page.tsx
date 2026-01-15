@@ -12,11 +12,15 @@ import {
   Card,
   CardContent,
   CardFooter,
+  CardHeader,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   X,
   AlertCircle,
@@ -25,26 +29,22 @@ import {
   ArrowUp,
   ArrowDown,
   RefreshCcw,
-  Activity,
-  ShieldCheck
+  BookOpen,
+  Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Types ---
-
 interface QuizData {
   quiz: Quiz;
   questions: Question[];
 }
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
-
-// Extended type to hold shuffled options for display
 type QuizQuestion = Question & { shuffledOptions?: string[] };
 
 // --- Helpers ---
-
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -84,10 +84,7 @@ function OrderingQuestionUI({
 
     if (swapIndex < 0 || swapIndex >= newOrder.length) return;
 
-    [newOrder[index], newOrder[swapIndex]] = [
-      newOrder[swapIndex],
-      newOrder[index],
-    ];
+    [newOrder[index], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[index]];
     setCurrentOrder(newOrder);
   };
 
@@ -99,26 +96,26 @@ function OrderingQuestionUI({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="space-y-2">
         {currentOrder.map((item, index) => {
           const correctOrder = question.options as string[];
           const isSlotCorrect = correctOrder[index] === item;
-
-          let itemClass = 'bg-black/40 border-white/10 text-zinc-300';
+          let itemClass = 'bg-card border-border hover:bg-accent/50';
+          
           if (answerStatus === 'correct') {
-            itemClass = 'border-green-500/50 bg-green-500/10 text-green-400';
+            itemClass = 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400';
           } else if (answerStatus === 'incorrect') {
             itemClass = isSlotCorrect
-              ? 'border-green-500/50 bg-green-500/10 text-green-400'
-              : 'border-red-500/50 bg-red-500/10 text-red-400';
+              ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
+              : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400';
           }
 
           return (
             <div
               key={`${item}-${index}`}
               className={cn(
-                'flex items-center gap-3 p-3 border rounded-lg transition-colors',
+                'flex items-center gap-3 p-3 border rounded-md transition-all duration-200',
                 itemClass
               )}
             >
@@ -126,7 +123,7 @@ function OrderingQuestionUI({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 hover:bg-white/10 text-muted-foreground hover:text-white"
+                  className="h-6 w-6 text-muted-foreground"
                   onClick={() => moveItem(index, 'up')}
                   disabled={index === 0 || answerStatus !== 'unanswered'}
                 >
@@ -135,17 +132,14 @@ function OrderingQuestionUI({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 hover:bg-white/10 text-muted-foreground hover:text-white"
+                  className="h-6 w-6 text-muted-foreground"
                   onClick={() => moveItem(index, 'down')}
-                  disabled={
-                    index === currentOrder.length - 1 ||
-                    answerStatus !== 'unanswered'
-                  }
+                  disabled={index === currentOrder.length - 1 || answerStatus !== 'unanswered'}
                 >
                   <ArrowDown className="w-3 h-3" />
                 </Button>
               </div>
-              <span className="flex-1 font-medium font-mono text-sm">{item}</span>
+              <span className="flex-1 text-sm font-medium">{item}</span>
               {answerStatus !== 'unanswered' &&
                 (isSlotCorrect ? (
                   <Check className="w-4 h-4 text-green-500" />
@@ -157,8 +151,8 @@ function OrderingQuestionUI({
         })}
       </div>
       {answerStatus === 'unanswered' && (
-        <Button className="w-full mt-4 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90" onClick={handleSubmit}>
-          Submit Order
+        <Button className="w-full mt-4" onClick={handleSubmit}>
+          Confirm Order
         </Button>
       )}
     </div>
@@ -180,18 +174,11 @@ function MatchingQuestionUI({
   const [selectedPromptIdx, setSelectedPromptIdx] = useState<number | null>(null);
   const [userMatches, setUserMatches] = useState<(number | null)[]>([]);
 
-  const {
-    prompts,
-    options: correctOptions, 
-    shuffledOptions, 
-  } = useMemo(
-    () => ({
+  const { prompts, options: correctOptions, shuffledOptions } = useMemo(() => ({
       prompts: (question.prompts as string[]) || [],
       options: (question.options as string[]) || [],
       shuffledOptions: question.shuffledOptions || [],
-    }),
-    [question]
-  );
+    }), [question]);
 
   useEffect(() => {
     setUserMatches(new Array(prompts.length).fill(null));
@@ -200,7 +187,6 @@ function MatchingQuestionUI({
 
   const handlePromptClick = (promptIdx: number) => {
     if (answerStatus !== 'unanswered') return;
-
     if (userMatches[promptIdx] !== null) {
       const newUserMatches = [...userMatches];
       newUserMatches[promptIdx] = null;
@@ -213,12 +199,11 @@ function MatchingQuestionUI({
 
   const handleOptionClick = (optionIdx: number) => {
     if (answerStatus !== 'unanswered' || selectedPromptIdx === null) return;
-
     const newUserMatches = [...userMatches];
+    // Remove if already used elsewhere
     const existingMatchIdx = newUserMatches.indexOf(optionIdx);
-    if (existingMatchIdx > -1) {
-      newUserMatches[existingMatchIdx] = null;
-    }
+    if (existingMatchIdx > -1) newUserMatches[existingMatchIdx] = null;
+    
     newUserMatches[selectedPromptIdx] = optionIdx;
     setUserMatches(newUserMatches);
     setSelectedPromptIdx(null);
@@ -232,136 +217,93 @@ function MatchingQuestionUI({
 
   const handleSubmit = () => {
     if (answerStatus !== 'unanswered') return;
-
     let correctCount = 0;
     for (let pIdx = 0; pIdx < prompts.length; pIdx++) {
       const correctAns = correctOptions[pIdx];
       const userOptionIdx = userMatches[pIdx];
       if (userOptionIdx !== null) {
-        const userAns = shuffledOptions[userOptionIdx];
-        if (userAns === correctAns) {
-          correctCount++;
-        }
+        if (shuffledOptions[userOptionIdx] === correctAns) correctCount++;
       }
     }
     onQuestionComplete(correctCount === prompts.length);
   };
 
-  const allMatched = useMemo(
-    () => userMatches.every((m) => m !== null),
-    [userMatches]
-  );
+  const allMatched = useMemo(() => userMatches.every((m) => m !== null), [userMatches]);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-muted-foreground font-medium uppercase">Match Items</span>
         {answerStatus === 'unanswered' && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="text-muted-foreground hover:text-white"
-          >
-            <RefreshCcw className="w-3 h-3 mr-1" /> Reset Matches
+          <Button variant="ghost" size="sm" onClick={handleReset} className="h-8 text-xs">
+            <RefreshCcw className="w-3 h-3 mr-1" /> Reset
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 relative">
-        {/* Prompts Column */}
-        <div className="space-y-3">
-          <h4 className="text-[10px] font-bold font-mono text-muted-foreground uppercase tracking-wider mb-2">
-            Items
-          </h4>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
           {prompts.map((prompt, pIdx) => {
             const isSelected = selectedPromptIdx === pIdx;
             const isMatched = userMatches[pIdx] !== null;
-            let state: 'default' | 'selected' | 'matched' | 'correct' | 'incorrect' = 'default';
+            let stateClass = 'border-border bg-card hover:bg-accent/50';
 
             if (answerStatus === 'unanswered') {
-              if (isSelected) state = 'selected';
-              else if (isMatched) state = 'matched';
+              if (isSelected) stateClass = 'border-primary ring-1 ring-primary bg-primary/5';
+              else if (isMatched) stateClass = 'border-primary/50 bg-primary/5 text-primary';
             } else {
               const correctAns = correctOptions[pIdx];
               const userAns = userMatches[pIdx] !== null ? shuffledOptions[userMatches[pIdx]!] : null;
-              state = userAns === correctAns ? 'correct' : 'incorrect';
+              stateClass = userAns === correctAns 
+                ? 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400' 
+                : 'border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400';
             }
 
             return (
-              <div key={pIdx} className="relative">
-                <Button
-                  variant="outline"
-                  onClick={() => handlePromptClick(pIdx)}
-                  className={cn(
-                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border transition-all',
-                    state === 'default' && 'border-white/10 bg-black/40 text-zinc-300 hover:bg-white/5',
-                    state === 'selected' && 'border-primary ring-1 ring-primary bg-primary/10 text-primary',
-                    state === 'matched' && 'border-primary/50 bg-primary/5 text-primary/80',
-                    state === 'correct' && 'border-green-500 bg-green-500/10 text-green-400',
-                    state === 'incorrect' && 'border-red-500 bg-red-500/10 text-red-400'
-                  )}
-                  disabled={answerStatus !== 'unanswered'}
-                >
-                  <span className="mr-2 font-mono font-bold opacity-50 text-xs">{pIdx + 1}.</span>{' '}
-                  {prompt}
-                </Button>
-                <div
-                  className={cn(
-                    'absolute right-[-18px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full hidden md:block z-10 transition-colors',
-                    isMatched || state !== 'default' ? 'bg-primary' : 'bg-white/10',
-                    state === 'correct' && 'bg-green-500',
-                    state === 'incorrect' && 'bg-red-500'
-                  )}
-                />
+              <div key={pIdx} 
+                onClick={() => handlePromptClick(pIdx)}
+                className={cn(
+                  'cursor-pointer rounded-lg border p-3 text-sm transition-all',
+                  stateClass,
+                  answerStatus !== 'unanswered' && 'cursor-default'
+                )}
+              >
+                <span className="font-mono text-xs opacity-50 mr-2">{pIdx + 1}.</span>
+                {prompt}
               </div>
             );
           })}
         </div>
 
-        {/* Options Column */}
-        <div className="space-y-3">
-          <h4 className="text-[10px] font-bold font-mono text-muted-foreground uppercase tracking-wider mb-2">
-            Matches
-          </h4>
+        <div className="space-y-2">
           {shuffledOptions.map((option, oIdx) => {
             const isMatched = userMatches.includes(oIdx);
-            let state: 'default' | 'matched' | 'correct' | 'incorrect' = 'default';
+            let stateClass = 'border-border bg-card hover:bg-accent/50';
 
             if (answerStatus === 'unanswered') {
-              if (isMatched) state = 'matched';
+              if (isMatched) stateClass = 'border-primary/50 bg-primary/5 opacity-50';
             } else {
+              // Find which prompt matched this option
               const promptIdx = userMatches.indexOf(oIdx);
               if (promptIdx > -1) {
-                const correctAns = correctOptions[promptIdx];
-                state = option === correctAns ? 'correct' : 'incorrect';
+                 const correctAns = correctOptions[promptIdx];
+                 stateClass = option === correctAns 
+                  ? 'border-green-500/50 bg-green-500/10' 
+                  : 'border-red-500/50 bg-red-500/10';
               }
             }
 
             return (
-              <div key={oIdx} className="relative">
-                <div
-                  className={cn(
-                    'absolute left-[-18px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full hidden md:block z-10 transition-colors',
-                    isMatched || state !== 'default' ? 'bg-primary' : 'bg-white/10',
-                    state === 'correct' && 'bg-green-500',
-                    state === 'incorrect' && 'bg-red-500'
-                  )}
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => handleOptionClick(oIdx)}
-                  className={cn(
-                    'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal border transition-all',
-                    state === 'default' && 'border-white/10 bg-black/40 text-zinc-300 hover:bg-white/5',
-                    state === 'matched' && 'border-primary/50 bg-primary/5 text-primary/80',
-                    state === 'correct' && 'border-green-500 bg-green-500/10 text-green-400',
-                    state === 'incorrect' && 'border-red-500 bg-red-500/10 text-red-400',
-                    answerStatus === 'unanswered' && selectedPromptIdx === null && 'opacity-50 cursor-not-allowed'
-                  )}
-                  disabled={answerStatus !== 'unanswered' || selectedPromptIdx === null}
-                >
-                  {option}
-                </Button>
+              <div key={oIdx}
+                onClick={() => handleOptionClick(oIdx)}
+                className={cn(
+                  'cursor-pointer rounded-lg border p-3 text-sm transition-all',
+                  stateClass,
+                  answerStatus === 'unanswered' && selectedPromptIdx === null && 'opacity-50 cursor-not-allowed',
+                  answerStatus !== 'unanswered' && 'cursor-default'
+                )}
+              >
+                {option}
               </div>
             );
           })}
@@ -369,11 +311,7 @@ function MatchingQuestionUI({
       </div>
 
       {answerStatus === 'unanswered' && (
-        <Button
-          className="w-full mt-4 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90"
-          disabled={!allMatched}
-          onClick={handleSubmit}
-        >
+        <Button className="w-full" disabled={!allMatched} onClick={handleSubmit}>
           Submit Matches
         </Button>
       )}
@@ -397,435 +335,306 @@ export default function TakeQuizPage() {
   const params = useParams();
   const quizId = params.quizId as string;
   const { session } = useAuth();
-
-  // FIX: Validate quizId is not "null" (string) or undefined
   const isValidQuizId = quizId && quizId !== 'null' && quizId !== 'undefined';
 
-  const {
-    data: apiResponse,
-    error,
-    isLoading,
-  } = useSWR<ApiResponse<QuizData>>(
-    // Conditionally fetch only if ID is valid
+  const { data: apiResponse, error, isLoading } = useSWR<ApiResponse<QuizData>>(
     session && isValidQuizId ? `/api/quiz/${quizId}` : null,
-    (url: string) =>
-      fetcher(url, {
-        headers: { Authorization: `Bearer ${session!.access_token}` },
-      }),
+    (url: string) => fetcher(url, { headers: { Authorization: `Bearer ${session!.access_token}` } }),
     { revalidateOnFocus: false }
   );
 
-  const quizData = apiResponse?.data;
-
-  // Initialize and shuffle questions once data loads
   useEffect(() => {
-    if (quizData?.questions && quizData.questions.length > 0) {
-      const shuffledQuestions = shuffleArray(quizData.questions);
-
-      const questionsWithShuffledOptions = shuffledQuestions.map((q) => {
-        // Shuffle Multiple Choice options
+    if (apiResponse?.data?.questions) {
+      const qData = apiResponse.data;
+      const shuffledQuestions = shuffleArray(qData.questions).map(q => {
         if (q.question_type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
-          return {
-            ...q,
-            options: shuffleArray(q.options as string[]),
-          };
+          return { ...q, options: shuffleArray(q.options as string[]) };
         }
-        // Shuffle Matching options for display
-        if (
-          q.question_type === 'MATCHING' &&
-          Array.isArray(q.options)
-        ) {
-          return {
-            ...q,
-            shuffledOptions: shuffleArray(q.options as string[]),
-          };
+        if (['MATCHING', 'ORDERING'].includes(q.question_type) && Array.isArray(q.options)) {
+          return { ...q, shuffledOptions: shuffleArray(q.options as string[]) };
         }
-        // Shuffle Ordering options for display
-        if (
-            q.question_type === 'ORDERING' &&
-            Array.isArray(q.options)
-          ) {
-            return {
-              ...q,
-              shuffledOptions: shuffleArray(q.options as string[]),
-            };
-          }
         return q;
       });
-
-      setQuizQuestions(questionsWithShuffledOptions as QuizQuestion[]);
-      setCurrentQuestionIndex(0);
-      setSelectedAnswer(null);
-      setAnswerStatus('unanswered');
-      setCorrectAnswers(0);
-      setIsFinished(false);
-      setShowHint(false);
+      setQuizQuestions(shuffledQuestions as QuizQuestion[]);
     }
-  }, [quizData]);
+  }, [apiResponse]);
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
-  const progress =
-    quizQuestions.length > 0
-      ? ((currentQuestionIndex + 1) / quizQuestions.length) * 100
-      : 0;
+  const progress = quizQuestions.length > 0 ? ((currentQuestionIndex) / quizQuestions.length) * 100 : 0;
 
-  // Handler for text-based answers (MC, TF, Blank)
   const handleAnswerSelect = (answer: string) => {
     if (answerStatus !== 'unanswered') return;
-
     const answerTrimmed = answer.trim();
     setSelectedAnswer(answerTrimmed);
 
     let isCorrect = false;
-    if (
-      currentQuestion.question_type === 'MULTIPLE_CHOICE' ||
-      currentQuestion.question_type === 'TRUE_FALSE'
-    ) {
+    if (['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type)) {
       isCorrect = currentQuestion.correct_answer === answerTrimmed;
     } else if (currentQuestion.question_type === 'FILL_IN_THE_BLANK') {
       const correctAnswers = (currentQuestion.options as string[]) || [];
-      if (correctAnswers.length > 0) {
-        // Check against list of acceptable answers
-        isCorrect = correctAnswers.some(
-          (a) => a.toLowerCase() === answerTrimmed.toLowerCase()
-        );
-      } else {
-        // Legacy check
-        isCorrect =
-          currentQuestion.correct_answer.toLowerCase() ===
-          answerTrimmed.toLowerCase();
-      }
+      isCorrect = correctAnswers.length > 0 
+        ? correctAnswers.some(a => a.toLowerCase() === answerTrimmed.toLowerCase())
+        : currentQuestion.correct_answer.toLowerCase() === answerTrimmed.toLowerCase();
     }
 
-    if (isCorrect) {
-      setAnswerStatus('correct');
-      setCorrectAnswers((prev) => prev + 1);
-    } else {
-      setAnswerStatus('incorrect');
-    }
+    setAnswerStatus(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) setCorrectAnswers(prev => prev + 1);
   };
 
-  // Handler for complex components (Matching, Ordering)
   const handleComplexQuestionComplete = (isCorrect: boolean) => {
-    if (answerStatus !== 'unanswered') return;
-
-    if (isCorrect) {
-      setAnswerStatus('correct');
-      setCorrectAnswers((prev) => prev + 1);
-    } else {
-      setAnswerStatus('incorrect');
-    }
+    setAnswerStatus(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) setCorrectAnswers(prev => prev + 1);
   };
 
   const handleNext = () => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
+      setCurrentQuestionIndex(prev => prev + 1);
       setSelectedAnswer(null);
       setAnswerStatus('unanswered');
       setShowHint(false);
     } else {
-      setIsFinished(true);
-      if (session && isValidQuizId) {
-        fetch('/api/quiz/attempt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            quizId: quizId,
-            score: correctAnswers,
-            total: quizQuestions.length,
-          }),
-        }).catch((err) => console.error('Failed to save quiz attempt:', err));
-      }
+      finishQuiz();
     }
   };
 
-  const handleRestart = () => {
-    // Quick reload for simplicity to re-fetch and re-shuffle
-    window.location.reload();
+  const finishQuiz = () => {
+    setIsFinished(true);
+    if (session && isValidQuizId) {
+      fetch('/api/quiz/attempt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ quizId, score: correctAnswers, total: quizQuestions.length }),
+      }).catch(console.error);
+    }
   };
 
   const getOptionClass = (optionText: string) => {
-    if (answerStatus === 'unanswered') return 'border-white/10 hover:bg-white/5 hover:border-primary/50 text-zinc-300';
-    
-    const isThisCorrect = currentQuestion.correct_answer === optionText;
-    if (isThisCorrect) {
-      return 'border-green-500 bg-green-500/10 text-green-400 shadow-[0_0_15px_-3px_rgba(34,197,94,0.4)]';
-    }
-    if (selectedAnswer === optionText && !isThisCorrect) {
-      return 'border-red-500 bg-red-500/10 text-red-400 shadow-[0_0_15px_-3px_rgba(239,68,68,0.4)]';
-    }
-    return 'border-white/5 opacity-50';
+    if (answerStatus === 'unanswered') return 'hover:border-primary/50 hover:bg-accent/50 cursor-pointer';
+    if (currentQuestion.correct_answer === optionText) return 'border-green-500 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400';
+    if (selectedAnswer === optionText) return 'border-red-500 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400';
+    return 'opacity-50';
   };
 
-  // FIX: Handle Invalid ID explicitly immediately
-  if (!isValidQuizId) {
+  if (!isValidQuizId || error) return (
+    <div className="flex flex-col items-center justify-center h-screen space-y-4">
+      <AlertCircle className="h-10 w-10 text-destructive" />
+      <p className="text-muted-foreground">Quiz not found</p>
+      <Button onClick={() => router.push('/dashboard')}>Return Home</Button>
+    </div>
+  );
+
+  if (isLoading) return (
+    <div className="flex h-screen items-center justify-center">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground animate-pulse">Loading quiz...</p>
+      </div>
+    </div>
+  );
+
+  // --- RESULTS SCREEN ---
+  if (isFinished) {
+    const scorePercentage = Math.round((correctAnswers / quizQuestions.length) * 100);
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-background text-red-500">
-        <AlertCircle className="h-12 w-12 mb-4 opacity-50" />
-        <h2 className="text-xl font-mono font-bold">INVALID MISSION ID</h2>
-        <p className="text-muted-foreground font-mono text-sm mt-2">Target ID is null or corrupted.</p>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-6 font-mono text-xs">
-          RETURN TO BASE
-        </Button>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-2 shadow-2xl">
+          <CardContent className="pt-10 pb-8 flex flex-col items-center text-center space-y-6">
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+              <div className="bg-background relative p-4 rounded-full border-2 border-primary/20">
+                <Trophy className="w-12 h-12 text-primary" />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold tracking-tight">Quiz Complete</h2>
+              <p className="text-muted-foreground">Here is how you performed</p>
+            </div>
+
+            <div className="flex items-end justify-center gap-2">
+              <span className="text-6xl font-bold tracking-tighter">{scorePercentage}%</span>
+              <span className="text-xl text-muted-foreground font-medium mb-2">/ 100</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 w-full">
+              <div className="bg-muted/50 p-3 rounded-lg border">
+                <p className="text-xs text-muted-foreground uppercase font-bold">Correct</p>
+                <p className="text-xl font-semibold text-green-600 dark:text-green-400">{correctAnswers}</p>
+              </div>
+              <div className="bg-muted/50 p-3 rounded-lg border">
+                <p className="text-xs text-muted-foreground uppercase font-bold">Total</p>
+                <p className="text-xl font-semibold">{quizQuestions.length}</p>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-2 pb-8">
+            <Button onClick={() => window.location.reload()} className="w-full" size="lg">
+              <RefreshCcw className="w-4 h-4 mr-2" /> Try Again
+            </Button>
+            <Button variant="ghost" onClick={() => router.push('/dashboard')} className="w-full">
+              Back to Dashboard
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-         <div className="text-primary font-mono animate-pulse text-sm">INITIALIZING SIMULATION...</div>
-      </div>
-    );
-  }
-
-  if (error || !quizData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-background text-red-500">
-        <AlertCircle className="h-12 w-12 mb-4 opacity-50" />
-        <h2 className="text-xl font-mono font-bold">SIMULATION FAILED</h2>
-        <Button onClick={() => router.push('/quizzes')} variant="outline" className="mt-6 font-mono text-xs">
-          ABORT
-        </Button>
-      </div>
-    );
-  }
-
+  // --- QUIZ SCREEN ---
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden relative">
-       {/* Background Grid Pattern */}
-       <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-
-      <div className="w-full max-w-3xl mx-auto p-6 relative z-10 flex flex-col h-full">
-        {/* Top HUD */}
-        <div className="flex items-center justify-between mb-8">
-          <Button variant="ghost" onClick={() => router.push('/quizzes')} className="text-muted-foreground hover:text-white font-mono text-xs">
-            <ArrowLeft className="mr-2 h-4 w-4" /> ABORT MISSION
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => router.back()} className="-ml-2 text-muted-foreground">
+            <X className="w-4 h-4 mr-2" /> Exit
           </Button>
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono">
-             <Activity className="w-3 h-3 text-primary animate-pulse" />
-             <span>LIVE_SIMULATION</span>
+          <div className="flex items-center gap-2 text-sm font-medium">
+             <Timer className="w-4 h-4 text-primary" />
+             <span>Question {currentQuestionIndex + 1} of {quizQuestions.length}</span>
           </div>
         </div>
+        <Progress value={progress} className="h-1 rounded-none" />
+      </header>
 
-        {!isFinished && (
-          <div className="mb-8 space-y-2">
-            <div className="flex justify-between text-xs font-mono text-muted-foreground uppercase">
-                <span>Progress</span>
-                <span>{Math.round(progress)}% Complete</span>
-            </div>
-            <Progress value={progress} className="h-1 bg-white/10" />
-          </div>
-        )}
-
-        <div className="flex-1 flex flex-col justify-center pb-12">
+      {/* Main Content */}
+      <main className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-8 flex flex-col justify-center">
         <AnimatePresence mode="wait">
-          {isFinished ? (
-            <motion.div
-              key="summary"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center text-center"
-            >
-               <div className="relative mb-8">
-                  <div className="absolute inset-0 bg-yellow-500/20 blur-[60px] rounded-full" />
-                  <Trophy className="w-24 h-24 text-yellow-500 relative z-10 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
-               </div>
-               
-               <h2 className="text-3xl font-bold font-mono mb-2 tracking-tight text-white">MISSION ACCOMPLISHED</h2>
-               <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 mb-8">
-                 {Math.round((correctAnswers / quizQuestions.length) * 100)}%
-               </div>
-               
-               <div className="grid grid-cols-2 gap-4 w-full max-w-sm mb-8">
-                  <div className="p-5 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center">
-                     <span className="text-xs font-mono text-muted-foreground uppercase mb-1">Correct</span>
-                     <span className="text-2xl font-bold text-green-400">{correctAnswers}</span>
-                  </div>
-                  <div className="p-5 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center">
-                     <span className="text-xs font-mono text-muted-foreground uppercase mb-1">Total</span>
-                     <span className="text-2xl font-bold text-white">{quizQuestions.length}</span>
-                  </div>
-               </div>
-
-               <div className="flex gap-4 w-full max-w-sm">
-                  <Button 
-                    className="flex-1 font-mono uppercase tracking-widest bg-primary text-black hover:bg-primary/90 font-bold" 
-                    onClick={handleRestart}
-                  >
-                    Re-Deploy
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="flex-1 font-mono uppercase tracking-widest border-white/10 hover:bg-white/5" 
-                    onClick={() => router.push('/quizzes')}
-                  >
-                    Exit
-                  </Button>
-               </div>
-            </motion.div>
-          ) : (
+          {currentQuestion && (
             <motion.div
               key={currentQuestionIndex}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="w-full"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
             >
-              {/* Ensure currentQuestion exists before rendering to avoid runtime crashes during fast transitions */}
-              {currentQuestion && (
-                <Card className="bg-zinc-900/80 backdrop-blur-xl border-white/10 shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
-                  <CardContent className="p-8">
-                    <div className="mb-8">
-                      <span className="text-xs font-mono text-primary/70 uppercase tracking-widest mb-3 block">
-                          Query Sequence 0{currentQuestionIndex + 1}
-                      </span>
-                      <h3 className="text-xl md:text-2xl font-semibold leading-relaxed text-white">
-                          {currentQuestion.question_text}
-                      </h3>
-                    </div>
+              <Card className="border-none shadow-none bg-transparent">
+                <CardHeader className="px-0 pt-0 pb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Badge variant="outline" className="text-xs font-mono tracking-wider text-muted-foreground uppercase">
+                      {currentQuestion.question_type.replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                  <h3 className="text-xl md:text-2xl font-semibold leading-relaxed">
+                    {currentQuestion.question_text}
+                  </h3>
+                </CardHeader>
 
-                    <div className="space-y-3">
-                      {/* Multiple Choice / True False */}
-                      {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
-                        (currentQuestion.options as string[]).map((option) => (
-                          <Button
-                            key={option}
-                            variant="outline"
-                            className={cn(
-                              'h-auto min-h-14 w-full justify-start text-left p-4 whitespace-normal text-base transition-all duration-200',
-                              answerStatus !== 'unanswered' && 'pointer-events-none opacity-100',
-                              getOptionClass(option)
-                            )}
-                            onClick={() => handleAnswerSelect(option)}
-                          >
-                            <span className="flex-1 font-sans">{option}</span>
-                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('green') && <Check className="w-5 h-5 ml-2 text-green-400" />}
-                            {answerStatus !== 'unanswered' && getOptionClass(option).includes('red') && <X className="w-5 h-5 ml-2 text-red-400" />}
-                          </Button>
-                      ))}
-                      
-                      {/* Fill in Blank */}
-                      {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                          <div className="space-y-4">
-                              <Input 
-                                  placeholder="ENTER DATA VALUE..." 
-                                  className="bg-black/50 border-white/20 h-14 font-mono text-lg text-white"
-                                  value={selectedAnswer || ''}
-                                  onChange={(e) => setSelectedAnswer(e.target.value)}
-                                  disabled={answerStatus !== 'unanswered'}
-                                  onKeyDown={(e) => {
-                                      if (e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer) {
-                                        handleAnswerSelect(selectedAnswer.trim());
-                                      }
-                                  }}
-                              />
-                              <Button 
-                                  className="w-full h-12 font-mono uppercase tracking-widest bg-white text-black hover:bg-white/90" 
-                                  disabled={answerStatus !== 'unanswered' || !selectedAnswer?.trim()} 
-                                  onClick={() => handleAnswerSelect(selectedAnswer!.trim())}
-                              >
-                                  Verify Data
-                              </Button>
-                          </div>
-                      )}
-
-                      {/* Complex Types */}
-                      {currentQuestion.question_type === 'MATCHING' && (
-                          <MatchingQuestionUI 
-                              question={currentQuestion} 
-                              answerStatus={answerStatus} 
-                              onQuestionComplete={handleComplexQuestionComplete} 
-                          />
-                      )}
-                      
-                      {currentQuestion.question_type === 'ORDERING' && (
-                          <OrderingQuestionUI 
-                              question={currentQuestion} 
-                              answerStatus={answerStatus} 
-                              onQuestionComplete={handleComplexQuestionComplete} 
-                          />
-                      )}
-
-                    </div>
-
-                    {/* Feedback Overlay */}
-                    <AnimatePresence>
-                      {answerStatus !== 'unanswered' && (
-                          <motion.div 
-                              initial={{ height: 0, opacity: 0 }} 
-                              animate={{ height: 'auto', opacity: 1 }}
-                              className={cn(
-                                  "mt-8 p-6 rounded-lg border-l-4 font-mono text-sm",
-                                  answerStatus === 'correct' ? "bg-green-500/10 border-green-500 text-green-400" : "bg-red-500/10 border-red-500 text-red-400"
-                              )}
-                          >
-                              <div className="flex items-center gap-2 font-bold mb-2 uppercase tracking-wider text-base">
-                                  {answerStatus === 'correct' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                                  {answerStatus === 'correct' ? 'Data Verified' : 'Corruption Detected'}
-                              </div>
-                              
-                              {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
-                                  <div className="mb-2 text-white/80">
-                                      Expected: <span className="text-white font-bold">{Array.isArray(currentQuestion.options) ? currentQuestion.options[0] : currentQuestion.correct_answer}</span>
-                                  </div>
-                              )}
-
-                              <p className="opacity-90 font-sans leading-relaxed text-zinc-300">
-                                  {currentQuestion.explanation || (answerStatus === 'incorrect' ? "Check your source material for further analysis." : "Logic sound. Proceed to next query.")}
-                              </p>
-                          </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </CardContent>
-                  
-                  <CardFooter className="bg-black/40 p-6 border-t border-white/5 flex justify-between items-center">
-                      <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => setShowHint(true)} 
-                          disabled={answerStatus !== 'unanswered' || showHint || !currentQuestion.explanation} 
+                <CardContent className="px-0 space-y-6">
+                  {/* Question Inputs */}
+                  {['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentQuestion.question_type) && 
+                    <div className="grid gap-3">
+                      {(currentQuestion.options as string[]).map((option) => (
+                        <div
+                          key={option}
+                          onClick={() => handleAnswerSelect(option)}
                           className={cn(
-                              "text-yellow-500/70 hover:text-yellow-500 hover:bg-yellow-500/10 transition-all",
-                              (answerStatus !== 'unanswered' || showHint) && "opacity-0"
+                            "flex items-center p-4 rounded-xl border transition-all duration-200 text-sm md:text-base font-medium",
+                            getOptionClass(option),
+                            answerStatus !== 'unanswered' && 'pointer-events-none'
                           )}
-                      >
-                          <Lightbulb className="w-4 h-4 mr-2" /> HINT
-                      </Button>
+                        >
+                          <div className="flex-1">{option}</div>
+                          {answerStatus !== 'unanswered' && currentQuestion.correct_answer === option && <Check className="w-5 h-5 text-green-600 dark:text-green-400" />}
+                          {answerStatus !== 'unanswered' && selectedAnswer === option && currentQuestion.correct_answer !== option && <X className="w-5 h-5 text-red-600 dark:text-red-400" />}
+                        </div>
+                      ))}
+                    </div>
+                  }
 
-                      <AnimatePresence>
-                          {showHint && answerStatus === 'unanswered' && (
-                              <motion.div 
-                                  initial={{ opacity: 0, y: 10 }} 
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="absolute bottom-20 left-8 right-8 bg-yellow-950/90 border border-yellow-500/30 p-4 rounded-lg text-yellow-200 text-sm shadow-xl backdrop-blur-md z-20"
-                              >
-                                  <div className="font-bold flex items-center gap-2 mb-1"><Lightbulb className="w-4 h-4" /> Hint Decrypted:</div>
-                                  {currentQuestion.explanation}
-                              </motion.div>
-                          )}
-                      </AnimatePresence>
+                  {currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                    <div className="space-y-4">
+                      <Input 
+                        placeholder="Type your answer..." 
+                        className="h-12 text-lg"
+                        value={selectedAnswer || ''}
+                        onChange={(e) => setSelectedAnswer(e.target.value)}
+                        disabled={answerStatus !== 'unanswered'}
+                        onKeyDown={(e) => e.key === 'Enter' && answerStatus === 'unanswered' && selectedAnswer && handleAnswerSelect(selectedAnswer)}
+                      />
+                      {answerStatus === 'unanswered' && (
+                        <Button onClick={() => handleAnswerSelect(selectedAnswer || '')} disabled={!selectedAnswer}>
+                          Submit Answer
+                        </Button>
+                      )}
+                    </div>
+                  )}
 
-                      <Button 
-                          onClick={handleNext} 
-                          disabled={answerStatus === 'unanswered'} 
-                          className="bg-white text-black hover:bg-white/90 font-mono text-xs uppercase font-bold px-8 h-10"
+                  {currentQuestion.question_type === 'MATCHING' && (
+                    <MatchingQuestionUI 
+                      question={currentQuestion} 
+                      answerStatus={answerStatus} 
+                      onQuestionComplete={handleComplexQuestionComplete} 
+                    />
+                  )}
+                  
+                  {currentQuestion.question_type === 'ORDERING' && (
+                    <OrderingQuestionUI 
+                      question={currentQuestion} 
+                      answerStatus={answerStatus} 
+                      onQuestionComplete={handleComplexQuestionComplete} 
+                    />
+                  )}
+
+                  {/* Feedback Section */}
+                  <AnimatePresence>
+                    {answerStatus !== 'unanswered' && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }} 
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className={cn(
+                          "rounded-lg p-4 flex gap-4 text-sm",
+                          answerStatus === 'correct' ? "bg-green-50 dark:bg-green-500/10 text-green-900 dark:text-green-300" : "bg-red-50 dark:bg-red-500/10 text-red-900 dark:text-red-300"
+                        )}
                       >
-                          {currentQuestionIndex === quizQuestions.length - 1 ? 'FINALIZE' : 'NEXT_QUERY'} <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
-                      </Button>
-                  </CardFooter>
-                </Card>
-              )}
+                        <div className="shrink-0">
+                          {answerStatus === 'correct' ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                        </div>
+                        <div className="space-y-1">
+                           <p className="font-semibold">{answerStatus === 'correct' ? 'Correct!' : 'Incorrect'}</p>
+                           {answerStatus === 'incorrect' && currentQuestion.question_type === 'FILL_IN_THE_BLANK' && (
+                             <p>Correct answer: <span className="font-mono font-bold">{currentQuestion.correct_answer}</span></p>
+                           )}
+                           <p className="opacity-90 leading-relaxed">{currentQuestion.explanation}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+
+                <CardFooter className="px-0 flex justify-between pt-4">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowHint(true)}
+                    disabled={answerStatus !== 'unanswered' || showHint}
+                    className={cn(showHint && "text-primary")}
+                  >
+                    <Lightbulb className="w-4 h-4 mr-2" /> 
+                    {showHint ? "Hint revealed" : "Show Hint"}
+                  </Button>
+                  
+                  {/* Hint Reveal */}
+                  {showHint && answerStatus === 'unanswered' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute bottom-20 left-0 right-0 mx-4 bg-popover border p-4 rounded-lg shadow-lg text-sm">
+                      <p className="font-semibold mb-1 flex items-center gap-2"><Lightbulb className="w-3 h-3 text-yellow-500" /> Hint</p>
+                      {currentQuestion.explanation}
+                    </motion.div>
+                  )}
+
+                  <Button onClick={handleNext} disabled={answerStatus === 'unanswered'} size="lg" className="min-w-[140px]">
+                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish Quiz' : 'Next Question'}
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </CardFooter>
+              </Card>
             </motion.div>
           )}
         </AnimatePresence>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
