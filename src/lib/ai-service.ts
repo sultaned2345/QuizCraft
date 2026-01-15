@@ -2,22 +2,19 @@
 import OpenAI from 'openai';
 
 // 1. Initialize Main Client (Groq preferred for speed, falls back to OpenAI)
-// This client is used for Text Generation (Chat, Summaries, Quizzes)
 const chatClient = new OpenAI({
   apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.GROQ_API_KEY ? "https://api.groq.com/openai/v1" : undefined
 });
 
 // 2. Initialize Embedding Client (Strictly OpenAI)
-// This client is used ONLY for generating vectors. 
-// We create a separate instance to ensure we don't accidentally send embedding requests to Groq.
 const embeddingClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Requires OpenAI Key for embeddings
 });
 
 export const AI_MODELS = {
-  FAST: 'llama3-8b-8192',       // Good for simple tasks (Flashcards)
-  SMART: 'llama3-70b-8192',     // Good for complex tasks (Summaries, Mixed Quizzes)
+  FAST: 'llama-3.1-8b-instant',       // Updated from llama3-8b-8192
+  SMART: 'llama-3.3-70b-versatile',     // Updated from llama3-70b-8192
   EMBEDDING: 'text-embedding-3-small' // OpenAI model for embeddings
 };
 
@@ -33,16 +30,16 @@ export async function generateDocumentSummary(text: string, title: string) {
     Structure your response as follows:
     # ${title} - Study Guide
     
-    ## 識 Core Concepts
+    ## 🧠 Core Concepts
     (Bulleted list of the most important ideas)
     
-    ## 統 Detailed Analysis
+    ## 📖 Detailed Analysis
     (Break down the content into logical sections with clear headings)
     
-    ## 泊 Key Terminology
+    ## 🔑 Key Terminology
     (Definition list of important terms found in the text)
     
-    ## ｧ Summary Conclusion
+    ## 💡 Summary Conclusion
     (A brief wrap-up paragraph)
     
     TEXT TO ANALYZE:
@@ -158,9 +155,6 @@ export async function generateQuizFromText(text: string, count: number = 5) {
 
 /**
  * Generates embeddings for Vector Search (RAG).
- * * NOTE: This function specifically uses OpenAI's embedding model because
- * Groq (llama3) does not support embedding endpoints natively in the same format.
- * Ensure OPENAI_API_KEY is set in .env.local
  */
 export async function generateEmbeddings(text: string): Promise<number[]> {
   try {
@@ -184,7 +178,6 @@ export async function generateEmbeddings(text: string): Promise<number[]> {
 
 /**
  * (Optional) Grading Assistant Logic
- * Use this if you want to implement the "ProjectEssayGrader" later.
  */
 export async function gradeUserEssay(essay: string, context: string) {
   const prompt = `
