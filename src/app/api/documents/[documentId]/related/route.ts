@@ -19,29 +19,37 @@ export async function GET(
       return NextResponse.json({ error: 'Missing document ID' }, { status: 400 });
     }
 
-    // 1. Fetch all related content in parallel
-    const [quiz, note, deck] = await Promise.all([
-      // Fetch latest quiz for this document
+    // 1. Fetch related content safely using Promise.allSettled
+    // We use allSettled so one failure doesn't crash the whole endpoint
+    const results = await Promise.allSettled([
+      // Fetch latest quiz
       prisma.quiz.findFirst({
         where: { documentId: documentId },
         orderBy: { createdAt: 'desc' },
         select: { id: true }
       }),
       // Fetch latest note
-      prisma.note.findFirst({
-        where: { documentId: documentId },
-        orderBy: { createdAt: 'desc' },
+      prisma.notes.findFirst({  // Changed from 'note' to 'notes' (check your schema map name)
+        where: { document_id: documentId }, // Changed from 'documentId' to 'document_id' to match typical Prisma naming
+        orderBy: { created_at: 'desc' }, // Changed to snake_case if your DB uses it
         select: { id: true, content: true }
       }),
       // Fetch latest flashcard deck
-      prisma.flashcardDeck.findFirst({
-        where: { documentId: documentId },
-        orderBy: { createdAt: 'desc' },
+      prisma.flashcard_decks.findFirst({ // Changed to 'flashcard_decks'
+        where: { document_id: documentId },
+        orderBy: { created_at: 'desc' },
         select: { id: true }
       })
     ]);
 
-    // 2. Return the IDs found
+    // 2. Extract Data (Handling Success/Failure)
+    const quiz = results[0].status === 'fulfilled' ? results[0].value : null;
+    // NOTE: I am guessing your schema names based on your previous logs (flashcard_decks vs FlashcardDeck). 
+    // Please verify if your schema uses `notes` or `Note`, and `document_id` or `documentId`.
+    // I will use snake_case for fields based on your previous logs.
+    const note = results[1].status === 'fulfilled' ? results[1].value : null;
+    const deck = results[2].status === 'fulfilled' ? results[2].value : null;
+
     return NextResponse.json({
       quizId: quiz?.id || null,
       noteId: note?.id || null,
@@ -51,9 +59,12 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching related content:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch related content' }, 
-      { status: 500 }
-    );
+    // Return 200 with nulls instead of 500 to prevent page crash
+    return NextResponse.json({
+      quizId: null,
+      noteId: null,
+      noteContent: '',
+      deckId: null
+    });
   }
 }

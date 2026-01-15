@@ -1,3 +1,4 @@
+// src/lib/aiGeneration.ts
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
@@ -6,8 +7,8 @@ import Groq from "groq-sdk";
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-// Using Flash for speed and cost-efficiency
-const AI_MODEL_NAME = "gemini-1.5-flash"; 
+// FIX: Use the specific "002" version. The generic alias was retired/moved.
+const AI_MODEL_NAME = "gemini-1.5-flash-002"; 
 const MAX_INPUT_LENGTH = 30000; 
 
 if (!API_KEY) console.warn("Missing GOOGLE_AI_API_KEY");
@@ -172,7 +173,10 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
   try {
     const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
-    return parsed.flashcards;
+    // Robust check for different potential AI return shapes
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed.flashcards && Array.isArray(parsed.flashcards)) return parsed.flashcards;
+    return [];
   } catch (error: any) {
     console.error("Flashcard Gen Error:", error);
     throw new Error(`AI Flashcard Gen Failed: ${error.message}`);
