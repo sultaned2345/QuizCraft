@@ -1,39 +1,55 @@
-// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { 
   ResizableHandle, 
   ResizablePanel, 
   ResizablePanelGroup 
 } from '@/components/ui/resizable';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   MessageSquare, 
   BrainCircuit, 
   StickyNote, 
   Layers, 
-  FileText, 
-  ChevronLeft 
+  ChevronLeft, 
+  FileText,
+  Share2,
+  MoreVertical,
+  Maximize2
 } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
-// Components
-import { ChatInterface } from '@/components/ChatInterface'; // Ensure this exists
-import { PdfViewer } from '@/components/PdfViewer'; // Ensure this exists
+// --- Imported Components ---
+// Ensure these paths match your project structure
+import { ChatInterface } from '@/components/ChatInterface';
+import { PdfViewer } from '@/components/PdfViewer'; 
 
+// Fetcher for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+type ActiveTool = 'chat' | 'quiz' | 'notes' | 'flashcards';
 
 export default function DocumentWorkspacePage() {
   const params = useParams();
+  const router = useRouter();
   const documentId = params.documentId as string;
-  const [activeTab, setActiveTab] = useState('chat');
+  
+  // State
+  const [activeTool, setActiveTool] = useState<ActiveTool>('chat');
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
   // 1. Fetch Document Data
   const { data: docData, isLoading: docLoading } = useSWR(
@@ -41,137 +57,223 @@ export default function DocumentWorkspacePage() {
     fetcher
   );
 
-  // 2. Fetch Related Content (Quiz, Notes, Flashcards) linked to this doc
+  // 2. Fetch Related Content (Quiz, Notes, Flashcards IDs)
   const { data: relatedData, isLoading: relatedLoading } = useSWR(
     documentId ? `/api/documents/${documentId}/related` : null,
     fetcher
   );
 
-  // Helper to safely get the file URL
-  const fileUrl = docData?.data?.storage_path 
-    ? `/api/files/${docData.data.storage_path}` // Adjust based on your actual file serving route
-    : null;
+  const document = docData?.data;
+  const fileUrl = document?.storage_path ? `/api/files/${document.storage_path}` : null;
 
+  // --- Loading State ---
   if (docLoading) {
-    return <div className="h-screen flex items-center justify-center">Loading Workspace...</div>;
+    return (
+      <div className="h-[calc(100vh-4rem)] flex flex-col items-center justify-center space-y-4 bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground animate-pulse">Loading workspace...</p>
+      </div>
+    );
   }
 
-  const document = docData?.data;
+  if (!document && !docLoading) {
+     return <div className="p-8 text-center">Document not found</div>;
+  }
+
+  // --- Tool Rail Button Component ---
+  const ToolButton = ({ tool, icon: Icon, label }: { tool: ActiveTool; icon: any; label: string }) => (
+    <TooltipProvider>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setActiveTool(tool)}
+            className={cn(
+              "rounded-xl w-10 h-10 transition-all duration-200",
+              activeTool === tool 
+                ? "bg-primary text-primary-foreground shadow-md scale-105" 
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="w-5 h-5" />
+            <span className="sr-only">{label}</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="font-medium">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-hidden bg-background">
-      {/* Top Bar for Context */}
-      <div className="h-12 border-b flex items-center px-4 justify-between bg-card/50 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      
+      {/* --- Header --- */}
+      <header className="h-14 border-b flex items-center justify-between px-4 bg-background/95 backdrop-blur z-10 shrink-0">
+        <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="h-8 w-8 text-muted-foreground">
                 <ChevronLeft className="w-5 h-5" />
-            </Link>
-            <span className="font-medium truncate max-w-[200px]">{document?.title || 'Untitled Document'}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider font-mono">
-                {document?.file_type || 'DOC'}
-            </span>
+            </Button>
+            <div className="flex flex-col">
+                <h1 className="text-sm font-semibold truncate max-w-[300px] leading-tight">
+                    {document?.title || 'Untitled Document'}
+                </h1>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
+                    {document?.file_type || 'DOC'}
+                </span>
+            </div>
         </div>
-      </div>
+        <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 gap-2 hidden sm:flex">
+                <Share2 className="w-3.5 h-3.5" /> Share
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+            </Button>
+        </div>
+      </header>
 
-      <ResizablePanelGroup direction="horizontal" className="h-[calc(100%-3rem)]">
+      {/* --- Main Workspace (Split View) --- */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
         
-        {/* --- LEFT PANEL: DOCUMENT VIEWER --- */}
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <div className="h-full bg-muted/30 p-2 md:p-4">
-             <Card className="h-full border-none shadow-sm overflow-hidden bg-white/50 dark:bg-black/20">
-                {document?.file_type === 'pdf' ? (
-                    <PdfViewer url={fileUrl} /> 
-                ) : (
-                    <ScrollArea className="h-full p-6 whitespace-pre-wrap font-serif text-lg leading-relaxed text-foreground/80">
-                        {document?.extracted_text || "No text content available."}
-                    </ScrollArea>
-                )}
-             </Card>
-          </div>
+        {/* LEFT PANEL: Document Viewer */}
+        <ResizablePanel defaultSize={50} minSize={30} className="bg-muted/30 relative">
+           <div className="h-full w-full flex flex-col">
+              {document?.file_type === 'pdf' ? (
+                 <PdfViewer url={fileUrl} />
+              ) : (
+                 <ScrollArea className="flex-1 p-8 md:p-12">
+                    <div className="max-w-3xl mx-auto prose dark:prose-invert prose-headings:font-bold prose-p:leading-relaxed">
+                        {/* If text-only, show extracted text nicely */}
+                        <h1>{document?.title}</h1>
+                        <div className="whitespace-pre-wrap font-serif text-lg text-foreground/80">
+                            {document?.extracted_text || "No text content available."}
+                        </div>
+                    </div>
+                 </ScrollArea>
+              )}
+           </div>
+           {/* Expand Button Overlay (Optional) */}
+           <div className="absolute top-4 right-4 z-10 opacity-0 hover:opacity-100 transition-opacity">
+               <Button size="icon" variant="secondary" className="shadow-lg rounded-full h-8 w-8">
+                   <Maximize2 className="w-4 h-4" />
+               </Button>
+           </div>
         </ResizablePanel>
 
-        <ResizableHandle withHandle />
+        <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1" />
 
-        {/* --- RIGHT PANEL: AI TOOLS --- */}
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <div className="h-full flex flex-col bg-background">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              
-              {/* Tab Navigation */}
-              <div className="border-b px-4 bg-muted/10">
-                <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
-                   <TabsTrigger value="chat" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
-                      <MessageSquare className="w-4 h-4" /> Chat
-                   </TabsTrigger>
-                   <TabsTrigger value="quiz" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
-                      <BrainCircuit className="w-4 h-4" /> Quiz
-                   </TabsTrigger>
-                   <TabsTrigger value="notes" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
-                      <StickyNote className="w-4 h-4" /> Notes
-                   </TabsTrigger>
-                   <TabsTrigger value="flashcards" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 pt-2 gap-2">
-                      <Layers className="w-4 h-4" /> Flashcards
-                   </TabsTrigger>
-                </TabsList>
-              </div>
+        {/* RIGHT PANEL: The "Turbo AI" Workspace */}
+        <ResizablePanel defaultSize={50} minSize={35} maxSize={70} className="bg-background flex flex-row">
+            
+            {/* 1. THE SIDEBAR RAIL */}
+            <div className="w-16 border-r flex flex-col items-center py-4 gap-4 bg-muted/10 shrink-0 z-20">
+                <ToolButton tool="chat" icon={MessageSquare} label="AI Chat" />
+                <ToolButton tool="quiz" icon={BrainCircuit} label="Quiz" />
+                <ToolButton tool="notes" icon={StickyNote} label="Smart Notes" />
+                <ToolButton tool="flashcards" icon={Layers} label="Flashcards" />
+            </div>
 
-              {/* Tab Content Areas */}
-              <div className="flex-1 overflow-hidden relative">
+            {/* 2. THE TOOL CONTENT AREA */}
+            <div className="flex-1 h-full overflow-hidden relative bg-background">
                 
-                {/* 1. Chat Tab */}
-                <TabsContent value="chat" className="h-full m-0 data-[state=active]:flex flex-col">
-                   <ChatInterface documentId={documentId} initialContext={document?.extracted_text} />
-                </TabsContent>
+                {/* Mode: CHAT */}
+                <div className={cn("h-full w-full absolute inset-0 transition-opacity duration-300", activeTool === 'chat' ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none")}>
+                    <ChatInterface 
+                        documentId={documentId} 
+                        initialMessage={`I've analyzed **${document?.title}**. Ask me anything or try generating a summary!`}
+                    />
+                </div>
 
-                {/* 2. Quiz Tab */}
-                <TabsContent value="quiz" className="h-full m-0 p-4 overflow-y-auto">
-                   {relatedLoading ? <Skeleton className="h-40 w-full" /> : (
-                      relatedData?.quizId ? (
-                         // Embed the Quiz Component here directly instead of an iframe
-                         // For now, linking to it or embedding logic is best.
-                         <div className="flex flex-col items-center justify-center h-full space-y-4 text-center">
-                            <BrainCircuit className="w-12 h-12 text-primary/50" />
-                            <h3 className="text-lg font-semibold">Quiz Ready</h3>
-                            <p className="text-muted-foreground max-w-xs">Test your knowledge on this document.</p>
-                            <Button asChild>
-                                <Link href={`/quiz/${relatedData.quizId}`}>Start Full Quiz</Link>
-                            </Button>
-                         </div>
-                      ) : (
-                         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                            <p>Generating Quiz...</p>
-                         </div>
-                      )
-                   )}
-                </TabsContent>
-
-                {/* 3. Notes Tab */}
-                <TabsContent value="notes" className="h-full m-0 p-6 overflow-y-auto prose dark:prose-invert max-w-none">
-                   {relatedLoading ? <div className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /></div> : (
-                      relatedData?.noteId ? (
-                         <div dangerouslySetInnerHTML={{ __html: relatedData.noteContent }} />
-                      ) : <p className="text-muted-foreground text-center mt-10">Generating Notes...</p>
-                   )}
-                </TabsContent>
-
-                {/* 4. Flashcards Tab */}
-                <TabsContent value="flashcards" className="h-full m-0 p-4 overflow-y-auto">
-                    {/* Placeholder for Flashcard Component */}
-                    <div className="flex flex-col items-center justify-center h-full space-y-4">
-                        <Layers className="w-12 h-12 text-primary/50" />
-                        <h3 className="text-lg font-semibold">Flashcards</h3>
-                        {relatedData?.deckId && (
-                           <Button asChild variant="secondary">
-                              <Link href={`/flashcards/${relatedData.deckId}`}>Review Deck</Link>
-                           </Button>
+                {/* Mode: QUIZ */}
+                {activeTool === 'quiz' && (
+                    <div className="h-full w-full p-6 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                        {relatedLoading ? (
+                            <div className="space-y-4">
+                                <Skeleton className="h-32 w-full rounded-xl" />
+                                <Skeleton className="h-32 w-full rounded-xl" />
+                            </div>
+                        ) : relatedData?.quizId ? (
+                            <div className="flex flex-col items-center justify-center h-full space-y-6 text-center max-w-sm mx-auto">
+                                <div className="p-4 bg-primary/10 rounded-full">
+                                    <BrainCircuit className="w-12 h-12 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">Quiz Ready</h3>
+                                    <p className="text-muted-foreground mt-2">Challenge yourself with questions generated from this document.</p>
+                                </div>
+                                <Button size="lg" className="w-full" asChild>
+                                    <Link href={`/quiz/${relatedData.quizId}`}>Start Quiz</Link>
+                                </Button>
+                            </div>
+                        ) : (
+                             <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+                                <p className="text-muted-foreground">No quiz generated yet.</p>
+                                <Button variant="outline">Generate Quiz</Button>
+                             </div>
                         )}
                     </div>
-                </TabsContent>
+                )}
 
-              </div>
-            </Tabs>
-          </div>
+                {/* Mode: NOTES */}
+                {activeTool === 'notes' && (
+                    <div className="h-full w-full overflow-y-auto bg-card animate-in fade-in zoom-in-95 duration-200">
+                        {relatedLoading ? (
+                             <div className="p-8 space-y-4">
+                                <Skeleton className="h-10 w-1/2" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-3/4" />
+                             </div>
+                        ) : relatedData?.noteId ? (
+                             <div className="prose dark:prose-invert max-w-none p-8">
+                                {/* If you have a dedicated Note Viewer component, use it here. 
+                                    Otherwise, render HTML safely */}
+                                <div dangerouslySetInnerHTML={{ __html: relatedData.noteContent }} />
+                             </div>
+                        ) : (
+                             <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                                <StickyNote className="w-12 h-12 text-muted-foreground mb-4" />
+                                <p className="text-muted-foreground">No notes found.</p>
+                             </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Mode: FLASHCARDS */}
+                {activeTool === 'flashcards' && (
+                    <div className="h-full w-full p-6 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                         {relatedLoading ? (
+                            <div className="grid grid-cols-2 gap-4">
+                                <Skeleton className="aspect-[4/3] rounded-xl" />
+                                <Skeleton className="aspect-[4/3] rounded-xl" />
+                            </div>
+                         ) : relatedData?.deckId ? (
+                            <div className="flex flex-col items-center justify-center h-full space-y-6 text-center max-w-sm mx-auto">
+                                <div className="p-4 bg-orange-500/10 rounded-full">
+                                    <Layers className="w-12 h-12 text-orange-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">Flashcards</h3>
+                                    <p className="text-muted-foreground mt-2">Review key concepts with active recall.</p>
+                                </div>
+                                <Button size="lg" variant="secondary" className="w-full" asChild>
+                                    <Link href={`/flashcards/${relatedData.deckId}`}>Practice Deck</Link>
+                                </Button>
+                            </div>
+                         ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-center">
+                                <p className="text-muted-foreground">No flashcards available.</p>
+                            </div>
+                         )}
+                    </div>
+                )}
+
+            </div>
         </ResizablePanel>
+
       </ResizablePanelGroup>
     </div>
   );

@@ -87,11 +87,12 @@ export async function POST(req: NextRequest) {
             }
           });
           
+          // FIX: Map the correct property names from the AI response
           await prisma.flashcards.createMany({
             data: cardsData.map((c: any) => ({
               deck_id: deck.id,
-              front_content: c.front,
-              back_content: c.back
+              front_content: c.front_content, // Fixed: was c.front
+              back_content: c.back_content    // Fixed: was c.back
             }))
           });
           outputId = deck.id;
@@ -185,8 +186,6 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error(`Job Processing Failed:`, e);
     
-    // CRITICAL FIX: Explicitly mark the job as 'failed' in the database
-    // This ensures the frontend doesn't hang or think it succeeded with null.
     if (jobId) {
         try {
             await prisma.generation_jobs.update({

@@ -1,426 +1,322 @@
+// src/app/(app)/flashcards/[deckId]/page.tsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetcher } from '@/lib/fetcher';
 import useSWR from 'swr';
-import { Card as Flashcard, Deck, ApiResponse } from '@/types/database'; 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Loader2,
-  ArrowLeft,
-  RotateCw,
-  Check,
-  X,
-  AlertCircle,
-  BookOpen, // Added for 'Review All' icon
+import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
+import { 
+  ArrowLeft, 
+  ArrowRight, 
+  RotateCw, 
+  Layers, 
+  Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
+import confetti from 'canvas-confetti';
 
-// This is the shape from /api/decks/[deckId]/study
+// --- Fetcher ---
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+// --- Types ---
+interface Flashcard {
+  id: string;
+  front_content: string;
+  back_content: string;
+}
+
 interface DeckData {
   id: string;
-  user_id: string;
   title: string;
-  created_at: string;
-  updated_at: string;
-  flashcards: Flashcard[]; 
-  cardCount: number;
-  cardLimit: number | typeof Infinity;
+  flashcards: Flashcard[];
 }
 
-interface StudyCard extends Flashcard {
-  reviewStatus: 'correct' | 'incorrect' | 'pending';
-}
-
-type StudyMode = 'due' | 'new' | 'cram' | 'all'; // Added 'all' to type
-
-// Helper function to shuffle an array
-function shuffleArray<T>(array: T[]): T[] {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; 
-  }
-  return newArray;
-}
-
-export default function FlashcardStudyPage() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [studyDeck, setStudyDeck] = useState<StudyCard[]>([]);
-  const [showSummary, setShowSummary] = useState(false);
-  const [sessionStarted, setSessionStarted] = useState(false);
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-
+export default function TurboFlashcardsPage() {
   const router = useRouter();
   const params = useParams();
-  const deckId = params.deckId as string;
   const { session } = useAuth();
+  const deckId = params.deckId as string;
 
-  // FIX: Use Next.js hook for reactive search params
-  const searchParams = useSearchParams();
-  const studyMode: StudyMode = (searchParams.get('mode') as StudyMode) || 'due';
+  // --- State ---
+  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [direction, setDirection] = useState(0); // -1 for left, 1 for right
+  const [isFinished, setIsFinished] = useState(false);
 
-  const { data, error, isLoading } = useSWR<DeckData>(
-    session ? `/api/decks/${deckId}/study?mode=${studyMode}` : null,
-    (url: string) =>
-      fetcher(url, {
-        headers: { Authorization: `Bearer ${session!.access_token}` },
-      }),
-    { revalidateOnFocus: false }
+  // --- Data Fetching ---
+  const { data: deckData, isLoading, error } = useSWR<DeckData>(
+    session && deckId ? `/api/decks/${deckId}` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      onSuccess: (data) => {
+        if (data?.flashcards) {
+          setCards(data.flashcards);
+        }
+      }
+    }
   );
 
-  useEffect(() => {
-    if (data?.flashcards) {
-      const shuffled = shuffleArray(data.flashcards).map((card) => ({
-        ...card,
-        reviewStatus: 'pending' as const,
-      }));
-      setStudyDeck(shuffled);
-      setCurrentIndex(0);
-      setShowSummary(false);
-      setSessionStarted(false);
-      setIsFlipped(false);
-      setIsSubmittingReview(false);
-    }
-  }, [data]);
+  // --- Handlers ---
 
-  const handleCardFlip = () => {
+  const handleFlip = useCallback(() => {
     setIsFlipped((prev) => !prev);
-  };
+  }, []);
 
-  const handleReview = (quality: 'again' | 'good' | 'easy') => {
-    if (!sessionStarted) setSessionStarted(true);
-    if (isSubmittingReview) return;
-
-    setIsSubmittingReview(true);
-
-    const currentCard = studyDeck[currentIndex];
-    const status = quality === 'again' ? 'incorrect' : 'correct';
-
-    setStudyDeck((prev) =>
-      prev.map((card, index) =>
-        index === currentIndex ? { ...card, reviewStatus: status } : card
-      )
-    );
-
-    const isCramming = studyMode === 'cram' || studyMode === 'all';
-
-    fetch(`/api/flashcards/${currentCard.id}/review`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session!.access_token}`,
-      },
-      body: JSON.stringify({ quality: quality, isCramming: isCramming }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || 'Failed to save review');
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to save review status:', err);
+  const handleNext = useCallback(() => {
+    if (currentIndex < cards.length - 1) {
+      setIsFlipped(false);
+      setDirection(1);
+      setTimeout(() => setCurrentIndex((prev) => prev + 1), 150); // Delay for animation
+    } else {
+      setIsFinished(true);
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#3b82f6', '#8b5cf6', '#10b981']
       });
+    }
+  }, [currentIndex, cards.length]);
 
-    setTimeout(() => {
-      if (currentIndex < studyDeck.length - 1) {
-        setIsFlipped(false);
-        setCurrentIndex(currentIndex + 1);
-        setIsSubmittingReview(false);
-      } else {
-        setIsFlipped(false);
-        setShowSummary(true);
-        setIsSubmittingReview(false);
-      }
-    }, 150);
-  };
+  const handlePrev = useCallback(() => {
+    if (currentIndex > 0) {
+      setIsFlipped(false);
+      setDirection(-1);
+      setTimeout(() => setCurrentIndex((prev) => prev - 1), 150);
+    }
+  }, [currentIndex]);
 
   const handleRestart = () => {
-    if (data?.flashcards) {
-      setStudyDeck(
-        shuffleArray(data.flashcards).map((card) => ({
-          ...card,
-          reviewStatus: 'pending' as const,
-        }))
-      );
-    }
+    setIsFinished(false);
     setCurrentIndex(0);
-    setShowSummary(false);
-    setSessionStarted(false);
     setIsFlipped(false);
+    setDirection(0);
   };
 
-  const summary = useMemo(() => {
-    if (!showSummary) return { correct: 0, incorrect: 0, total: 0, score: 0 };
-    const correct = studyDeck.filter(
-      (c) => c.reviewStatus === 'correct'
-    ).length;
-    const incorrect = studyDeck.filter(
-      (c) => c.reviewStatus === 'incorrect'
-    ).length;
-    const total = correct + incorrect;
-    const score = total > 0 ? Math.round((correct / total) * 100) : 0;
-    return { correct, incorrect, total, score };
-  }, [studyDeck, showSummary]);
+  // --- Keyboard Support ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isFinished) return;
+      
+      switch (e.key) {
+        case ' ':
+        case 'Enter':
+        case 'ArrowUp':
+        case 'ArrowDown':
+          e.preventDefault();
+          handleFlip();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          handleNext();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          handlePrev();
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleFlip, handleNext, handlePrev, isFinished]);
 
+
+  // --- Render: Loading ---
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="ml-2">Loading Deck...</p>
+      <div className="h-screen flex items-center justify-center bg-background">
+         <div className="flex flex-col items-center space-y-6 w-full max-w-xl px-6">
+            <Skeleton className="h-8 w-1/3 rounded-lg" />
+            <Skeleton className="w-full aspect-[3/2] rounded-3xl" />
+            <div className="flex gap-4">
+              <Skeleton className="h-14 w-14 rounded-full" />
+              <Skeleton className="h-14 w-14 rounded-full" />
+              <Skeleton className="h-14 w-14 rounded-full" />
+            </div>
+         </div>
       </div>
     );
   }
 
-  if (error) {
+  // --- Render: Error / Empty ---
+  if (error || !cards || cards.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-destructive">
-        <AlertCircle className="h-12 w-12 mb-4" />
-        <h2 className="text-2xl font-semibold">Failed to Load Deck</h2>
-        <p className="text-center">{error.message}</p>
-        <Button
-          onClick={() => router.push('/flashcards')}
-          variant="outline"
-          className="mt-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
+      <div className="h-screen flex flex-col items-center justify-center space-y-4 p-4 text-center">
+        <div className="p-4 bg-muted/50 rounded-full">
+           <Layers className="w-12 h-12 text-muted-foreground opacity-50" />
+        </div>
+        <h2 className="text-xl font-semibold">Empty Deck</h2>
+        <p className="text-muted-foreground">This deck has no flashcards yet.</p>
+        <Button onClick={() => router.back()} variant="outline">
+          Go Back
         </Button>
       </div>
     );
   }
 
-  // --- FIX: Logic to handle Empty vs Caught Up ---
-  if (!data || !data.flashcards || data.flashcards.length === 0) {
-    const totalCards = data?.cardCount || 0;
-
-    // Case 1: Deck is truly empty (User has no cards)
-    if (totalCards === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <AlertCircle className="h-12 w-12 mb-4" />
-          <h2 className="text-2xl font-semibold">{data?.title || 'Flashcard Deck'}</h2>
-          <p className="text-center">This deck has no cards in it. Add some cards to start studying!</p>
-          <Button
-            onClick={() => router.push('/flashcards')}
-            variant="outline"
-            className="mt-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
-          </Button>
-        </div>
-      );
-    }
-
-    // Case 2: Cards exist, but none match the current filter (Caught Up)
-    let message = 'You are all caught up!';
-    if (studyMode === 'due') message = 'No cards due for review right now.';
-    if (studyMode === 'new') message = 'No new cards to learn at the moment.';
-
+  // --- Render: Finished ---
+  if (isFinished) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
-        <Check className="h-16 w-16 mb-4 text-green-500" />
-        <h2 className="text-2xl font-semibold mb-2">{data?.title}</h2>
-        <p className="text-center text-lg mb-6">{message}</p>
-        
-        <div className="flex flex-col w-full max-w-xs gap-3">
-          {/* Button to force review of all cards */}
-          <Button 
-            onClick={() => router.push(`/flashcards/${deckId}?mode=all`)}
-            className="w-full"
-          >
-            <BookOpen className="mr-2 h-4 w-4" /> Review All Cards
-          </Button>
+      <div className="h-screen w-full flex items-center justify-center bg-background p-4">
+        <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-md text-center"
+        >
+           <div className="relative inline-block mb-8">
+             <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
+             <div className="relative p-6 rounded-full bg-background border-2 border-primary/20">
+                <Trophy className="w-16 h-16 text-primary" />
+             </div>
+           </div>
 
-          <Button
-            onClick={() => router.push('/flashcards')}
-            variant="outline"
-            className="w-full"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
-          </Button>
-        </div>
+           <h2 className="text-3xl font-bold mb-2">Deck Complete!</h2>
+           <p className="text-muted-foreground mb-8">You've reviewed all {cards.length} cards.</p>
+
+           <div className="flex gap-4 justify-center">
+              <Button onClick={handleRestart} variant="outline" className="h-12 px-6 rounded-xl border-2">
+                 <RotateCw className="w-4 h-4 mr-2" /> Review Again
+              </Button>
+              <Button onClick={() => router.push('/dashboard')} className="h-12 px-6 rounded-xl shadow-lg shadow-primary/25">
+                 Back to Dashboard
+              </Button>
+           </div>
+        </motion.div>
       </div>
     );
   }
 
-  const currentCard = studyDeck[currentIndex];
-  if (!currentCard) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="ml-2">Shuffling cards...</p>
-      </div>
-    );
-  }
-
-  const progress = sessionStarted
-    ? ((currentIndex + 1) / studyDeck.length) * 100
-    : 0;
+  // --- Render: Active Card ---
+  const currentCard = cards[currentIndex];
+  const progress = ((currentIndex + 1) / cards.length) * 100;
 
   return (
-    <div className="flex flex-col h-full items-center py-8">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/flashcards')}
-            className="pl-0"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Decks
-          </Button>
-          <h1
-            className="text-xl font-semibold truncate text-center"
-            title={data.title}
-          >
-            {data.title}
-          </h1>
-          <div className="w-24"></div> {/* Spacer */}
+    <div className="h-screen bg-background flex flex-col overflow-hidden text-foreground">
+      
+      {/* 1. Header */}
+      <header className="h-16 px-6 flex items-center justify-between shrink-0 z-10 max-w-6xl mx-auto w-full">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full hover:bg-muted/80">
+            <ArrowLeft className="w-5 h-5" />
+        </Button>
+        
+        <div className="flex flex-col items-center">
+            <h1 className="text-sm font-bold tracking-tight">{deckData?.title || 'Flashcards'}</h1>
+            <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+               Card {currentIndex + 1} of {cards.length}
+            </p>
         </div>
+        
+        <div className="w-10" /> {/* Spacer */}
+      </header>
 
-        {!showSummary && (
-          <p className="text-center text-muted-foreground text-sm mb-4">
-            Card {currentIndex + 1} of {studyDeck.length}
-          </p>
-        )}
-
-        <Progress value={progress} className="w-full h-2 mb-6" />
-
-        <AnimatePresence mode="wait">
-          {!showSummary ? (
-            <motion.div
-              key="study"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center"
-            >
-              <div
-                className="w-full h-80 [perspective:1000px] cursor-pointer"
-                onClick={handleCardFlip}
-              >
-                <motion.div
-                  className="relative w-full h-full [transform-style:preserve-3d]"
-                  animate={{ rotateY: isFlipped ? 180 : 0 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  {/* Front of Card */}
-                  <div className="absolute backface-hidden w-full h-full">
-                    <Card className="flex h-full items-center justify-center p-6 shadow-lg">
-                      <p className="text-2xl font-medium text-center">
-                        {currentCard.front_content}
-                      </p>
-                    </Card>
-                  </div>
-                  {/* Back of Card */}
-                  <div className="absolute backface-hidden w-full h-full [transform:rotateY(180deg)]">
-                    <Card className="flex h-full items-center justify-center p-6 shadow-lg bg-secondary">
-                      <p className="text-xl text-center">
-                        {currentCard.back_content}
-                      </p>
-                    </Card>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Study Controls */}
-              <AnimatePresence>
-                {isFlipped && (
-                  <motion.div
-                    className="flex w-full gap-4 mt-6"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Button
-                      variant="outline"
-                      className="flex-1 text-destructive hover:border-destructive/80 hover:text-destructive/80 border-2 border-destructive/50 h-14 text-lg"
-                      onClick={() => handleReview('again')}
-                      disabled={isSubmittingReview}
-                    >
-                      <X className="mr-2 h-6 w-6" /> Again
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1 text-primary hover:border-primary/80 hover:text-primary/80 border-2 border-primary/50 h-14 text-lg"
-                      onClick={() => handleReview('good')}
-                      disabled={isSubmittingReview}
-                    >
-                      <Check className="mr-2 h-6 w-6" /> Good
-                    </Button>
-                    <Button
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white border-2 border-green-600 hover:border-green-700 h-14 text-lg"
-                      onClick={() => handleReview('easy')}
-                      disabled={isSubmittingReview}
-                    >
-                      <Check className="mr-2 h-6 w-6" /> Easy
-                    </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="summary"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="flex flex-col items-center"
-            >
-              <Card className="w-full max-w-md shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-center text-2xl">
-                    Session Complete!
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center gap-4">
-                  <div className="text-6xl font-bold">{summary.score}%</div>
-                  <div className="w-full">
-                    <div className="flex justify-between text-green-600">
-                      <span>Correct</span>
-                      <span>{summary.correct}</span>
-                    </div>
-                    <div className="flex justify-between text-destructive">
-                      <span>Incorrect</span>
-                      <span>{summary.incorrect}</span>
-                    </div>
-                    <div className="flex justify-between font-medium border-t mt-2 pt-2">
-                      <span>Total Reviewed</span>
-                      <span>{summary.total}</span>
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-3">
-                  <Button className="w-full" onClick={handleRestart}>
-                    <RotateCw className="mr-2 h-4 w-4" /> Study Again
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => router.push('/flashcards')}
-                  >
-                    Back to Decks
-                  </Button>
-                </CardFooter>
-              </Card>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* 2. Progress Line */}
+      <div className="w-full max-w-md mx-auto px-6 mb-2">
+        <Progress value={progress} className="h-1" />
       </div>
+
+      {/* 3. Main Card Area */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 perspective-1000">
+         
+         <div className="relative w-full max-w-3xl aspect-[1.6/1] md:aspect-[1.8/1] perspective-1000 group cursor-pointer" onClick={handleFlip}>
+            <AnimatePresence mode="wait" initial={false} custom={direction}>
+                <motion.div
+                    key={currentIndex}
+                    custom={direction}
+                    initial={{ x: direction * 100, opacity: 0, rotateY: direction * 10 }}
+                    animate={{ x: 0, opacity: 1, rotateY: 0 }}
+                    exit={{ x: direction * -100, opacity: 0, rotateY: direction * -10 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    className="w-full h-full relative preserve-3d transition-transform duration-500"
+                    style={{ 
+                        transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)', 
+                        transformStyle: 'preserve-3d' 
+                    }}
+                >
+                    {/* --- FRONT SIDE --- */}
+                    <div className="absolute inset-0 backface-hidden bg-card border shadow-2xl rounded-[2rem] flex flex-col items-center justify-center p-8 md:p-16 text-center hover:shadow-primary/10 transition-shadow">
+                        <div className="absolute top-8 left-8">
+                           <span className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest border border-border px-2 py-1 rounded-md">
+                             Front
+                           </span>
+                        </div>
+                        
+                        <div className="flex-1 flex items-center justify-center overflow-y-auto w-full no-scrollbar">
+                             <h3 className="text-2xl md:text-4xl font-medium leading-snug text-balance">
+                                {currentCard.front_content}
+                             </h3>
+                        </div>
+
+                        <div className="absolute bottom-8 text-xs text-muted-foreground/40 font-medium uppercase tracking-widest animate-pulse">
+                           Tap or Press Space to Flip
+                        </div>
+                    </div>
+
+                    {/* --- BACK SIDE --- */}
+                    <div 
+                        className="absolute inset-0 backface-hidden bg-primary/5 border-2 border-primary/10 shadow-2xl rounded-[2rem] flex flex-col items-center justify-center p-8 md:p-16 text-center"
+                        style={{ transform: 'rotateY(180deg)' }}
+                    >
+                         <div className="absolute top-8 left-8">
+                           <span className="text-xs font-bold text-primary/70 uppercase tracking-widest border border-primary/20 bg-primary/5 px-2 py-1 rounded-md">
+                             Back
+                           </span>
+                        </div>
+
+                        <div className="flex-1 flex items-center justify-center overflow-y-auto w-full no-scrollbar">
+                             <h3 className="text-xl md:text-3xl font-medium leading-snug text-foreground/90 text-balance">
+                                {currentCard.back_content}
+                             </h3>
+                        </div>
+                    </div>
+                </motion.div>
+            </AnimatePresence>
+         </div>
+
+         {/* 4. Controls */}
+         <div className="mt-12 flex items-center gap-8 z-10">
+             <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-14 w-14 rounded-full border-2 hover:bg-muted"
+                onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                disabled={currentIndex === 0}
+                title="Previous (Left Arrow)"
+             >
+                <ArrowLeft className="w-6 h-6" />
+             </Button>
+
+             <Button 
+                className="h-20 w-20 rounded-full shadow-xl bg-primary text-primary-foreground hover:scale-105 hover:shadow-primary/25 transition-all"
+                onClick={(e) => { e.stopPropagation(); handleFlip(); }}
+                title="Flip (Space)"
+             >
+                <RotateCw className={cn("w-8 h-8 transition-transform duration-500", isFlipped && "rotate-180")} />
+             </Button>
+
+             <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-14 w-14 rounded-full border-2 hover:bg-muted"
+                onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                disabled={currentIndex === cards.length - 1}
+                title="Next (Right Arrow)"
+             >
+                <ArrowRight className="w-6 h-6" />
+             </Button>
+         </div>
+
+      </main>
+      
+      {/* Keyboard Hint Footer */}
+      <footer className="py-6 text-center text-xs text-muted-foreground/50 pointer-events-none">
+         Use <span className="font-bold">Arrow Keys</span> to navigate • <span className="font-bold">Space</span> to flip
+      </footer>
     </div>
   );
 }
