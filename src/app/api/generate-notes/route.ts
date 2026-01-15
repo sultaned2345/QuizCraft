@@ -152,9 +152,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Return Success
-    return NextResponse.json<ApiResponse<{ count: number }>>({
+    // FIX: Included noteId in data so frontend can redirect
+    return NextResponse.json<ApiResponse<{ count: number; noteId: string }>>({
         success: true,
-        data: { count: 1 }, 
+        data: { count: 1, noteId: savedNote.id }, 
         message: `Note generated successfully.`
     }, { status: 201 });
 

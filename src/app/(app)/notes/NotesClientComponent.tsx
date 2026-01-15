@@ -1,4 +1,3 @@
-// src/app/(app)/notes/NotesClientComponent.tsx
 'use client';
 
 import { useState } from 'react';
@@ -12,7 +11,8 @@ import {
   MoreHorizontal, 
   Trash2, 
   Clock, 
-  ArrowRight 
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 import { fetcher } from '@/lib/fetcher';
 import { Button } from '@/components/ui/button';
@@ -26,8 +26,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { GenerateNotesDialog } from '@/components/GenerateNotesDialog';
 
-// Match types with Server Component
+// Types matching the server response
 interface NoteListItem {
   id: string;
   user_id: string;
@@ -53,43 +54,33 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
   const { session } = useAuth();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
+  
+  // State for the AI Generation Dialog
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
 
-  // Use initialData as fallbackData for SWR to prevent loading state
+  // SWR Hook with correct fallback structure
   const { data: notesData, error, isLoading, mutate } = useSWR(
     session ? '/api/notes' : null,
     (url) => fetcher(url, session!.access_token),
     {
-      fallbackData: initialData ? { success: true, data: initialData.notes } : undefined,
+      // We wrap initialData to match the API response shape: { success: true, data: ... }
+      fallbackData: initialData ? { success: true, data: initialData } : undefined,
     }
   );
 
-  // If using initialData, notesData structure matches API response { success: true, data: [...] }
-  // OR it matches what we passed in fallbackData.
-  const notes = notesData?.data || initialData?.notes || [];
+  // Safely extract the notes array from the paginated response object
+  const notes = notesData?.data?.notes || initialData?.notes || [];
 
-  const handleCreate = async () => {
-    setIsCreating(true);
-    try {
-      const res = await fetch('/api/notes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({
-          title: 'Untitled Note',
-          content: '',
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        router.push(`/notes/${data.data.id}`);
-      }
-    } catch (e) {
-      toast({ variant: "destructive", description: "Failed to initialize new note." });
-    } finally {
-      setIsCreating(false);
+  // Handler for successful AI generation
+  const handleGenerateSuccess = (newNoteId?: string) => {
+    setIsGenerateOpen(false);
+    mutate(); // Refresh the list to show the new note
+    
+    if (newNoteId) {
+      toast({ title: "Note Created", description: "Redirecting to your new note..." });
+      router.push(`/notes/${newNoteId}`);
+    } else {
+      toast({ title: "Note Created", description: "Your new note is ready." });
     }
   };
 
@@ -108,9 +99,10 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
     }
   };
 
-  const filteredNotes = notes.filter((n: any) =>
-    n.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Safe filtering (ensuring notes is actually an array)
+  const filteredNotes = Array.isArray(notes) 
+    ? notes.filter((n: any) => n.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
 
   return (
     <div className="space-y-8 h-full flex flex-col">
@@ -134,13 +126,14 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
             />
           </div>
           <div className="h-6 w-px bg-border mx-1 hidden md:block" />
+          
+          {/* Main Action: Open AI Generator */}
           <Button 
-            onClick={handleCreate} 
-            disabled={isCreating}
+            onClick={() => setIsGenerateOpen(true)} 
             size="sm" 
-            className="h-9 px-4"
+            className="h-9 px-4 gap-2 shadow-lg shadow-primary/20"
           >
-            <Plus className="w-4 h-4 mr-2" /> {isCreating ? 'Creating...' : 'New Note'}
+            <Sparkles className="w-4 h-4" /> Generate Note
           </Button>
         </div>
       </div>
@@ -164,11 +157,11 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
             </div>
             <h3 className="text-lg font-medium text-foreground">Notebook Empty</h3>
             <p className="text-muted-foreground max-w-sm mt-1 mb-6 text-sm">
-              Capture your thoughts, summaries, and ideas here.
+              Use AI to generate your first note from a topic, YouTube video, or article.
             </p>
             {!searchQuery && (
-              <Button onClick={handleCreate} variant="outline" className="border-border hover:bg-muted/50">
-                Create First Note
+              <Button onClick={() => setIsGenerateOpen(true)} variant="outline" className="border-border hover:bg-muted/50 gap-2">
+                <Sparkles className="w-4 h-4" /> Generate First Note
               </Button>
             )}
           </div>
@@ -229,6 +222,13 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
           </div>
         )}
       </div>
+
+      {/* 3. AI Generation Dialog */}
+      <GenerateNotesDialog 
+        open={isGenerateOpen} 
+        onOpenChange={setIsGenerateOpen}
+        onGenerate={handleGenerateSuccess} 
+      />
     </div>
   );
 }
