@@ -32,6 +32,10 @@ export async function GET(
         const user = await requireAuth(request);
         const { documentId } = params;
 
+        if (!documentId) {
+             return NextResponse.json({ error: 'Document ID missing' }, { status: 400 });
+        }
+
         const doc = await prisma.documents.findUnique({
             where: {
                 id: documentId,
@@ -45,7 +49,8 @@ export async function GET(
                 created_at: true,
                 processing_status: true,
                 ai_summary: true,
-                storage_path: true, // Needed for public URL generation
+                storage_path: true, 
+                extracted_text: true, // <--- ADDED: Required for Workspace/Chat
             }
         });
 
@@ -55,10 +60,14 @@ export async function GET(
 
         // 1. Serialize BigInt (file_size) to string
         // 2. Generate Public URL for frontend PDF viewer
+        // 3. Map file_name to title for Frontend consistency
         const safeDoc = {
             ...doc,
-            file_size: doc.file_size?.toString(), 
-            publicUrl: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET_NAME}/${doc.storage_path}`
+            title: doc.file_name, // <--- ADDED: Frontend expects 'title'
+            file_size: doc.file_size?.toString() || "0", 
+            publicUrl: doc.storage_path 
+                ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET_NAME}/${doc.storage_path}`
+                : null
         };
 
         return NextResponse.json({ success: true, data: safeDoc });
@@ -107,7 +116,7 @@ export async function DELETE(
 
             if (storageError) {
                 console.error(`Storage delete error:`, storageError);
-                throw new Error(`Storage delete failed: ${storageError.message}`);
+                // We log but continue to delete DB record to prevent orphans
             }
         }
 
