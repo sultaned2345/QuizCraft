@@ -92,12 +92,12 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       }, 1000);
 
       const processResponse = await fetch('/api/generation-jobs/process', {
-        method: 'POST', // Fix: Changed from default GET to POST
+        method: 'POST', 
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        body: JSON.stringify({ jobId }) // Fix: Send ID in body, not query param
+        body: JSON.stringify({ jobId }) 
       });
 
       clearInterval(progressTimer);
@@ -108,6 +108,11 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       }
 
       const result = await processResponse.json();
+
+      // CRITICAL CHECK: Ensure we actually have an output ID
+      if (!result.outputId) {
+          throw new Error("Generation completed, but no content was returned. Please check your document content.");
+      }
 
       // 4. Completion
       setProgress(100);
@@ -131,7 +136,7 @@ export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
       } else {
         toast({
             title: "Generation failed",
-            description: error.message,
+            description: error.message || "An unexpected error occurred.",
             variant: "destructive"
         });
       }

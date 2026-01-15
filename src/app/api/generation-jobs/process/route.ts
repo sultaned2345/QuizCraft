@@ -1,3 +1,4 @@
+// src/app/api/generation-jobs/process/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -5,15 +6,22 @@ import {
   generateDocumentSummary, 
   generateFlashcardsFromText, 
   generateQuizFromText,
-  generateEmbeddings // We will add this to ai-service next
+  generateEmbeddings 
 } from '@/lib/ai-service';
 
 export const maxDuration = 60; // Allow 60s timeout on Vercel Pro
 
 export async function POST(req: NextRequest) {
+  let jobId = ""; // Scoped outside try/catch for error logging
+
   try {
     const user = await requireAuth(req);
-    const { jobId } = await req.json();
+    const body = await req.json();
+    jobId = body.jobId;
+
+    if (!jobId) {
+      return NextResponse.json({ error: "Missing Job ID" }, { status: 400 });
+    }
 
     // 1. Fetch Job and Document
     const job = await prisma.generation_jobs.findUnique({
@@ -37,12 +45,18 @@ export async function POST(req: NextRequest) {
 
     const text = job.document.extracted_text || "";
     const title = job.document.file_name;
-    let outputId = null;
+    let outputId: string | null = null;
 
     // 2. Execute Logic based on Job Type
     switch (job.job_type) {
       case 'note': {
         const noteContent = await generateDocumentSummary(text, title);
+        
+        // VALIDATION: Ensure AI actually generated content
+        if (!noteContent || noteContent.length < 50) {
+            throw new Error("AI failed to generate valid notes. Content was empty or too short.");
+        }
+
         const note = await prisma.notes.create({
           data: {
             user_id: user.id,
@@ -58,6 +72,12 @@ export async function POST(req: NextRequest) {
 
       case 'flashcard': {
         const cardsData = await generateFlashcardsFromText(text, 15);
+        
+        // VALIDATION: Ensure we have cards
+        if (!cardsData || cardsData.length === 0) {
+            throw new Error("AI returned 0 flashcards. Please check your API keys or document content.");
+        }
+
         if (cardsData.length > 0) {
           const deck = await prisma.flashcard_decks.create({
             data: {
@@ -81,6 +101,12 @@ export async function POST(req: NextRequest) {
 
       case 'quiz': {
         const questionsData = await generateQuizFromText(text, 10);
+        
+        // VALIDATION: Ensure we have questions
+        if (!questionsData || questionsData.length === 0) {
+            throw new Error("AI generated 0 questions. The content may be too short or the AI service failed.");
+        }
+
         if (questionsData.length > 0) {
           const quiz = await prisma.quiz.create({
             data: {
@@ -91,7 +117,7 @@ export async function POST(req: NextRequest) {
             }
           });
 
-          // Create questions sequentially or look into createMany if schema allows (schema has complex relations, usually loop is safer for initial nesting)
+          // Create questions sequentially
           for (const q of questionsData) {
             await prisma.questions.create({
               data: {
@@ -157,11 +183,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, jobId, outputId });
 
   } catch (e: any) {
-    console.error(`Job ${req.json['jobId']} failed:`, e);
-    // Mark job as failed
-    if (req.body) {
-        // Logic to extract ID and mark failed would go here
+    console.error(`Job Processing Failed:`, e);
+    
+    // CRITICAL FIX: Explicitly mark the job as 'failed' in the database
+    // This ensures the frontend doesn't hang or think it succeeded with null.
+    if (jobId) {
+        try {
+            await prisma.generation_jobs.update({
+                where: { id: jobId },
+                data: { 
+                    status: 'failed',
+                    error_message: e.message || "Unknown error occurred during generation."
+                }
+            });
+        } catch (dbErr) {
+            console.error("Failed to update job status to failed:", dbErr);
+        }
     }
+
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
