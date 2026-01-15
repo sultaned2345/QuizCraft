@@ -3,16 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { 
-  generateDocumentSummary, 
-  generateFlashcardsFromText, 
-  generateQuizFromText,
-  generateEmbeddings 
-} from '@/lib/ai-service';
+  callAIToGenerateNote, 
+  callAIToGenerateFlashcards, 
+  callAIToGenerateQuiz 
+} from '@/lib/aiGeneration';
+import { generateEmbeddings } from '@/lib/ai-service';
 
 export const maxDuration = 60; // Allow 60s timeout on Vercel Pro
 
 export async function POST(req: NextRequest) {
-  let jobId = ""; // Scoped outside try/catch for error logging
+  let jobId = ""; 
 
   try {
     const user = await requireAuth(req);
@@ -44,25 +44,26 @@ export async function POST(req: NextRequest) {
     });
 
     const text = job.document.extracted_text || "";
-    const title = job.document.file_name;
+    const fileName = job.document.file_name;
     let outputId: string | null = null;
 
     // 2. Execute Logic based on Job Type
     switch (job.job_type) {
       case 'note': {
-        const noteContent = await generateDocumentSummary(text, title);
+        // Use Gemini to generate structured notes
+        const noteResult = await callAIToGenerateNote(text);
         
-        // VALIDATION: Ensure AI actually generated content
-        if (!noteContent || noteContent.length < 50) {
-            throw new Error("AI failed to generate valid notes. Content was empty or too short.");
+        // VALIDATION
+        if (!noteResult || !noteResult.content) {
+            throw new Error("AI failed to generate notes.");
         }
 
         const note = await prisma.notes.create({
           data: {
             user_id: user.id,
             document_id: job.document_id,
-            title: `${title} - Study Notes`,
-            content: noteContent,
+            title: noteResult.title || `${fileName} - Study Notes`,
+            content: noteResult.content, // HTML content
             tags: ['auto-generated']
           }
         });
@@ -71,76 +72,73 @@ export async function POST(req: NextRequest) {
       }
 
       case 'flashcard': {
-        const cardsData = await generateFlashcardsFromText(text, 15);
+        // Use Gemini to generate flashcards
+        const cardsData = await callAIToGenerateFlashcards(text, 15);
         
-        // VALIDATION: Ensure we have cards
+        // VALIDATION
         if (!cardsData || cardsData.length === 0) {
-            throw new Error("AI returned 0 flashcards. Please check your API keys or document content.");
+            throw new Error("AI returned 0 flashcards.");
         }
 
-        if (cardsData.length > 0) {
-          const deck = await prisma.flashcard_decks.create({
-            data: {
-              user_id: user.id,
-              document_id: job.document_id,
-              title: `${title} - Flashcards`
-            }
-          });
-          
-          // FIX: Map the correct property names from the AI response
-          await prisma.flashcards.createMany({
-            data: cardsData.map((c: any) => ({
-              deck_id: deck.id,
-              front_content: c.front_content, // Fixed: was c.front
-              back_content: c.back_content    // Fixed: was c.back
-            }))
-          });
-          outputId = deck.id;
-        }
+        const deck = await prisma.flashcard_decks.create({
+          data: {
+            user_id: user.id,
+            document_id: job.document_id,
+            title: `${fileName} - Flashcards`
+          }
+        });
+        
+        // Use explicit 'front_content' and 'back_content' from Gemini Schema
+        await prisma.flashcards.createMany({
+          data: cardsData.map((c: any) => ({
+            deck_id: deck.id,
+            front_content: c.front_content || c.front || "Error", // Fallback for safety
+            back_content: c.back_content || c.back || "Error"
+          }))
+        });
+        outputId = deck.id;
         break;
       }
 
       case 'quiz': {
-        const questionsData = await generateQuizFromText(text, 10);
+        // Use Gemini to generate quiz
+        const quizResult = await callAIToGenerateQuiz(text, 10, 'medium', 'MIXED');
         
-        // VALIDATION: Ensure we have questions
-        if (!questionsData || questionsData.length === 0) {
-            throw new Error("AI generated 0 questions. The content may be too short or the AI service failed.");
+        // VALIDATION
+        if (!quizResult || !quizResult.questions || quizResult.questions.length === 0) {
+            throw new Error("AI generated 0 questions.");
         }
 
-        if (questionsData.length > 0) {
-          const quiz = await prisma.quiz.create({
+        const quiz = await prisma.quiz.create({
+          data: {
+            userId: user.id,
+            document_id: job.document_id,
+            title: quizResult.title || `${fileName} - Pop Quiz`,
+            time_limit_minutes: 15
+          }
+        });
+
+        // Create questions sequentially
+        for (const q of quizResult.questions) {
+          await prisma.questions.create({
             data: {
-              userId: user.id,
-              document_id: job.document_id,
-              title: `${title} - Pop Quiz`,
-              time_limit_minutes: 15
+              quiz_id: quiz.id,
+              question_text: q.question_text,
+              question_type: q.question_type,
+              correct_answer: q.correct_answer,
+              options: q.options || [],
+              explanation: q.explanation || ""
             }
           });
-
-          // Create questions sequentially
-          for (const q of questionsData) {
-            await prisma.questions.create({
-              data: {
-                quiz_id: quiz.id,
-                question_text: q.question_text,
-                question_type: q.question_type,
-                correct_answer: q.correct_answer,
-                options: q.options,
-                explanation: q.explanation
-              }
-            });
-          }
-          outputId = quiz.id;
         }
+        outputId = quiz.id;
         break;
       }
 
       case 'embedding': {
-        // Generate embedding vector for RAG (Chat with File)
-        const vector = await generateEmbeddings(text.slice(0, 8000)); // Limit for embedding model
+        // Keep OpenAI/Embeddings for RAG (Gemini embeddings support requires different setup)
+        const vector = await generateEmbeddings(text.slice(0, 8000));
         
-        // Use raw SQL for pgvector insertion
         await prisma.$executeRaw`
           INSERT INTO content_embeddings (id, user_id, content_id, content_type, content_chunk, embedding)
           VALUES (
@@ -152,7 +150,7 @@ export async function POST(req: NextRequest) {
             ${vector}::vector
           )
         `;
-        outputId = job.document_id; // Maps back to the doc
+        outputId = job.document_id;
         break;
       }
     }
@@ -166,7 +164,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Check if all jobs for this doc are done, if so, mark doc as ready
+    // Check if all jobs for this doc are done
     const pendingJobs = await prisma.generation_jobs.count({
       where: { 
         document_id: job.document_id,
@@ -186,17 +184,18 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error(`Job Processing Failed:`, e);
     
+    // Explicitly fail the job in DB so UI updates
     if (jobId) {
         try {
             await prisma.generation_jobs.update({
                 where: { id: jobId },
                 data: { 
                     status: 'failed',
-                    error_message: e.message || "Unknown error occurred during generation."
+                    error_message: e.message || "Unknown error."
                 }
             });
         } catch (dbErr) {
-            console.error("Failed to update job status to failed:", dbErr);
+            console.error("Failed to update job status:", dbErr);
         }
     }
 
