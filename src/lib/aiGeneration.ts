@@ -7,8 +7,8 @@ import Groq from "groq-sdk";
 const API_KEY = process.env.GOOGLE_AI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-// FIX: Use the specific "002" version. The generic alias was retired/moved.
-const AI_MODEL_NAME = "gemini-1.5-flash-002"; 
+// FIX: Switched to the requested model version
+const AI_MODEL_NAME = "gemini-2.5-flash-lite"; 
 const MAX_INPUT_LENGTH = 30000; 
 
 if (!API_KEY) console.warn("Missing GOOGLE_AI_API_KEY");
@@ -76,13 +76,13 @@ export async function callAIToGenerateQuiz(
     const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
 
-    // Sanitize for Prisma (Ensure Options is array or empty)
+    // Sanitize for Prisma
     const questions = parsed.questions.map((q: any) => ({
       question_text: q.question_text || "Untitled Question",
       question_type: q.question_type,
       correct_answer: q.correct_answer,
       options: q.options || [],
-      prompts: Prisma.JsonNull, // Simple schema doesn't use prompts yet, can add if needed
+      prompts: Prisma.JsonNull, 
       explanation: q.explanation || "",
     }));
 
@@ -173,7 +173,8 @@ export async function callAIToGenerateFlashcards(text: string, numCards: number)
   try {
     const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
-    // Robust check for different potential AI return shapes
+    
+    // Robust check for array vs object wrapper
     if (Array.isArray(parsed)) return parsed;
     if (parsed.flashcards && Array.isArray(parsed.flashcards)) return parsed.flashcards;
     return [];
@@ -216,7 +217,6 @@ export async function callAIToProcessAudio(audioFile: File): Promise<{ title: st
       { role: "system", content: systemPrompt },
       { role: "user", content: transcriptText }
     ],
-    // UPDATED: 'llama3-70b-8192' is deprecated.
     model: "llama-3.3-70b-versatile", 
     temperature: 0.5,
     response_format: { type: "json_object" },

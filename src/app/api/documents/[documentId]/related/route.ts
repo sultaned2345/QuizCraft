@@ -24,18 +24,18 @@ export async function GET(
     const results = await Promise.allSettled([
       // Fetch latest quiz
       prisma.quiz.findFirst({
-        where: { documentId: documentId },
+        where: { document_id: documentId },
         orderBy: { createdAt: 'desc' },
         select: { id: true }
       }),
-      // Fetch latest note
-      prisma.notes.findFirst({  // Changed from 'note' to 'notes' (check your schema map name)
-        where: { document_id: documentId }, // Changed from 'documentId' to 'document_id' to match typical Prisma naming
-        orderBy: { created_at: 'desc' }, // Changed to snake_case if your DB uses it
+      // Fetch latest note (Schema model: 'notes')
+      prisma.notes.findFirst({  
+        where: { document_id: documentId }, 
+        orderBy: { created_at: 'desc' }, 
         select: { id: true, content: true }
       }),
-      // Fetch latest flashcard deck
-      prisma.flashcard_decks.findFirst({ // Changed to 'flashcard_decks'
+      // Fetch latest deck (Schema model: 'flashcard_decks')
+      prisma.flashcard_decks.findFirst({ 
         where: { document_id: documentId },
         orderBy: { created_at: 'desc' },
         select: { id: true }
@@ -43,10 +43,8 @@ export async function GET(
     ]);
 
     // 2. Extract Data (Handling Success/Failure)
+    // results[0] = Quiz, results[1] = Note, results[2] = Deck
     const quiz = results[0].status === 'fulfilled' ? results[0].value : null;
-    // NOTE: I am guessing your schema names based on your previous logs (flashcard_decks vs FlashcardDeck). 
-    // Please verify if your schema uses `notes` or `Note`, and `document_id` or `documentId`.
-    // I will use snake_case for fields based on your previous logs.
     const note = results[1].status === 'fulfilled' ? results[1].value : null;
     const deck = results[2].status === 'fulfilled' ? results[2].value : null;
 
@@ -59,7 +57,7 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching related content:', error);
-    // Return 200 with nulls instead of 500 to prevent page crash
+    // Return empty 200 OK instead of 500 to keep the UI alive
     return NextResponse.json({
       quizId: null,
       noteId: null,
