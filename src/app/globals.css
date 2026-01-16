@@ -4,89 +4,94 @@
 
 @layer base {
   :root {
-    /* Base: Warm White / Paper feel */
-    --background: 30 20% 99%; /* #FFFCF9 */
-    --foreground: 20 14.3% 4.1%; /* Warm Black */
+    /* Alabaster/Isatine warm beige background - mimics high-quality paper */
+    --background: oklch(0.965 0.008 75);
+    /* Dark warm gray (Stone-800) text - never pitch black */
+    --foreground: oklch(0.38 0.015 60);
 
-    /* Card: White with slight warmth */
-    --card: 0 0% 100%;
-    --card-foreground: 20 14.3% 4.1%;
+    /* Soft sand/beige for card backgrounds with subtle warmth */
+    --card: oklch(0.97 0.012 80);
+    --card-foreground: oklch(0.38 0.015 60);
 
-    /* Popover */
-    --popover: 0 0% 100%;
-    --popover-foreground: 20 14.3% 4.1%;
+    --popover: oklch(0.97 0.012 80);
+    --popover-foreground: oklch(0.38 0.015 60);
 
-    /* Primary: Fox Orange (Orange-600) */
-    --primary: 24.6 95% 53.1%; /* #EA580C */
-    --primary-foreground: 60 9.1% 97.8%;
+    /* Baked Clay / Earthy Terra Cotta as primary accent */
+    --primary: oklch(0.58 0.12 40);
+    --primary-foreground: oklch(0.98 0.008 75);
 
-    /* Secondary: Electric Blue (Sky-500) - The Eyes */
-    --secondary: 199 89% 48%; /* #0EA5E9 */
-    --secondary-foreground: 60 9.1% 97.8%;
+    /* Sage Green as secondary accent - natural color palette */
+    --secondary: oklch(0.72 0.06 145);
+    --secondary-foreground: oklch(0.28 0.02 145);
 
-    /* Muted: Warm Sand/Beige */
-    --muted: 30 20% 94%; 
-    --muted-foreground: 25 5.3% 44.7%;
+    /* Soft warm stone muted tones */
+    --muted: oklch(0.91 0.012 70);
+    --muted-foreground: oklch(0.54 0.018 65);
 
-    /* Accent: Light Orange/Blue mix for hovers */
-    --accent: 30 25% 94%; 
-    --accent-foreground: 24.6 95% 53.1%;
+    /* Soft sage accent */
+    --accent: oklch(0.86 0.04 140);
+    --accent-foreground: oklch(0.32 0.025 140);
 
-    /* Destructive */
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 60 9.1% 97.8%;
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.98 0.008 75);
 
-    /* Borders & Inputs */
-    --border: 30 15% 90%; /* Warm Gray */
-    --input: 30 15% 90%;
-    --ring: 24.6 95% 53.1%; /* Focus Ring is Orange */
+    /* Very subtle, semi-transparent warm stone borders */
+    --border: oklch(0.87 0.012 75);
+    --input: oklch(0.89 0.012 75);
+    --ring: oklch(0.58 0.12 40);
 
-    /* ROUNDING: Make everything softer */
-    --radius: 1rem; /* 16px - Very rounded and friendly */
+    --radius: 1rem;
+
+    /* Sidebar variables */
+    --sidebar: oklch(0.965 0.008 75);
+    --sidebar-foreground: oklch(0.38 0.015 60);
+    --sidebar-primary: oklch(0.58 0.12 40);
+    --sidebar-primary-foreground: oklch(0.98 0.008 75);
+    --sidebar-accent: oklch(0.91 0.012 70);
+    --sidebar-accent-foreground: oklch(0.38 0.015 60);
+    --sidebar-border: oklch(0.87 0.012 75);
+    --sidebar-ring: oklch(0.58 0.12 40);
   }
 
   .dark {
-    /* Base: Deep Warm Gray/Brown tint, not pitch black */
-    --background: 20 14.3% 4.1%;
-    --foreground: 60 9.1% 97.8%;
-
-    --card: 24 10% 8%; 
-    --card-foreground: 60 9.1% 97.8%;
-
-    --popover: 24 10% 8%;
-    --popover-foreground: 60 9.1% 97.8%;
-
-    /* Primary: Slightly lighter Orange for dark mode visibility */
-    --primary: 20.5 90.2% 48.2%; 
-    --primary-foreground: 60 9.1% 97.8%;
-
-    /* Secondary: Electric Blue pops in dark mode */
-    --secondary: 199 89% 48%;
-    --secondary-foreground: 60 9.1% 97.8%;
-
-    --muted: 24 10% 12%;
-    --muted-foreground: 24 5.4% 63.9%;
-
-    --accent: 24 10% 12%;
-    --accent-foreground: 60 9.1% 97.8%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 60 9.1% 97.8%;
-
-    --border: 24 10% 12%;
-    --input: 24 10% 12%;
-    --ring: 20.5 90.2% 48.2%;
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.145 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.145 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: oklch(0.637 0.237 25.331);
+    --border: oklch(0.269 0 0);
+    --input: oklch(0.269 0 0);
+    --ring: oklch(0.439 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(0.269 0 0);
+    --sidebar-ring: oklch(0.439 0 0);
   }
 }
 
 @layer base {
   * {
-    /* FIXED: Use standard CSS to avoid @apply errors with complex variables */
-    border-color: hsl(var(--border));
+    @apply border-border;
   }
   body {
-    /* FIXED: Use standard CSS for background and text color */
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    @apply bg-background text-foreground;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
   }
 }

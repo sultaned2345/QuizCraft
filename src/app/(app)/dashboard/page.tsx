@@ -1,258 +1,235 @@
-// src/app/(app)/dashboard/page.tsx
-'use client';
-
-import { useState } from 'react';
-import useSWR from 'swr';
-import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
-import { 
-  BookOpen, 
-  BrainCircuit, 
-  FileText, 
-  LayoutDashboard, 
-  PenTool, 
-  Plus, 
-  Sparkles, 
-  StickyNote,
-  Clock,
-  ArrowRight,
-  GraduationCap
-} from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AddDocumentDialog } from '@/components/AddDocumentDialog'; 
-import { Skeleton } from '@/components/ui/skeleton';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-// --- Helper for Quick Action Tiles ---
-function ActionTile({ 
-  icon, 
-  title, 
-  colorClass, 
-  bgClass, 
-  href,
-  onClick
-}: { 
-  icon: React.ReactNode, 
-  title: string, 
-  colorClass: string, 
-  bgClass: string, 
-  href?: string,
-  onClick?: () => void
-}) {
-  const content = (
-    <div className={`flex flex-col items-center justify-center p-6 rounded-3xl transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer border-2 border-transparent hover:border-${colorClass.split('-')[1]}-200 h-full ${bgClass}`}>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 bg-white/60 dark:bg-black/20 backdrop-blur-sm ${colorClass}`}>
-        {icon}
-      </div>
-      <span className="font-bold text-foreground/90">{title}</span>
-    </div>
-  );
-
-  if (href) return <Link href={href} className="block h-full">{content}</Link>;
-  return <div onClick={onClick} className="h-full">{content}</div>;
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { BookOpen, Clock, Target, TrendingUp, CheckCircle2, Calendar } from "lucide-react"
 
 export default function DashboardPage() {
-  const { data, isLoading, mutate } = useSWR('/api/library', fetcher);
-  
-  const allContent = data?.data || [];
-  
-  // Stats
-  const stats = {
-    documents: allContent.filter((i: any) => i.type === 'document').length,
-    quizzes: allContent.filter((i: any) => i.type === 'quiz').length,
-    notes: allContent.filter((i: any) => i.type === 'note').length,
-  };
+  const subjects = [
+    { name: "Mathematics", progress: 75, nextSession: "Today, 2:00 PM", color: "bg-primary" },
+    { name: "Physics", progress: 60, nextSession: "Tomorrow, 10:00 AM", color: "bg-secondary" },
+    { name: "Literature", progress: 85, nextSession: "Today, 4:30 PM", color: "bg-accent" },
+  ]
 
-  // Recents (Top 4 now, for grid balance)
-  const recentItems = [...allContent]
-    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 4);
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'document': return <FileText className="w-5 h-5 text-blue-500" />;
-      case 'note': return <StickyNote className="w-5 h-5 text-yellow-500" />;
-      case 'quiz': return <BrainCircuit className="w-5 h-5 text-purple-500" />;
-      default: return <FileText className="w-5 h-5" />;
-    }
-  };
-
-  const getUrl = (item: any) => {
-    switch (item.type) {
-      case 'document': return `/documents/${item.id}`;
-      case 'note': return `/notes/${item.id}`;
-      case 'quiz': return `/quiz/${item.id}`;
-      case 'deck': return `/flashcards/${item.id}`;
-      default: return '#';
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto p-6 space-y-8 max-w-7xl">
-        <div className="flex justify-between items-center mb-8">
-            <Skeleton className="h-12 w-64 rounded-xl" />
-            <Skeleton className="h-12 w-40 rounded-full" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-           {[1,2,3].map(i => <Skeleton key={i} className="h-40 rounded-3xl" />)}
-        </div>
-        <Skeleton className="h-64 w-full rounded-3xl mt-8" />
-      </div>
-    );
-  }
+  const todayTasks = [
+    { task: "Complete Chapter 5 exercises", subject: "Math", done: true },
+    { task: "Review Newton's Laws", subject: "Physics", done: true },
+    { task: "Read pages 45-60", subject: "Literature", done: false },
+    { task: "Practice problem sets", subject: "Math", done: false },
+  ]
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-10 max-w-7xl animate-in fade-in duration-500 font-sans">
-      
-      {/* 1. Friendly Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-extrabold tracking-tight flex items-center gap-3 text-foreground">
-            <span role="img" aria-label="wave">👋</span> Welcome back!
-          </h1>
-          <p className="text-lg text-muted-foreground mt-2 font-medium">
-            Your brain is ready for an upgrade. What are we learning today?
+    <main className="min-h-screen bg-background pb-10">
+      {/* Header */}
+      <header className="border-b border-border/60 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-5 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/90 text-primary-foreground shadow-sm">
+                <BookOpen className="h-5 w-5" />
+              </div>
+              <h1 className="font-serif text-2xl font-normal text-foreground tracking-tight">QuizCraft</h1>
+            </div>
+            <Button variant="outline" size="sm" className="rounded-xl border-border/60 bg-card hover:bg-muted/50">
+              <Calendar className="mr-2 h-4 w-4" />
+              Schedule
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-10 sm:px-6 lg:px-8">
+        {/* Welcome Section */}
+        <div className="mb-10">
+          <h2 className="font-serif text-4xl font-light text-foreground text-balance mb-3 tracking-tight">
+            Good afternoon, Scholar
+          </h2>
+          <p className="text-muted-foreground text-lg leading-relaxed max-w-2xl">
+            {"You're making great progress. Let's keep the momentum going!"}
           </p>
         </div>
-        
-        {/* Big Pill Button */}
-        <AddDocumentDialog onUploadSuccess={() => mutate()}>
-            <Button size="lg" className="h-12 px-8 rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5 text-base font-bold bg-gradient-to-r from-primary to-orange-600 border-none">
-                <Plus className="w-5 h-5 mr-2" /> Create New Set
-            </Button>
-        </AddDocumentDialog>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* 2. Left Column: Colorful Quick Action Tiles (The "Playground") */}
-        <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" /> 
-                Quick Actions
-            </h2>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                 <AddDocumentDialog onUploadSuccess={() => mutate()}>
-                     {/* Wrapper div to capture click since DialogTrigger wraps children */}
-                     <div className="h-36">
-                        <ActionTile 
-                            icon={<FileText className="w-6 h-6" />}
-                            title="Upload Doc"
-                            colorClass="text-blue-600"
-                            bgClass="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20"
-                        />
-                     </div>
-                 </AddDocumentDialog>
-
-                 <div className="h-36">
-                    <ActionTile 
-                        href="/create"
-                        icon={<BrainCircuit className="w-6 h-6" />}
-                        title="Generate Quiz"
-                        colorClass="text-purple-600"
-                        bgClass="bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20"
-                    />
-                 </div>
-
-                 <div className="h-36">
-                    <ActionTile 
-                        href="/notes/new"
-                        icon={<PenTool className="w-6 h-6" />}
-                        title="Write Notes"
-                        colorClass="text-pink-600"
-                        bgClass="bg-pink-50 hover:bg-pink-100 dark:bg-pink-900/20"
-                    />
-                 </div>
-            </div>
-
-            {/* Recent Activity List - Soft & Clean */}
-            <div className="pt-4">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-muted-foreground" />
-                    Jump Back In
-                    </h2>
-                    <Link href="/documents" className="text-sm font-semibold text-primary hover:underline flex items-center">
-                        View Library <ArrowRight className="w-4 h-4 ml-1" />
-                    </Link>
+        {/* Stats Grid */}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <Target className="h-6 w-6 text-primary" />
                 </div>
+              </div>
+              <p className="text-muted-foreground text-sm mb-1.5 font-medium">Study Streak</p>
+              <p className="font-serif text-3xl font-light text-foreground tracking-tight">12 days</p>
+            </CardContent>
+          </Card>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {recentItems.length === 0 ? (
-                    <div className="col-span-full p-12 text-center border-2 border-dashed border-muted rounded-3xl bg-muted/10">
-                        <div className="w-16 h-16 bg-muted rounded-full mx-auto flex items-center justify-center mb-4">
-                            <BookOpen className="w-8 h-8 text-muted-foreground" />
-                        </div>
-                        <p className="text-lg font-medium text-muted-foreground">It's quiet in here...</p>
-                        <p className="text-sm text-muted-foreground">Create your first study set above!</p>
-                    </div>
-                    ) : (
-                    recentItems.map((item: any) => (
-                        <Link key={item.id} href={getUrl(item)}>
-                        <div className="group flex items-center gap-4 p-4 rounded-3xl border border-border/40 bg-card hover:border-primary/30 hover:shadow-md hover:bg-accent/30 transition-all duration-300">
-                            <div className="w-12 h-12 rounded-2xl bg-muted/50 group-hover:bg-white group-hover:shadow-sm flex items-center justify-center transition-all">
-                                {getIcon(item.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-bold truncate text-foreground group-hover:text-primary transition-colors">{item.title}</h4>
-                                <p className="text-xs font-medium text-muted-foreground capitalize mt-1">
-                                    {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-                                </p>
-                            </div>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent group-hover:bg-primary/10 transition-colors">
-                                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-                            </div>
-                        </div>
-                        </Link>
-                    ))
-                    )}
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/25">
+                  <Clock className="h-6 w-6 text-secondary-foreground" />
                 </div>
-            </div>
+              </div>
+              <p className="text-muted-foreground text-sm mb-1.5 font-medium">Today</p>
+              <p className="font-serif text-3xl font-light text-foreground tracking-tight">3.5 hrs</p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/40">
+                  <CheckCircle2 className="h-6 w-6 text-accent-foreground" />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-sm mb-1.5 font-medium">Tasks Done</p>
+              <p className="font-serif text-3xl font-light text-foreground tracking-tight">8/12</p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-sm mb-1.5 font-medium">This Week</p>
+              <p className="font-serif text-3xl font-light text-foreground tracking-tight">18 hrs</p>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* 3. Right Column: Stats Card (Vertical Stack) */}
-        <div className="space-y-6">
-            <Card className="border-none shadow-lg bg-gradient-to-b from-orange-50 to-white dark:from-card dark:to-background rounded-[2rem] overflow-hidden">
-                <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        <GraduationCap className="w-5 h-5 text-primary" /> 
-                        Your Progress
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-4">
-                    <div className="flex items-center justify-between p-4 bg-white dark:bg-card border border-border/50 rounded-2xl shadow-sm">
-                        <span className="text-muted-foreground font-medium">Documents</span>
-                        <span className="text-2xl font-bold text-blue-600">{stats.documents}</span>
+        {/* Main Grid */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Subjects Progress */}
+          <div className="lg:col-span-2">
+            <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card">
+              <CardHeader className="pb-4">
+                <CardTitle className="font-serif text-2xl font-light text-foreground tracking-tight">
+                  Your Subjects
+                </CardTitle>
+                <CardDescription className="text-muted-foreground leading-relaxed text-base">
+                  Track your progress across all subjects
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-7">
+                {subjects.map((subject) => (
+                  <div key={subject.name} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-serif text-lg font-normal text-foreground tracking-tight">
+                          {subject.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-0.5">{subject.nextSession}</p>
+                      </div>
+                      <span className="font-serif text-lg font-normal text-foreground tracking-tight">
+                        {subject.progress}%
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-white dark:bg-card border border-border/50 rounded-2xl shadow-sm">
-                        <span className="text-muted-foreground font-medium">Quizzes</span>
-                        <span className="text-2xl font-bold text-purple-600">{stats.quizzes}</span>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full transition-all ${subject.color}`}
+                        style={{ width: `${subject.progress}%` }}
+                      />
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-white dark:bg-card border border-border/50 rounded-2xl shadow-sm">
-                        <span className="text-muted-foreground font-medium">Notes</span>
-                        <span className="text-2xl font-bold text-amber-600">{stats.notes}</span>
-                    </div>
-                    
-                    <div className="pt-4">
-                        <div className="p-4 rounded-2xl bg-primary/10 border border-primary/10">
-                            <h4 className="font-bold text-primary mb-1 text-sm">Study Streak 🔥</h4>
-                            <p className="text-xs text-muted-foreground mb-3">You're on a roll! Keep it up.</p>
-                            <div className="w-full bg-primary/20 h-2 rounded-full overflow-hidden">
-                                <div className="bg-primary h-full w-[75%] rounded-full" />
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
+                  </div>
+                ))}
+                <Button className="w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm mt-6 h-11 font-medium">
+                  Start Study Session
+                </Button>
+              </CardContent>
             </Card>
+          </div>
+
+          {/* Today's Tasks */}
+          <div>
+            <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card">
+              <CardHeader className="pb-4">
+                <CardTitle className="font-serif text-2xl font-light text-foreground tracking-tight">
+                  {"Today's Tasks"}
+                </CardTitle>
+                <CardDescription className="text-muted-foreground leading-relaxed text-base">
+                  Stay on track with your goals
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {todayTasks.map((item, index) => (
+                  <div key={index} className="flex items-start gap-3.5">
+                    <div
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                        item.done ? "border-primary bg-primary" : "border-border"
+                      }`}
+                    >
+                      {item.done && <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" />}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p
+                        className={`text-sm leading-relaxed ${
+                          item.done ? "text-muted-foreground line-through" : "text-foreground"
+                        }`}
+                      >
+                        {item.task}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-medium">{item.subject}</p>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl mt-6 h-11 border-border/60 bg-card hover:bg-muted/50"
+                >
+                  Add Task
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
+        {/* Quick Actions */}
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer group">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/25 group-hover:bg-secondary/35 transition-colors">
+                  <BookOpen className="h-6 w-6 text-secondary-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-normal text-foreground tracking-tight">Flashcards</h3>
+                  <p className="text-sm text-muted-foreground">Review your notes</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer group">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                  <Clock className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-normal text-foreground tracking-tight">Pomodoro Timer</h3>
+                  <p className="text-sm text-muted-foreground">Focus sessions</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-border/60 bg-card hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer group">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/40 group-hover:bg-accent/50 transition-colors">
+                  <TrendingUp className="h-6 w-6 text-accent-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-normal text-foreground tracking-tight">Progress Report</h3>
+                  <p className="text-sm text-muted-foreground">View analytics</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
-  );
+    </main>
+  )
 }
