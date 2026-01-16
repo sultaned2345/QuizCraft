@@ -1,3 +1,5 @@
+/* sultaned2345/quizcraft/QuizCraft-7113187ddace0f9fac2e5b7447f292b241bc9494/src/app/globals.css */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -97,14 +99,18 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* FIX: Use standard CSS variables instead of @apply to prevent build errors in Tailwind v4 */
+    border-color: var(--border);
+    outline-color: var(--ring);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--foreground);
   }
 }
 
 /* --- ANIMATIONS & UTILITIES --- */
+/* (Keep the rest of your file exactly as is below this line) */
 
 @keyframes float {
   0%, 100% { transform: translateY(0px) rotate(var(--rotate, 0deg)); }

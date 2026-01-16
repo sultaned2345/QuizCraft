@@ -1,3 +1,5 @@
+// sultaned2345/quizcraft/QuizCraft-7113187ddace0f9fac2e5b7447f292b241bc9494/tailwind.config.mjs
+
 /** @type {import('tailwindcss').Config} */
 const config = {
   darkMode: ["class"],
@@ -5,7 +7,7 @@ const config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}", // Added to ensure utils are scanned
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     container: {
@@ -21,8 +23,8 @@ const config = {
         serif: ["var(--font-serif)", "serif"],
       },
       colors: {
-        // Fix for "unknown utility class border-border"
-        border: "var(--border)", 
+        // Core Shadcn colors mapped to CSS variables
+        border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
         background: "var(--background)",
@@ -55,6 +57,7 @@ const config = {
           DEFAULT: "var(--card)",
           foreground: "var(--card-foreground)",
         },
+        // Sidebar specific colors
         sidebar: {
           DEFAULT: "var(--sidebar)",
           foreground: "var(--sidebar-foreground)",
@@ -65,7 +68,7 @@ const config = {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
-        // Chart colors often used in dashboards
+        // Charts
         chart: {
           1: "var(--chart-1)",
           2: "var(--chart-2)",
