@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { BookOpen, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/hooks/use-toast';
@@ -99,7 +99,7 @@ function SignupForm() {
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="h-11 bg-background"
+            className="h-11 bg-background border-border/60"
           />
         </div>
         <div className="grid gap-2">
@@ -112,7 +112,7 @@ function SignupForm() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="h-11 bg-background"
+            className="h-11 bg-background border-border/60"
           />
         </div>
         <div className="grid gap-2">
@@ -125,7 +125,7 @@ function SignupForm() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="h-11 bg-background"
+            className="h-11 bg-background border-border/60"
           />
         </div>
 
@@ -145,7 +145,7 @@ function SignupForm() {
 
         <Button
           type="submit"
-          className="w-full h-11"
+          className="w-full h-11 rounded-xl shadow-sm"
           disabled={loading || googleLoading || message !== ''}
         >
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -168,7 +168,7 @@ function SignupForm() {
       {/* --- GOOGLE BUTTON --- */}
       <Button 
         variant="outline" 
-        className="w-full h-11"
+        className="w-full h-11 rounded-xl border-border/60 bg-card hover:bg-muted/50"
         onClick={handleGoogleLogin} 
         disabled={loading || googleLoading}
       >
@@ -188,7 +188,7 @@ function SignupForm() {
 // --- Main Page Layout ---
 export default function SignupPage() {
   return (
-    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans">
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans bg-background">
        <SpotlightCursor />
 
        {/* LEFT COLUMN: Form */}
@@ -199,7 +199,7 @@ export default function SignupPage() {
 
         <div className="mx-auto grid w-full max-w-sm gap-8 relative z-10">
           <div className="grid gap-2 text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Create an Account</h1>
+            <h1 className="text-3xl font-serif font-medium tracking-tight text-foreground">Create an Account</h1>
             <p className="text-muted-foreground">
               Join QuizCraft to start studying smarter.
             </p>
@@ -219,21 +219,23 @@ export default function SignupPage() {
       </div>
 
       {/* RIGHT COLUMN: Brand */}
-      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-muted/40 text-foreground">
+      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-secondary/20 text-foreground">
         <div className="flex flex-col items-center justify-center max-w-lg text-center">
             <Link href="/" className="flex items-center gap-3 mb-10">
                 <div className="bg-primary text-primary-foreground p-3 rounded-xl shadow-sm">
-                    <Sparkles className="w-8 h-8" />
+                    <BookOpen className="w-8 h-8" />
                 </div>
-                <span className="text-4xl font-bold tracking-tight">QuizCraft</span>
+                <span className="text-4xl font-serif font-medium tracking-tight">QuizCraft</span>
             </Link>
             
             <div className="p-8">
-                <p className="text-xl italic text-muted-foreground leading-relaxed font-light">
-                    &ldquo;This app is a game-changer for my midterms. I turned a 40-page PDF into a practice quiz in 30 seconds.&rdquo;
+                <p className="text-xl font-serif italic text-foreground/80 leading-relaxed">
+                    &ldquo;This app is a game-changer. I turned a 40-page PDF into a practice quiz in 30 seconds.&rdquo;
                 </p>
                 <div className="flex items-center justify-center gap-4 mt-8">
-                    <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold font-serif">
+                       S
+                    </div>
                     <div className="text-left">
                         <p className="font-semibold text-foreground text-lg">Sarah J.</p>
                         <p className="text-sm text-muted-foreground">University Student</p>

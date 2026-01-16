@@ -4,11 +4,13 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 
+// 1. Configure Sans-Serif (Body text)
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
 });
 
+// 2. Configure Serif (Headings)
 const merriweather = Merriweather({
   subsets: ["latin"],
   variable: "--font-serif",
@@ -18,6 +20,10 @@ const merriweather = Merriweather({
 export const metadata: Metadata = {
   title: "QuizCraft",
   description: "AI-Powered Study Tools",
+  // You can customize icons here if you have the files in /public
+  icons: {
+    icon: "/placeholder-logo.png", 
+  },
 };
 
 export default function RootLayout({
@@ -27,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${merriweather.variable} font-sans min-h-screen bg-background text-foreground antialiased`}>
+      <body className={`${inter.variable} ${merriweather.variable} font-sans antialiased min-h-screen bg-background text-foreground`}>
         <Providers>
            <div className="relative flex min-h-screen flex-col">
             {children}

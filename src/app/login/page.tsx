@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, Sparkles, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, BookOpen, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
 
@@ -77,7 +77,7 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="h-11 bg-background"
+            className="h-11 bg-background border-border/60"
           />
         </div>
         <div className="grid gap-2">
@@ -98,7 +98,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading || googleLoading}
             required
-            className="h-11 bg-background"
+            className="h-11 bg-background border-border/60"
           />
         </div>
 
@@ -111,7 +111,7 @@ function LoginForm() {
 
         <Button
           type="submit"
-          className="w-full h-11"
+          className="w-full h-11 rounded-xl shadow-sm"
           disabled={loading || googleLoading}
         >
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -134,7 +134,7 @@ function LoginForm() {
       {/* --- GOOGLE BUTTON --- */}
       <Button 
         variant="outline" 
-        className="w-full h-11"
+        className="w-full h-11 rounded-xl border-border/60 bg-card hover:bg-muted/50"
         onClick={handleGoogleLogin} 
         disabled={loading || googleLoading}
       >
@@ -154,7 +154,7 @@ function LoginForm() {
 // --- Main Page Layout ---
 export default function LoginPage() {
   return (
-    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans">
+    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans bg-background">
        <SpotlightCursor />
 
        {/* LEFT COLUMN: Form */}
@@ -165,9 +165,9 @@ export default function LoginPage() {
 
         <div className="mx-auto grid w-full max-w-sm gap-8 relative z-10">
           <div className="grid gap-2 text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
+            <h1 className="text-3xl font-serif font-medium tracking-tight text-foreground">Welcome Back</h1>
             <p className="text-muted-foreground">
-              Enter your credentials to access your workspace.
+              Enter your credentials to access your library.
             </p>
           </div>
           
@@ -185,22 +185,24 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT COLUMN: Brand (Clean Solid) */}
-      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-muted/40 text-foreground">
+      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-secondary/20 text-foreground">
         
         <div className="flex flex-col items-center justify-center max-w-lg text-center">
             <Link href="/" className="flex items-center gap-3 mb-10">
                 <div className="bg-primary text-primary-foreground p-3 rounded-xl shadow-sm">
-                    <Sparkles className="w-8 h-8" />
+                    <BookOpen className="w-8 h-8" />
                 </div>
-                <span className="text-4xl font-bold tracking-tight">QuizCraft</span>
+                <span className="text-4xl font-serif font-medium tracking-tight">QuizCraft</span>
             </Link>
             
             <div className="p-8">
-                <p className="text-xl italic text-muted-foreground leading-relaxed font-light">
+                <p className="text-xl font-serif italic text-foreground/80 leading-relaxed">
                     &ldquo;The AI grading feature saved me hours of manual review. It's like having a TA in your pocket.&rdquo;
                 </p>
                 <div className="flex items-center justify-center gap-4 mt-8">
-                    <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold font-serif">
+                       M
+                    </div>
                     <div className="text-left">
                         <p className="font-semibold text-foreground text-lg">Marcus T.</p>
                         <p className="text-sm text-muted-foreground">Medical Student</p>

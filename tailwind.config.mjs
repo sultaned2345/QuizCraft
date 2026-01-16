@@ -17,10 +17,10 @@ const config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "sans-serif"],
-        serif: ["var(--font-serif)", "serif"], // Added Merriweather support
+        serif: ["var(--font-serif)", "serif"],
       },
       colors: {
-        // UPDATED: Removed 'hsl()' wrapper to support 'oklch' values
+        // IMPORTANT: We use 'var(--...)' directly because values in CSS are now 'oklch(...)'
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
@@ -70,17 +70,8 @@ const config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      // Keep existing animations
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-      },
+      // You can now extend animations here using the keyframes defined in CSS
+      // or rely on the CSS classes added in globals.css directly.
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
