@@ -21,39 +21,39 @@ const config = {
         sans: ["var(--font-sans)", "sans-serif"],
       },
       colors: {
-        // Using Relative Color Syntax to handle variables defined as full oklch() colors
-        border: "oklch(from var(--border) l c h / <alpha-value>)",
-        input: "oklch(from var(--input) l c h / <alpha-value>)",
-        ring: "oklch(from var(--ring) l c h / <alpha-value>)",
-        background: "oklch(from var(--background) l c h / <alpha-value>)",
-        foreground: "oklch(from var(--foreground) l c h / <alpha-value>)",
+        // FIXED: Changed all 'oklch' references to 'hsl' to match globals.css
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "oklch(from var(--primary) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--primary-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "oklch(from var(--secondary) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--secondary-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
-          DEFAULT: "oklch(from var(--destructive) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--destructive-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT: "oklch(from var(--muted) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--muted-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "oklch(from var(--accent) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--accent-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
-          DEFAULT: "oklch(from var(--popover) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--popover-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
         },
         card: {
-          DEFAULT: "oklch(from var(--card) l c h / <alpha-value>)",
-          foreground: "oklch(from var(--card-foreground) l c h / <alpha-value>)",
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
         },
       },
       borderRadius: {
@@ -74,7 +74,6 @@ const config = {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        // Friendly Fox Animations
         float: {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
