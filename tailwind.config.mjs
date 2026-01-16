@@ -5,6 +5,7 @@ const config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}", // Added to ensure utils are scanned
   ],
   theme: {
     container: {
@@ -20,8 +21,8 @@ const config = {
         serif: ["var(--font-serif)", "serif"],
       },
       colors: {
-        // IMPORTANT: We use 'var(--...)' directly because values in CSS are now 'oklch(...)'
-        border: "var(--border)",
+        // Fix for "unknown utility class border-border"
+        border: "var(--border)", 
         input: "var(--input)",
         ring: "var(--ring)",
         background: "var(--background)",
@@ -64,14 +65,30 @@ const config = {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
+        // Chart colors often used in dashboards
+        chart: {
+          1: "var(--chart-1)",
+          2: "var(--chart-2)",
+          3: "var(--chart-3)",
+          4: "var(--chart-4)",
+          5: "var(--chart-5)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      // You can now extend animations here using the keyframes defined in CSS
-      // or rely on the CSS classes added in globals.css directly.
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
