@@ -1,85 +1,284 @@
+// src/components/layout/AppSidebar.tsx
 'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  FileText, 
-  StickyNote, 
-  PenTool, // New Icon
+import * as React from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  BookOpen,
+  BrainCircuit,
+  FileText,
+  LayoutDashboard,
   Settings,
+  Mic,
+  PenTool,
+  FolderKanban,
+  Layers,
   LogOut,
-  User
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+  Sparkles,
+  HelpCircle,
+  User,
+  CreditCard
+} from "lucide-react"
 
-export function AppSidebar() {
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarSeparator,
+} from "@/components/ui/sidebar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import Logo from "@/components/ui/Logo"
+import { useAuth } from "@/contexts/AuthContext" // Assuming you have this
+import { useRouter } from "next/navigation"
+
+// Menu Configuration
+const data = {
+  navMain: [
+    {
+      title: "Learning Center",
+      items: [
+        {
+          title: "Dashboard",
+          url: "/dashboard",
+          icon: LayoutDashboard,
+        },
+        {
+          title: "My Library",
+          url: "/documents",
+          icon: BookOpen,
+        },
+        {
+          title: "Flashcards",
+          url: "/flashcards",
+          icon: Layers,
+        },
+        {
+          title: "Recordings",
+          url: "/recordings",
+          icon: Mic,
+        },
+      ],
+    },
+    {
+      title: "Tools & AI",
+      items: [
+        {
+          title: "Quiz Generator",
+          url: "/create",
+          icon: BrainCircuit,
+          badge: "AI",
+        },
+        {
+          title: "Essay Grader",
+          url: "/essay-grader",
+          icon: PenTool,
+        },
+        {
+          title: "Notes & Graph",
+          url: "/notes",
+          icon: FileText,
+        },
+        {
+          title: "Projects",
+          url: "/projects",
+          icon: FolderKanban,
+        },
+      ],
+    },
+  ],
+}
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const { user, signOut } = useAuth(); // Helper to get user data
+  const router = useRouter();
 
-  const routes = [
-    {
-      label: "Dashboard",
-      icon: LayoutDashboard,
-      href: "/dashboard",
-      active: pathname === "/dashboard",
-    },
-    {
-      label: "Documents",
-      icon: FileText,
-      href: "/documents",
-      active: pathname.startsWith("/documents"),
-    },
-    {
-      label: "Notes",
-      icon: StickyNote,
-      href: "/notes",
-      active: pathname.startsWith("/notes"),
-    },
-    // REPLACED: Removed Quizzes & Flashcards, Added Essay Grader
-    {
-      label: "Essay Grader",
-      icon: PenTool,
-      href: "/essay-grader",
-      active: pathname.startsWith("/essay-grader"),
-    },
-  ];
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/');
+  };
 
   return (
-    <div className="space-y-4 py-4 flex flex-col h-full bg-secondary/10 border-r border-border">
-      <div className="px-3 py-2">
-        <Link href="/dashboard" className="flex items-center pl-3 mb-14">
-           {/* You can add your logo here */}
-           <h1 className="text-2xl font-bold">QuizCraft</h1>
-        </Link>
-        <div className="space-y-1">
-          {routes.map((route) => (
-            <Link
-              key={route.href}
-              href={route.href}
-              className={cn(
-                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-primary hover:bg-primary/10 rounded-lg transition",
-                route.active ? "text-primary bg-primary/10" : "text-muted-foreground"
-              )}
-            >
-              <div className="flex items-center flex-1">
-                <route.icon className={cn("h-5 w-5 mr-3", route.active ? "text-primary" : "text-muted-foreground")} />
-                {route.label}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
+    <Sidebar variant="inset" collapsible="icon" className="border-r-orange-100 dark:border-r-border" {...props}>
       
-      {/* Bottom Actions */}
-      <div className="mt-auto px-3 py-2 space-y-1">
-         <Link href="/account">
-            <Button variant="ghost" className="w-full justify-start gap-3">
-               <Settings className="h-5 w-5" />
-               Settings
-            </Button>
-         </Link>
-      </div>
-    </div>
-  );
+      {/* HEADER: Friendly Logo */}
+      <SidebarHeader className="h-16 flex items-center justify-center border-b border-orange-100/50 dark:border-border/40 bg-orange-50/30 dark:bg-card/30 backdrop-blur-sm">
+        <div className="w-full flex items-center px-2 group-data-[collapsible=icon]:justify-center">
+            {/* Show Full Logo when expanded, Icon only when collapsed (controlled by CSS/Sidebar logic) */}
+            <div className="group-data-[collapsible=icon]:hidden">
+                <Logo size="md" />
+            </div>
+            <div className="hidden group-data-[collapsible=icon]:block">
+                <Logo variant="icon" size="md" />
+            </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="bg-orange-50/30 dark:bg-background/50">
+        
+        {/* NAV GROUPS */}
+        {data.navMain.map((group) => (
+          <SidebarGroup key={group.title}>
+            <SidebarGroupLabel className="text-orange-900/60 dark:text-muted-foreground font-semibold px-4 py-2">
+                {group.title}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const isActive = pathname === item.url || pathname?.startsWith(item.url + '/');
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton 
+                        asChild 
+                        tooltip={item.title}
+                        isActive={isActive}
+                        className={`
+                            h-10 rounded-xl transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95
+                            ${isActive 
+                                ? 'bg-orange-200/50 text-orange-900 font-bold dark:bg-primary/20 dark:text-primary' 
+                                : 'text-muted-foreground hover:bg-orange-100/50 hover:text-orange-800 dark:hover:bg-accent'
+                            }
+                        `}
+                      >
+                        <Link href={item.url}>
+                          <item.icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''}`} />
+                          <span>{item.title}</span>
+                          {item.badge && (
+                              <span className="ml-auto text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
+                                  {item.badge}
+                              </span>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+
+        {/* Upgrade Card (Optional Friendly Nudge) */}
+        <div className="mt-auto p-4 group-data-[collapsible=icon]:hidden">
+            <div className="bg-gradient-to-br from-primary/10 to-orange-100/50 dark:from-primary/10 dark:to-background border border-orange-100 dark:border-border rounded-2xl p-4 text-center space-y-3">
+                <div className="w-10 h-10 bg-white dark:bg-card rounded-full flex items-center justify-center mx-auto shadow-sm text-lg">
+                   🦊
+                </div>
+                <h4 className="font-bold text-sm text-orange-900 dark:text-foreground">Go Pro</h4>
+                <p className="text-xs text-muted-foreground">Get unlimited AI quizzes and smart summaries.</p>
+                <Button size="sm" className="w-full rounded-xl text-xs font-bold" variant="default">
+                    Upgrade
+                </Button>
+            </div>
+        </div>
+
+      </SidebarContent>
+
+      <SidebarSeparator className="bg-orange-100 dark:bg-border" />
+
+      {/* FOOTER: User Profile */}
+      <SidebarFooter className="bg-orange-50/50 dark:bg-card/30">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-orange-100/50 rounded-xl transition-all"
+                >
+                  <Avatar className="h-8 w-8 rounded-lg border-2 border-white dark:border-border shadow-sm">
+                    <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder-user.jpg"} alt={user?.email || "User"} />
+                    <AvatarFallback className="rounded-lg bg-orange-200 text-orange-800">
+                        {user?.email?.charAt(0).toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-bold text-foreground">
+                        {user?.user_metadata?.full_name || "Happy Learner"}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                        {user?.email || "student@quizcraft.app"}
+                    </span>
+                  </div>
+                  <Settings className="ml-auto size-4 text-muted-foreground" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-2xl p-2 bg-card/95 backdrop-blur-sm border-orange-100 dark:border-border"
+                side="bottom"
+                align="end"
+                sideOffset={4}
+              >
+                <DropdownMenuLabel className="p-0 font-normal">
+                  <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                    <Avatar className="h-8 w-8 rounded-lg">
+                      <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.email} />
+                      <AvatarFallback className="rounded-lg">
+                        {user?.email?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold">{user?.user_metadata?.full_name || "User"}</span>
+                      <span className="truncate text-xs text-muted-foreground">{user?.email}</span>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
+                    <Link href="/account">
+                        <Sparkles className="mr-2 h-4 w-4 text-orange-500" />
+                        Upgrade Plan
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
+                    <Link href="/account">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Billing
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
+                    <Link href="/profile">
+                        <User className="mr-2 h-4 w-4" />
+                        Profile Settings
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
+                    <Link href="/support">
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Help & Support
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                    onClick={handleSignOut}
+                    className="rounded-xl cursor-pointer text-red-600 focus:bg-red-50 dark:focus:bg-red-900/10 focus:text-red-600"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  )
 }

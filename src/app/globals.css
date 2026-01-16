@@ -1,157 +1,89 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@plugin "tailwindcss-animate";
-@plugin "@tailwindcss/typography";
+@layer base {
+  :root {
+    /* Base: Warm White / Paper feel */
+    --background: 30 20% 99%; /* #FFFCF9 */
+    --foreground: 20 14.3% 4.1%; /* Warm Black */
 
-/* Manual dark mode variant for class-based toggling */
-@custom-variant dark (&:is(.dark *));
+    /* Card: White with slight warmth */
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
 
-:root {
-  /* --- LIGHT MODE (Clean & Crisp) --- */
-  /* Background: Very subtle cool grey, not pure white */
-  --background: oklch(98.5% 0.005 240); 
-  --foreground: oklch(20% 0.02 265); 
-  
-  /* Cards: Pure white to pop against background */
-  --card: oklch(100% 0 0);
-  --card-foreground: oklch(20% 0.02 265);
-  
-  --popover: oklch(100% 0 0);
-  --popover-foreground: oklch(20% 0.02 265);
-  
-  /* Primary: Vibrant Violet/Purple */
-  --primary: oklch(55% 0.25 280); 
-  --primary-foreground: oklch(99% 0 0);
-  
-  /* Secondary: Soft grey for buttons */
-  --secondary: oklch(96% 0.01 265);
-  --secondary-foreground: oklch(20% 0.02 265);
-  
-  /* Muted: Slightly darker grey for backgrounds */
-  --muted: oklch(94% 0.02 265);
-  --muted-foreground: oklch(50% 0.05 265);
-  
-  --accent: oklch(96% 0.01 265);
-  --accent-foreground: oklch(20% 0.02 265);
-  
-  --destructive: oklch(60% 0.2 20);
-  --destructive-foreground: oklch(99% 0 0);
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14.3% 4.1%;
 
-  /* Border: Clearly visible but soft */
-  --border: oklch(92% 0.02 265);
-  --input: oklch(92% 0.02 265);
-  --ring: oklch(55% 0.25 280);
-  
-  --radius: 0.5rem;
-}
+    /* Primary: Fox Orange (Orange-600) */
+    --primary: 24.6 95% 53.1%; /* #EA580C */
+    --primary-foreground: 60 9.1% 97.8%;
 
-.dark {
-  /* --- DARK MODE (Deep Space HUD) --- */
-  --background: oklch(10% 0.02 270); 
-  --foreground: oklch(98% 0.01 280);
+    /* Secondary: Electric Blue (Sky-500) - The Eyes */
+    --secondary: 199 89% 48%; /* #0EA5E9 */
+    --secondary-foreground: 60 9.1% 97.8%;
 
-  --card: oklch(14% 0.03 270 / 0.6); 
-  --card-foreground: oklch(98% 0.01 280);
+    /* Muted: Warm Sand/Beige */
+    --muted: 30 20% 94%; 
+    --muted-foreground: 25 5.3% 44.7%;
 
-  --popover: oklch(12% 0.03 270);
-  --popover-foreground: oklch(98% 0.01 280);
+    /* Accent: Light Orange/Blue mix for hovers */
+    --accent: 30 25% 94%; 
+    --accent-foreground: 24.6 95% 53.1%;
 
-  /* Neon Cyan/Purple Gradient Main Color */
-  --primary: oklch(65% 0.22 280); 
-  --primary-foreground: oklch(99% 0 0);
+    /* Destructive */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
 
-  --secondary: oklch(20% 0.04 270);
-  --secondary-foreground: oklch(98% 0.01 280);
+    /* Borders & Inputs */
+    --border: 30 15% 90%; /* Warm Gray */
+    --input: 30 15% 90%;
+    --ring: 24.6 95% 53.1%; /* Focus Ring is Orange */
 
-  --muted: oklch(18% 0.03 270);
-  --muted-foreground: oklch(70% 0.05 270);
+    /* ROUNDING: Make everything softer */
+    --radius: 1rem; /* 16px - Very rounded and friendly */
+  }
 
-  --accent: oklch(25% 0.05 270);
-  --accent-foreground: oklch(99% 0 0);
+  .dark {
+    /* Base: Deep Warm Gray/Brown tint, not pitch black */
+    --background: 20 14.3% 4.1%;
+    --foreground: 60 9.1% 97.8%;
 
-  --destructive: oklch(60% 0.2 20);
-  --destructive-foreground: oklch(99% 0 0);
+    --card: 24 10% 8%; 
+    --card-foreground: 60 9.1% 97.8%;
 
-  --border: oklch(30% 0.05 270);
-  --input: oklch(25% 0.05 270);
-  --ring: oklch(65% 0.22 280);
-}
+    --popover: 24 10% 8%;
+    --popover-foreground: 60 9.1% 97.8%;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+    /* Primary: Slightly lighter Orange for dark mode visibility */
+    --primary: 20.5 90.2% 48.2%; 
+    --primary-foreground: 60 9.1% 97.8%;
+
+    /* Secondary: Electric Blue pops in dark mode */
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 60 9.1% 97.8%;
+
+    --muted: 24 10% 12%;
+    --muted-foreground: 24 5.4% 63.9%;
+
+    --accent: 24 10% 12%;
+    --accent-foreground: 60 9.1% 97.8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 60 9.1% 97.8%;
+
+    --border: 24 10% 12%;
+    --input: 24 10% 12%;
+    --ring: 20.5 90.2% 48.2%;
+  }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
-}
-
-@layer utilities {
-  .glass {
-    @apply bg-card/60 backdrop-blur-md shadow-xl;
-    border: 1px solid rgb(255 255 255 / 0.1);
-  }
-
-  .glow {
-    box-shadow: 0 0 20px -5px var(--primary);
-  }
-  
-  .glow-text {
-    text-shadow: 0 0 10px var(--primary);
-  }
-
-  .bg-grid {
-    background-size: 40px 40px;
-    background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-  }
-  
-  .direction-reverse {
-    animation-direction: reverse;
-  }
-  
-  .animate-shimmer {
-    animation: shimmer 2s infinite linear;
-  }
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out forwards;
-  opacity: 0; 
 }

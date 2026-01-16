@@ -1,7 +1,6 @@
 // src/app/page.tsx
 import Link from "next/link";
 import { LandingHeader } from "@/components/LandingHeader";
-import { Footer } from "@/components/Footer"; // Assuming you have this, or keep it if it was there
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,6 @@ import {
 import {
   ArrowRight,
   Sparkles,
-  FileText,
   MessageSquare,
   FileQuestion,
   Layers,
@@ -31,27 +29,31 @@ import {
   Youtube,
   Link as LinkIcon,
   CalendarDays,
-  BarChart3,
+  Zap,
 } from "lucide-react";
 
-// --- Sub-Components for the Page (Server Components) ---
+// --- Sub-Components ---
 
 function FeatureCard({
   icon,
   title,
   description,
+  colorClass = "text-primary",
+  bgClass = "bg-primary/10",
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  colorClass?: string;
+  bgClass?: string;
 }) {
   return (
-    <Card className="border-muted bg-card/50 transition-all duration-300 ease-in-out hover:scale-[1.03] hover:shadow-lg h-full">
+    <Card className="border-none shadow-sm bg-card hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out rounded-3xl overflow-hidden group">
       <CardHeader>
-        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4">
+        <div className={`w-14 h-14 rounded-2xl ${bgClass} flex items-center justify-center ${colorClass} mb-4 group-hover:scale-110 transition-transform duration-300`}>
           {icon}
         </div>
-        <CardTitle className="text-xl">{title}</CardTitle>
+        <CardTitle className="text-xl font-bold text-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-muted-foreground leading-relaxed">{description}</p>
@@ -72,17 +74,19 @@ function StepCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center text-center p-6 rounded-xl transition-all duration-300 ease-in-out hover:scale-105 hover:bg-card/60">
+    <div className="flex flex-col items-center text-center p-8 rounded-3xl bg-card border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      
       <div className="relative mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+        <div className="w-20 h-20 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center text-primary shadow-inner">
           {icon}
         </div>
-        <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold border-4 border-background">
+        <div className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm border-4 border-card shadow-sm">
           {number}
         </div>
       </div>
-      <h3 className="text-xl font-semibold mb-3">{title}</h3>
-      <p className="text-muted-foreground max-w-sm">{description}</p>
+      <h3 className="text-xl font-bold mb-3">{title}</h3>
+      <p className="text-muted-foreground max-w-xs mx-auto leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -97,20 +101,21 @@ function TestimonialCard({
   title: string;
 }) {
   return (
-    <Card className="h-full flex flex-col bg-card/50 border-muted shadow-lg">
-      <CardContent className="pt-6 flex-1">
-        <blockquote className="text-lg leading-relaxed text-foreground">
-          "{quote}"
+    <Card className="h-full flex flex-col bg-card border-none shadow-md rounded-3xl relative">
+      <div className="absolute -top-3 left-8 text-6xl text-primary/20 font-serif leading-none">“</div>
+      <CardContent className="pt-8 flex-1">
+        <blockquote className="text-lg leading-relaxed text-foreground/80 font-medium">
+          {quote}
         </blockquote>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="bg-muted/30 py-4 mt-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-            <User className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold">
+            {name.charAt(0)}
           </div>
           <div>
-            <p className="font-semibold">{name}</p>
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="font-bold text-sm">{name}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">{title}</p>
           </div>
         </div>
       </CardFooter>
@@ -118,7 +123,7 @@ function TestimonialCard({
   );
 }
 
-// --- Pricing Section Component ---
+// --- Pricing Section ---
 function PricingSection() {
   const plans = [
     {
@@ -153,56 +158,65 @@ function PricingSection() {
   ];
 
   return (
-    <section className="py-24 bg-background" id="pricing">
+    <section className="py-32 bg-background" id="pricing">
       <div className="container mx-auto px-4 md:px-6">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Invest in your education for less than the price of lunch.
+        <div className="text-center mb-20">
+          <Badge variant="secondary" className="mb-4 px-4 py-1 rounded-full text-primary bg-primary/10 hover:bg-primary/20">
+            Transparent Pricing
+          </Badge>
+          <h2 className="text-4xl md:text-5xl font-extrabold mb-6 tracking-tight">Invest in your brain</h2>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Less than the price of a lunch, for better grades forever.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-start">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-center">
           {plans.map((plan) => (
             <Card 
               key={plan.title} 
-              className={`relative flex flex-col h-full transition-all duration-300 ${plan.highlight ? 'border-primary shadow-xl scale-105 z-10' : 'hover:shadow-lg'}`}
+              className={`relative flex flex-col h-full transition-all duration-300 rounded-[2rem] overflow-visible ${
+                plan.highlight 
+                  ? 'border-2 border-primary shadow-2xl scale-105 z-10 bg-card' 
+                  : 'border border-border/50 hover:shadow-xl bg-card/50'
+              }`}
             >
               {plan.badge && (
-                <div className="absolute -top-4 left-0 right-0 flex justify-center">
-                  <Badge className={`${plan.highlight ? 'bg-primary' : 'bg-green-600'} text-primary-foreground px-4 py-1`}>
+                <div className="absolute -top-5 left-0 right-0 flex justify-center">
+                  <Badge className={`${plan.highlight ? 'bg-gradient-to-r from-orange-500 to-amber-500' : 'bg-green-600'} text-white px-6 py-1.5 rounded-full text-sm shadow-md`}>
                     {plan.badge}
                   </Badge>
                 </div>
               )}
               
-              <CardHeader>
+              <CardHeader className={`${plan.highlight ? 'pt-10' : 'pt-8'}`}>
                 <CardTitle className="text-xl text-muted-foreground font-medium">{plan.title}</CardTitle>
                 <div className="mt-4 flex items-baseline text-foreground">
-                  <span className="text-4xl font-bold tracking-tight">{plan.price}</span>
-                  <span className="ml-1 text-sm font-semibold text-muted-foreground">{plan.period}</span>
+                  <span className="text-5xl font-extrabold tracking-tight">{plan.price}</span>
+                  <span className="ml-1 text-base font-semibold text-muted-foreground">{plan.period}</span>
                 </div>
                 {plan.subPrice && (
-                  <p className="text-sm font-medium text-green-600 dark:text-green-400 mt-1">
+                  <div className="inline-block mt-2 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-bold">
                     {plan.subPrice}
-                  </p>
+                  </div>
                 )}
-                <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
+                <p className="text-base text-muted-foreground mt-4">{plan.description}</p>
               </CardHeader>
               
               <CardContent className="flex-1">
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
-                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
-                      <span className="text-sm text-muted-foreground">{feature}</span>
+                      <div className="mt-0.5 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                        <Check className="h-3 w-3 text-primary" />
+                      </div>
+                      <span className="text-sm font-medium text-foreground/80">{feature}</span>
                     </li>
                   ))}
                 </ul>
               </CardContent>
               
-              <CardFooter>
-                <Button className="w-full" size="lg" variant={plan.buttonVariant} asChild>
+              <CardFooter className="pb-8">
+                <Button className="w-full h-12 text-base rounded-2xl shadow-sm" size="lg" variant={plan.buttonVariant} asChild>
                    <Link href="/signup">Get Started</Link>
                 </Button>
               </CardFooter>
@@ -214,228 +228,170 @@ function PricingSection() {
   );
 }
 
-// --- Main Page Component (Server Component) ---
+// --- Main Page Component ---
 
 export default function LandingPage() {
   return (
-    <div className="flex flex-col min-h-screen font-sans">
+    <div className="flex flex-col min-h-screen font-sans bg-background selection:bg-primary/20">
       <LandingHeader /> 
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative py-20 md:py-32 overflow-hidden">
-          <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px] backdrop-blur-sm"></div>
-          <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-[310px] rounded-full bg-primary/20 opacity-20 blur-[100px]"></div>
+        <section className="relative py-24 md:py-36 overflow-hidden">
+          {/* Friendly Background Blobs */}
+          <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-orange-200/20 rounded-full blur-[100px] -z-10 animate-pulse" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-200/20 rounded-full blur-[120px] -z-10" />
           
-          <div className="container mx-auto px-4 md:px-6 text-center">
-            <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
-              <Sparkles className="mr-2 h-3.5 w-3.5" />
-              <span>Now with AI Lecture Analysis</span>
+          <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
+            <div className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-sm font-semibold text-orange-700 mb-8 shadow-sm backdrop-blur-sm dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300">
+              <Sparkles className="mr-2 h-4 w-4 fill-orange-500 text-orange-600" />
+              <span>New: AI Lecture Analysis is here!</span>
             </div>
             
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-foreground mb-6 max-w-5xl mx-auto leading-[1.1]">
-              Your Personal <span className="text-primary">AI Tutor</span> & <br className="hidden sm:block" /> Second Brain
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground mb-8 max-w-5xl mx-auto leading-[1.1]">
+              Your Friendly <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500">AI Tutor</span> & <br className="hidden sm:block" /> Study Buddy
             </h1>
             
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              Upload documents, record lectures, or paste YouTube links. 
-              Instantly generate quizzes, flashcards, and study plans to ace your exams.
+            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
+              Turn any document, video, or lecture into fun quizzes, flashcards, and summaries. Ace your exams without the stress.
             </p>
             
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="h-12 px-8 text-base rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-shadow" asChild>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+              <Button size="lg" className="h-14 px-10 text-lg rounded-full shadow-xl shadow-orange-500/20 hover:shadow-orange-500/40 hover:-translate-y-1 transition-all bg-gradient-to-r from-orange-600 to-amber-600 border-none" asChild>
                 <Link href="/signup">
-                  Start Studying for Free
+                  Start Studying Free
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base rounded-full" asChild>
+              <Button size="lg" variant="outline" className="h-14 px-10 text-lg rounded-full border-2 hover:bg-accent/50" asChild>
                 <Link href="/login">
                   Log In
                 </Link>
               </Button>
             </div>
+            
+            {/* Social Proof / Trust Indicators */}
+            <div className="mt-16 pt-8 border-t border-border/40 max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
+               {/* Placeholders for logos (optional) */}
+            </div>
           </div>
         </section>
 
         {/* Feature Grid */}
-        <section className="py-24 bg-muted/30">
+        <section className="py-32 bg-muted/40 relative">
+           {/* Decorative Curve */}
+           <div className="absolute top-0 left-0 w-full overflow-hidden leading-[0]">
+             <svg className="relative block w-[calc(100%+1.3px)] h-[50px] text-background" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                 <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" fill="currentColor"></path>
+             </svg>
+           </div>
+
           <div className="container mx-auto px-4 md:px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need to master any subject</h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                QuizCraft transforms raw content into a comprehensive active learning system.
+            <div className="text-center mb-20">
+              <h2 className="text-4xl md:text-5xl font-extrabold mb-6">Everything you need to master it</h2>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                QuizCraft transforms boring study materials into an active learning playground.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
               <FeatureCard
-                icon={<MessageSquare className="w-6 h-6" />}
-                title="Chat with Data (RAG)"
-                description="Upload PDFs or docs and ask questions. Get instant, hallucination-free answers cited directly from your source material."
+                icon={<MessageSquare className="w-7 h-7" />}
+                title="Chat with Data"
+                description="Upload PDFs or docs and just ask. It's like texting your textbook and getting instant, cited answers."
+                colorClass="text-blue-600"
+                bgClass="bg-blue-100 dark:bg-blue-900/30"
               />
               <FeatureCard
-                icon={<FileQuestion className="w-6 h-6" />}
-                title="Intelligent Quizzes"
-                description="Generate multiple-choice, true/false, and fill-in-the-blank quizzes. Includes immediate feedback and detailed AI explanations."
+                icon={<FileQuestion className="w-7 h-7" />}
+                title="Magic Quizzes"
+                description="Instant multiple-choice, true/false, and fill-in-the-blank tests. We even explain why you got it wrong."
+                colorClass="text-purple-600"
+                bgClass="bg-purple-100 dark:bg-purple-900/30"
               />
               <FeatureCard
-                icon={<Layers className="w-6 h-6" />}
-                title="Spaced Repetition"
-                description="Flashcards that know when you're about to forget. Our Anki-style algorithm optimizes your review schedule for long-term retention."
+                icon={<Layers className="w-7 h-7" />}
+                title="Smart Flashcards"
+                description="Flashcards that track your memory. We show you the cards you struggle with just before you forget them."
+                colorClass="text-green-600"
+                bgClass="bg-green-100 dark:bg-green-900/30"
               />
               <FeatureCard
-                icon={<Mic className="w-6 h-6" />}
-                title="Audio & Lecture Notes"
-                description="Record live lectures or upload audio files. We transcribe, summarize, and turn spoken words into study materials automatically."
+                icon={<Mic className="w-7 h-7" />}
+                title="Audio Notes"
+                description="Record a lecture or upload a file. We transcribe it, summarize it, and turn it into study fuel."
+                colorClass="text-rose-600"
+                bgClass="bg-rose-100 dark:bg-rose-900/30"
               />
               <FeatureCard
-                icon={<Youtube className="w-6 h-6" />}
-                title="YouTube to Quiz"
-                description="Paste a video link and instantly get a summary and test questions. Perfect for visual learners and tutorials."
+                icon={<Youtube className="w-7 h-7" />}
+                title="YouTube Learning"
+                description="Paste a video link. We watch it for you and generate a summary and quiz in seconds."
+                colorClass="text-red-600"
+                bgClass="bg-red-100 dark:bg-red-900/30"
               />
               <FeatureCard
-                icon={<PenTool className="w-6 h-6" />}
-                title="AI Essay Grader"
-                description="Get instant scoring and feedback on your essays. Our AI critiques your argument, structure, and grammar based on academic rubrics."
-              />
-              <FeatureCard
-                icon={<LinkIcon className="w-6 h-6" />}
-                title="Connected Notes"
-                description="Build a 'Second Brain'. Create notes with bi-directional links to connect concepts across different topics and documents."
-              />
-              <FeatureCard
-                icon={<CalendarDays className="w-6 h-6" />}
-                title="Personalized Plans"
-                description="Not sure what to study? Let AI generate a daily study schedule based on your weak areas and upcoming exam dates."
-              />
-              <FeatureCard
-                icon={<FolderKanban className="w-6 h-6" />}
-                title="Project Management"
-                description="Organize disparate notes, quizzes, and decks into structured Projects to keep your entire curriculum in one place."
+                icon={<PenTool className="w-7 h-7" />}
+                title="Essay Grader"
+                description="Get instant scoring and feedback. Improve your writing style, grammar, and arguments instantly."
+                colorClass="text-amber-600"
+                bgClass="bg-amber-100 dark:bg-amber-900/30"
               />
             </div>
           </div>
         </section>
 
-        {/* How It Works */}
-        <section className="py-24 bg-background">
+        {/* How It Works - "The Friendly Path" */}
+        <section className="py-32 bg-background">
           <div className="container mx-auto px-4 md:px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">From raw input to mastery in minutes</h2>
-              <p className="text-lg text-muted-foreground">Three simple steps to supercharge your learning.</p>
+            <div className="text-center mb-20">
+              <h2 className="text-4xl md:text-5xl font-extrabold mb-6">Three steps to brilliance</h2>
+              <p className="text-xl text-muted-foreground">No complex setup. Just upload and learn.</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto relative">
-              <div className="hidden md:block absolute top-14 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/10 to-transparent -z-10" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-5xl mx-auto relative">
+              {/* Connecting dashed line for desktop */}
+              <div className="hidden md:block absolute top-14 left-[16%] right-[16%] h-1 border-t-4 border-dashed border-muted -z-10" />
               
               <StepCard 
                 number="1"
-                title="Capture Content"
-                description="Upload PDFs, record audio, paste links, or write notes directly in the app."
+                title="Drop it in"
+                description="Drag & drop your PDFs, recordings, or links. We handle the rest."
                 icon={<Upload className="w-8 h-8" />}
               />
               <StepCard 
                 number="2"
-                title="AI Synthesis"
-                description="Our engine extracts key concepts to build quizzes, flashcards, and summaries."
-                icon={<BrainCircuit className="w-8 h-8" />}
+                title="Watch magic happen"
+                description="Our AI breaks it down into bite-sized concepts and quizzes."
+                icon={<Zap className="w-8 h-8" />}
               />
               <StepCard 
                 number="3"
-                title="Active Recall"
-                description="Test yourself with quizzes and spaced repetition to lock information into long-term memory."
+                title="Master it"
+                description="Test yourself, track progress, and crush that exam."
                 icon={<GraduationCap className="w-8 h-8" />}
               />
             </div>
           </div>
         </section>
 
-        {/* Use Cases Section */}
-        <section className="py-24 bg-muted/30">
+        {/* Testimonials */}
+        <section className="py-32 bg-orange-50/50 dark:bg-background border-t border-orange-100 dark:border-border/30">
           <div className="container mx-auto px-4 md:px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">For Every Kind of Learner</h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Whether you're a student or a professional, QuizCraft adapts to your workflow.
+             <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Students love the Fox 🦊</h2>
+              <p className="text-lg text-muted-foreground">
+                Join the community of smarter learners.
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-2xl flex items-center gap-3">
-                    <GraduationCap className="w-8 h-8 text-primary" />
-                    For Students
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-muted-foreground">
-                    Turn lecture notes and textbook chapters into study sets in seconds. Stop wasting time on manual prep and focus on what matters: learning.
-                  </p>
-                  <ul className="space-y-2">
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Instantly create study guides from PDFs.</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Record lectures and get auto-summaries.</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Ace exams with practice quizzes and flashcards.</span>
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-2xl flex items-center gap-3">
-                    <Briefcase className="w-8 h-8 text-primary" />
-                    For Educators & Professionals
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-muted-foreground">
-                    Quickly create training materials, onboard new hires, or refresh your knowledge on technical documents.
-                  </p>
-                  <ul className="space-y-2">
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Generate test questions for any topic.</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Summarize dense reports and technical manuals.</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span>Create flashcards for corporate training.</span>
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
-
-        {/* Testimonials Section */}
-        <section className="py-24 bg-background">
-          <div className="container mx-auto px-4 md:px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Don't just study. Understand.</h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                See what other learners are saying about QuizCraft.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
               <TestimonialCard
                 quote="I uploaded a 40-page PDF on biology and had a practice quiz in 30 seconds. This is a game-changer for midterms."
                 name="Sarah J."
                 title="University Student"
               />
               <TestimonialCard
-                quote="The 'Chat with Document' feature is incredible. I can ask my textbook specific questions and get answers instantly. Saved me hours of searching."
+                quote="The 'Chat with Document' feature is incredible. I can ask my textbook specific questions and get answers instantly."
                 name="Michael B."
                 title="Grad Student"
               />
@@ -448,65 +404,29 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing Section */}
+        {/* Pricing */}
         <PricingSection />
 
-        {/* FAQ Section */}
-        <section className="py-24 bg-muted/30">
-          <div className="container mx-auto px-4 md:px-6 max-w-3xl">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
-            </div>
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="item-1">
-                <AccordionTrigger className="text-lg">Is QuizCraft free to use?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  Yes! QuizCraft offers a generous free plan that includes access to all core features, including document uploads, quiz generation, and AI chat. We have fair usage limits on the free plan, with an option to upgrade to Pro for unlimited access.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="item-2">
-                <AccordionTrigger className="text-lg">What file types are supported?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  You can upload `.pdf`, `.docx`, `.pptx`, and text files. We also support **Audio files** (mp3, wav) for transcription and **YouTube links** for video learning.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="item-3">
-                <AccordionTrigger className="text-lg">How does the AI Essay Grader work?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  Our AI Essay Grader analyzes your text based on standard academic criteria like clarity, argumentation, and grammar. It provides an estimated score (0-100) and detailed feedback with highlights, helping you understand your strengths and areas for improvement.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="item-4">
-                <AccordionTrigger className="text-lg">Is my data secure?</AccordionTrigger>
-                <AccordionContent className="text-base text-muted-foreground leading-relaxed">
-                  Yes. Your data is stored securely in your own private Supabase database. We do not share your documents or personal information with any third parties. All AI processing is done anonymously.
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="py-24 bg-primary/5 border-t border-b border-primary/10">
+        {/* CTA */}
+        <section className="py-24 bg-gradient-to-br from-primary via-orange-600 to-amber-600 text-white rounded-t-[3rem] mt-12 mx-4 md:mx-8 shadow-[0_-10px_40px_-15px_rgba(234,88,12,0.3)]">
           <div className="container mx-auto px-4 md:px-6 text-center">
-            <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">
-              Ready to upgrade your grades?
+            <h2 className="text-3xl md:text-5xl font-extrabold mb-6 tracking-tight">
+              Ready to boost your grades?
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
+            <p className="text-lg md:text-xl text-orange-100 max-w-2xl mx-auto mb-10 font-medium">
               Join thousands of students using AI to study smarter, not harder. 
               Get started today for free.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-               <Button size="lg" className="h-12 px-8 rounded-full text-lg shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-shadow" asChild>
+               <Button size="lg" variant="secondary" className="h-14 px-10 rounded-full text-lg font-bold shadow-lg text-primary hover:bg-white" asChild>
                 <Link href="/signup">
                   Get Started Now <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
                </Button>
             </div>
-            <p className="mt-6 text-sm text-muted-foreground flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-500" /> No credit card required
-              <span className="mx-2">•</span>
-              <CheckCircle2 className="w-4 h-4 text-green-500" /> Free plan available
+            <p className="mt-8 text-sm text-orange-200 flex items-center justify-center gap-6 font-medium">
+              <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> No credit card required</span>
+              <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Free plan available</span>
             </p>
           </div>
         </section>
