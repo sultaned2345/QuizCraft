@@ -4,319 +4,205 @@
 
 @layer base {
   :root {
-    /* Alabaster/Isatine warm beige background - mimics high-quality paper */
-    --background: 0.965 0.008 75; /* Converted oklch values for Tailwind compatibility if needed, or keep raw */
-    /* Note: If your tailwind.config supports raw oklch, keep as is. 
-       Standard Shadcn usually expects pure HSL or specific values. 
-       I have preserved your exact OKLCH strings below for modern browser support. */
+    /* ------------------------------------------------------------------ */
+    /* YOUR COLORS (Preserved exactly as you pasted them)                */
+    /* ------------------------------------------------------------------ */
     
-    --background: 96.5% 0.008 75; /* approximates oklch(0.965 0.008 75) */
-    /* Reverting to your exact definitions below */
+    /* Alabaster/Isatine warm beige background */
+    --background: 0.965 0.008 75; /* Using raw values for Tailwind v3 opacity support */
+    /* If your config expects full strings, use: oklch(0.965 0.008 75) */
+    
+    /* To ensure compatibility, I will use the oklch wrapper as valid CSS variables
+       assuming your tailwind.config.js maps these correctly. */
+    --background: oklch(0.965 0.008 75);
+    --foreground: oklch(0.38 0.015 60);
+
+    --card: oklch(0.97 0.012 80);
+    --card-foreground: oklch(0.38 0.015 60);
+
+    --popover: oklch(0.97 0.012 80);
+    --popover-foreground: oklch(0.38 0.015 60);
+
+    /* Baked Clay / Earthy Terra Cotta */
+    --primary: oklch(0.58 0.12 40);
+    --primary-foreground: oklch(0.98 0.008 75);
+
+    /* Sage Green */
+    --secondary: oklch(0.72 0.06 145);
+    --secondary-foreground: oklch(0.28 0.02 145);
+
+    --muted: oklch(0.91 0.012 70);
+    --muted-foreground: oklch(0.54 0.018 65);
+
+    --accent: oklch(0.86 0.04 140);
+    --accent-foreground: oklch(0.32 0.025 140);
+
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.98 0.008 75);
+
+    --border: oklch(0.87 0.012 75);
+    --input: oklch(0.89 0.012 75);
+    --ring: oklch(0.58 0.12 40);
+
+    --chart-1: oklch(0.58 0.12 40);
+    --chart-2: oklch(0.72 0.06 145);
+    --chart-3: oklch(0.62 0.08 180);
+    --chart-4: oklch(0.7 0.1 35);
+    --chart-5: oklch(0.55 0.05 70);
+
+    --radius: 1rem;
+
+    --sidebar: oklch(0.965 0.008 75);
+    --sidebar-foreground: oklch(0.38 0.015 60);
+    --sidebar-primary: oklch(0.58 0.12 40);
+    --sidebar-primary-foreground: oklch(0.98 0.008 75);
+    --sidebar-accent: oklch(0.91 0.012 70);
+    --sidebar-accent-foreground: oklch(0.38 0.015 60);
+    --sidebar-border: oklch(0.87 0.012 75);
+    --sidebar-ring: oklch(0.58 0.12 40);
+
+    /* Fonts */
+    --font-sans: "Inter", "Inter Fallback", system-ui, -apple-system, sans-serif;
+    --font-serif: "Merriweather", "Merriweather Fallback", "Georgia", serif;
+    --font-mono: "Geist Mono", "Geist Mono Fallback";
   }
-}
 
-/* ----------------------------------------------------------------------- */
-/* YOUR CUSTOM THEME (Adapted for Tailwind v3)                             */
-/* ----------------------------------------------------------------------- */
-
-:root {
-  /* Alabaster/Isatine warm beige background - mimics high-quality paper */
-  --background: 96.5% 0.008 75; /* oklch notation usually requires 'oklch(val val val)' in CSS, 
-                                   but Shadcn maps these in tailwind.config. 
-                                   I am keeping your exact values but wrapping in oklch() 
-                                   if they are used directly in CSS variables, 
-                                   OR defining them as you pasted them if your config expects that.
-                                   
-                                   Assumed Format: You pasted valid CSS. I will output exactly what you gave
-                                   but fixed the imports. */
-                                   
-  --background: oklch(0.965 0.008 75);
-  /* Dark warm gray (Stone-800) text - never pitch black */
-  --foreground: oklch(0.38 0.015 60);
-
-  /* Soft sand/beige for card backgrounds with subtle warmth */
-  --card: oklch(0.97 0.012 80);
-  --card-foreground: oklch(0.38 0.015 60);
-
-  --popover: oklch(0.97 0.012 80);
-  --popover-foreground: oklch(0.38 0.015 60);
-
-  /* Baked Clay / Earthy Terra Cotta as primary accent */
-  --primary: oklch(0.58 0.12 40);
-  --primary-foreground: oklch(0.98 0.008 75);
-
-  /* Sage Green as secondary accent - natural color palette */
-  --secondary: oklch(0.72 0.06 145);
-  --secondary-foreground: oklch(0.28 0.02 145);
-
-  /* Soft warm stone muted tones for reduced contrast */
-  --muted: oklch(0.91 0.012 70);
-  --muted-foreground: oklch(0.54 0.018 65);
-
-  /* Soft sage accent with organic feel */
-  --accent: oklch(0.86 0.04 140);
-  --accent-foreground: oklch(0.32 0.025 140);
-
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.98 0.008 75);
-
-  /* Very subtle, semi-transparent warm stone borders */
-  --border: oklch(0.87 0.012 75);
-  --input: oklch(0.89 0.012 75);
-  --ring: oklch(0.58 0.12 40);
-
-  --chart-1: oklch(0.58 0.12 40);
-  --chart-2: oklch(0.72 0.06 145);
-  --chart-3: oklch(0.62 0.08 180);
-  --chart-4: oklch(0.7 0.1 35);
-  --chart-5: oklch(0.55 0.05 70);
-
-  /* 1rem (16px) radius for friendly, organic rounded corners */
-  --radius: 1rem;
-
-  --sidebar: oklch(0.965 0.008 75);
-  --sidebar-foreground: oklch(0.38 0.015 60);
-  --sidebar-primary: oklch(0.58 0.12 40);
-  --sidebar-primary-foreground: oklch(0.98 0.008 75);
-  --sidebar-accent: oklch(0.91 0.012 70);
-  --sidebar-accent-foreground: oklch(0.38 0.015 60);
-  --sidebar-border: oklch(0.87 0.012 75);
-  --sidebar-ring: oklch(0.58 0.12 40);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.145 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.145 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: oklch(0.637 0.237 25.331);
+    --border: oklch(0.269 0 0);
+    --input: oklch(0.269 0 0);
+    --ring: oklch(0.439 0 0);
+    --chart-1: oklch(0.488 0.243 264.376);
+    --chart-2: oklch(0.696 0.17 162.48);
+    --chart-3: oklch(0.769 0.188 70.08);
+    --chart-4: oklch(0.627 0.265 303.9);
+    --chart-5: oklch(0.645 0.246 16.439);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(0.269 0 0);
+    --sidebar-ring: oklch(0.439 0 0);
+  }
 }
 
 @layer base {
   * {
-    /* FIX: Changed 'outline-ring/50' to 'ring/50' because outline-ring does not exist */
-    @apply border-border ring/50;
+    /* FIXED: 'outline-ring/50' is invalid in Tailwind v3. 
+       We use standard 'border-border' here.
+    */
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
-/* ----------------------------------------------------------------------- */
-/* ANIMATIONS                                                              */
-/* ----------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* ANIMATIONS (Preserved exactly as requested)                        */
+/* ------------------------------------------------------------------ */
 
-/* Add subtle animations for the landing page */
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px) rotate(var(--rotate, 0deg));
-  }
-  50% {
-    transform: translateY(-10px) rotate(var(--rotate, 0deg));
-  }
+  0%, 100% { transform: translateY(0px) rotate(var(--rotate, 0deg)); }
+  50% { transform: translateY(-10px) rotate(var(--rotate, 0deg)); }
 }
 
 @keyframes float-delayed {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
 }
 
 @keyframes marquee {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 @keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.8;
-  }
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
 }
 
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Adding more animations for enhanced interactivity */
 @keyframes count-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes bounce-subtle {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 
 @keyframes scale-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 @keyframes gradient-shift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 @keyframes typing {
-  from {
-    width: 0;
-  }
-  to {
-    width: 100%;
-  }
+  from { width: 0; }
+  to { width: 100%; }
 }
 
 @keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
+/* ------------------------------------------------------------------ */
+/* UTILITY CLASSES                                                    */
+/* ------------------------------------------------------------------ */
 
-.animate-float-delayed {
-  animation: float-delayed 5s ease-in-out infinite;
-  animation-delay: 1s;
-}
-
-.animate-marquee {
-  animation: marquee 30s linear infinite;
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 3s ease-in-out infinite;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.6s ease-out forwards;
-}
-
-.animate-count-up {
-  animation: count-up 0.6s ease-out forwards;
-}
-
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-delayed { animation: float-delayed 5s ease-in-out infinite; animation-delay: 1s; }
+.animate-marquee { animation: marquee 30s linear infinite; }
+.animate-pulse-soft { animation: pulse-soft 3s ease-in-out infinite; }
+.animate-slide-up { animation: slide-up 0.6s ease-out forwards; }
+.animate-count-up { animation: count-up 0.6s ease-out forwards; }
 .animate-shimmer {
   animation: shimmer 2s infinite;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   background-size: 200% 100%;
 }
+.animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
+.animate-scale-pulse { animation: scale-pulse 3s ease-in-out infinite; }
+.animate-gradient-shift { animation: gradient-shift 4s ease infinite; background-size: 200% 200%; }
+.animate-typing { animation: typing 2s steps(20) forwards; overflow: hidden; white-space: nowrap; }
+.animate-blink { animation: blink 1s step-end infinite; }
 
-.animate-bounce-subtle {
-  animation: bounce-subtle 2s ease-in-out infinite;
-}
+.card-hover-lift { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+.card-hover-lift:hover { transform: translateY(-4px); }
 
-.animate-scale-pulse {
-  animation: scale-pulse 3s ease-in-out infinite;
-}
-
-.animate-gradient-shift {
-  animation: gradient-shift 4s ease infinite;
-  background-size: 200% 200%;
-}
-
-.animate-typing {
-  animation: typing 2s steps(20) forwards;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.animate-blink {
-  animation: blink 1s step-end infinite;
-}
-
-/* Smooth hover transitions for cards */
-.card-hover-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-.card-hover-lift:hover {
-  transform: translateY(-4px);
-}
-
-/* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   -webkit-background-clip: text;
@@ -324,18 +210,11 @@
   background-clip: text;
 }
 
-/* Glass effect */
 .glass {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* Hide scrollbar for testimonials */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
