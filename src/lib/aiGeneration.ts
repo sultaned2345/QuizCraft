@@ -1,7 +1,7 @@
 // src/lib/aiGeneration.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "./supabaseAdmin";
-import { prisma } from "./prisma";
+import { prisma } from "@/lib/prisma";
 import { generatePodcastScript, synthesizeSpeech } from "@/lib/podcast-service";
 
 // Initialize Gemini
