@@ -249,3 +249,6 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     </div>
   );
 }
+
+// FIX: Added default export to satisfy import in projects/[projectId]/page.tsx
+export default PdfViewer;
