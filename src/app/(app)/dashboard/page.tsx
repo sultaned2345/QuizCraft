@@ -1,7 +1,7 @@
 // src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth"; // Ensure this uses the new server-redirect helper
+import { requireUser } from "@/lib/auth"; 
 import { getHeatmapData } from "@/lib/dashboard-data";
 
 // Components
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 async function getDashboardData(userId: string) {
   try {
     // 1. Safe Database Access for 'study_sessions'
-    // If the table is missing in Prisma Client, this prevents a crash.
+    // If table missing, fallback immediately
     const studyTimePromise = (prisma as any).study_sessions
       ? (prisma as any).study_sessions.aggregate({
           where: { user_id: userId },
@@ -28,9 +28,9 @@ async function getDashboardData(userId: string) {
 
     // 2. Fetch Data in Parallel
     const [heatmap, studyAggregate, quizAttempts] = await Promise.all([
-      getHeatmapData(userId).catch(err => {
-        console.error("Heatmap fetch failed:", err);
-        return []; // Fallback to empty array
+      getHeatmapData(userId).catch(e => {
+         console.error("Heatmap fetch failed", e); 
+         return []; 
       }),
       studyTimePromise.catch(() => ({ _sum: { duration_seconds: 0 } })),
       prisma.quiz_attempts.findMany({
@@ -49,7 +49,8 @@ async function getDashboardData(userId: string) {
       (q) => q.total > 0 && q.score / q.total >= 0.8
     ).length;
 
-    // 5. Calculate Streak (The source of your error)
+    // 5. Calculate Streak (CRITICAL FIX: Ensure Array)
+    // If getHeatmapData returned undefined/null, default to []
     const validHeatmap = Array.isArray(heatmap) ? heatmap : [];
     
     const sortedDates = validHeatmap
@@ -63,7 +64,6 @@ async function getDashboardData(userId: string) {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split("T")[0];
 
-    // Simple streak logic checks if today or yesterday is present
     if (sortedDates.includes(todayStr) || sortedDates.includes(yesterdayStr)) {
       streak = 1;
       let currentDate = new Date(sortedDates[0]);
@@ -87,16 +87,12 @@ async function getDashboardData(userId: string) {
     };
   } catch (error) {
     console.error("CRITICAL: Failed to calculate dashboard data:", error);
-    // Absolute fallback to prevent page crash
     return { streak: 0, studyHours: 0, quizzesMastered: 0 };
   }
 }
 
 export default async function DashboardPage() {
-  // 1. Auth Guard
   const user = await requireUser();
-  
-  // 2. Data Fetching
   const stats = await getDashboardData(user.id);
 
   return (
@@ -106,7 +102,6 @@ export default async function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4 flex flex-col gap-6">
           <WelcomeHero user={user} />
-          
           <Suspense fallback={<Skeleton className="h-32 w-full rounded-xl" />}>
             <DashboardStatsGrid stats={stats} />
           </Suspense>
@@ -120,7 +115,6 @@ export default async function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4 space-y-6">
           <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
-          {/* RecentActivity also fetches data; if it fails, it might crash the page unless it handles its own errors */}
           <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
             <RecentActivity />
           </Suspense>
