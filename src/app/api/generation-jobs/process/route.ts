@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { 
-  callAIToGenerateNote, 
-  callAIToGenerateFlashcards, 
-  callAIToGenerateQuiz 
+  generateNotesFromContent,      // Ensure these match your aiGeneration.ts exports
+  generateFlashcardsFromContent, 
+  generateQuizFromContent, 
+  generatePodcastForDocument     
 } from '@/lib/aiGeneration';
 import { generateEmbeddings } from '@/lib/ai-service';
 
@@ -50,20 +51,16 @@ export async function POST(req: NextRequest) {
     // 2. Execute Logic based on Job Type
     switch (job.job_type) {
       case 'note': {
-        // Use Gemini to generate structured notes
-        const noteResult = await callAIToGenerateNote(text);
+        const noteContent = await generateNotesFromContent(text);
         
-        // VALIDATION
-        if (!noteResult || !noteResult.content) {
-            throw new Error("AI failed to generate notes.");
-        }
+        if (!noteContent) throw new Error("AI failed to generate notes.");
 
         const note = await prisma.notes.create({
           data: {
             user_id: user.id,
             document_id: job.document_id,
-            title: noteResult.title || `${fileName} - Study Notes`,
-            content: noteResult.content, // HTML content
+            title: `${fileName} - Study Notes`,
+            content: noteContent, 
             tags: ['auto-generated']
           }
         });
@@ -72,13 +69,9 @@ export async function POST(req: NextRequest) {
       }
 
       case 'flashcard': {
-        // Use Gemini to generate flashcards
-        const cardsData = await callAIToGenerateFlashcards(text, 15);
+        const cardsData = await generateFlashcardsFromContent(text);
         
-        // VALIDATION
-        if (!cardsData || cardsData.length === 0) {
-            throw new Error("AI returned 0 flashcards.");
-        }
+        if (!cardsData || cardsData.length === 0) throw new Error("AI returned 0 flashcards.");
 
         const deck = await prisma.flashcard_decks.create({
           data: {
@@ -88,11 +81,10 @@ export async function POST(req: NextRequest) {
           }
         });
         
-        // Use explicit 'front_content' and 'back_content' from Gemini Schema
         await prisma.flashcards.createMany({
           data: cardsData.map((c: any) => ({
             deck_id: deck.id,
-            front_content: c.front_content || c.front || "Error", // Fallback for safety
+            front_content: c.front_content || c.front || "Error", 
             back_content: c.back_content || c.back || "Error"
           }))
         });
@@ -101,10 +93,9 @@ export async function POST(req: NextRequest) {
       }
 
       case 'quiz': {
-        // Use Gemini to generate quiz
-        const quizResult = await callAIToGenerateQuiz(text, 10, 'medium', 'MIXED');
+        // Passing title/filename to helper if needed
+        const quizResult = await generateQuizFromContent(text, fileName);
         
-        // VALIDATION
         if (!quizResult || !quizResult.questions || quizResult.questions.length === 0) {
             throw new Error("AI generated 0 questions.");
         }
@@ -118,7 +109,6 @@ export async function POST(req: NextRequest) {
           }
         });
 
-        // Create questions sequentially
         for (const q of quizResult.questions) {
           await prisma.questions.create({
             data: {
@@ -135,10 +125,26 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      // ✅ NEW: Podcast Generation
+      case 'podcast': {
+        const podcast = await generatePodcastForDocument(
+            text, 
+            fileName, 
+            user.id, 
+            job.document_id, 
+            'document'
+        );
+        
+        if (!podcast) throw new Error("Podcast generation returned null");
+        outputId = podcast.id;
+        break;
+      }
+
+      // ✅ NEW: Chat Embeddings (for RAG)
       case 'embedding': {
-        // Keep OpenAI/Embeddings for RAG (Gemini embeddings support requires different setup)
         const vector = await generateEmbeddings(text.slice(0, 8000));
         
+        // Using raw SQL for pgvector insertion
         await prisma.$executeRaw`
           INSERT INTO content_embeddings (id, user_id, content_id, content_type, content_chunk, embedding)
           VALUES (
@@ -150,7 +156,7 @@ export async function POST(req: NextRequest) {
             ${vector}::vector
           )
         `;
-        outputId = job.document_id;
+        outputId = job.document_id; 
         break;
       }
     }
@@ -164,7 +170,8 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Check if all jobs for this doc are done
+    // Check if ALL jobs for this document are done
+    // If so, mark the document itself as 'completed'
     const pendingJobs = await prisma.generation_jobs.count({
       where: { 
         document_id: job.document_id,
@@ -184,7 +191,6 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error(`Job Processing Failed:`, e);
     
-    // Explicitly fail the job in DB so UI updates
     if (jobId) {
         try {
             await prisma.generation_jobs.update({

@@ -1,154 +1,112 @@
 // src/hooks/useTurboGenerator.ts
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type GenerationType = 'quiz' | 'notes' | 'flashcards';
+export type TurboJobType = 'quiz' | 'note' | 'flashcard' | 'podcast' | 'embedding';
+export type JobStatus = 'idle' | 'generating' | 'completed' | 'error';
 
-interface UseTurboGeneratorOptions {
-  onSuccess?: (id: string, type: GenerationType) => void;
-  onError?: (error: Error) => void;
+interface TurboState {
+  quiz: JobStatus;
+  note: JobStatus;
+  flashcard: JobStatus;
+  podcast: JobStatus;
+  embedding: JobStatus;
 }
 
-export function useTurboGenerator(options: UseTurboGeneratorOptions = {}) {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0); 
-  const [status, setStatus] = useState<string>('idle');
+interface TurboResults {
+  quiz?: string;      // ID
+  note?: string;      // ID
+  flashcard?: string; // ID
+  podcast?: string;   // ID
+  embedding?: boolean; 
+}
+
+export function useTurboGenerator(documentId: string) {
+  const [statuses, setStatuses] = useState<TurboState>({
+    quiz: 'idle',
+    note: 'idle',
+    flashcard: 'idle',
+    podcast: 'idle',
+    embedding: 'idle'
+  });
   
-  const router = useRouter();
-  const { toast } = useToast();
+  const [results, setResults] = useState<TurboResults>({});
+  const [isFullyComplete, setIsFullyComplete] = useState(false);
+  
   const { session } = useAuth();
 
-  const generate = useCallback(async (
-    type: GenerationType, 
-    documentId: string, 
-    metadata: any = {}
-  ) => {
-    setIsGenerating(true);
-    setProgress(10);
-    setStatus('Initializing AI...');
-
+  // Helper to run a single job
+  const runJob = useCallback(async (type: TurboJobType) => {
     try {
-      // 1. Validate Inputs
-      if (!documentId) throw new Error("Document ID is required.");
+      setStatuses(prev => ({ ...prev, [type]: 'generating' }));
 
-      const cleanedId = documentId.trim();
-      
-      // UUID Regex (V4 and others)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-      // Check if it's NOT a UUID (and likely text content)
-      if (!uuidRegex.test(cleanedId)) {
-        console.error("❌ [TurboGenerator Error] Invalid Document ID format.");
-        
-        throw new Error(
-            cleanedId.length > 50 
-            ? "Implementation Error: You are passing file CONTENT instead of the document ID." 
-            : `Invalid Document ID: ${cleanedId}`
-        );
-      }
-
-      console.log(`[TurboGenerator] Starting ${type} job for ID: ${cleanedId}`);
-
-      setProgress(20);
-      setStatus('Analyzing content...');
-      
-      // 2. Start Job (Create Record)
-      const startResponse = await fetch('/api/generation-jobs/start', {
+      // 1. Start Job
+      const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        body: JSON.stringify({
-          documentId: cleanedId, 
-          jobType: type,
-          metadata
-        })
+        body: JSON.stringify({ documentId, jobType: type })
       });
 
-      if (!startResponse.ok) {
-        if (startResponse.status === 401) throw new Error("Authentication failed. Please sign in.");
-        const errorData = await startResponse.json();
-        throw new Error(errorData.error || 'Failed to start generation');
+      if (!startRes.ok) {
+        console.error(`Failed to start ${type}`);
+        setStatuses(prev => ({ ...prev, [type]: 'error' }));
+        return;
       }
 
-      const { jobId } = await startResponse.json();
-      
-      setStatus('Generating magic...');
-      setProgress(40);
+      const { jobId } = await startRes.json();
 
-      // 3. Process Job (Synchronous Execution)
-      // Since the server route processes the job synchronously, we await the POST request.
-      // We use a timer just to simulate visual progress while waiting.
-      const progressTimer = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + 5;
-        });
-      }, 1000);
-
-      const processResponse = await fetch('/api/generation-jobs/process', {
-        method: 'POST', 
+      // 2. Process Job (Synchronous wait for server)
+      const processRes = await fetch('/api/generation-jobs/process', {
+        method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        body: JSON.stringify({ jobId }) 
+        body: JSON.stringify({ jobId })
       });
 
-      clearInterval(progressTimer);
-
-      if (!processResponse.ok) {
-         const errorData = await processResponse.json();
-         throw new Error(errorData.error || 'Generation process failed');
-      }
-
-      const result = await processResponse.json();
-
-      // CRITICAL CHECK: Ensure we actually have an output ID
-      if (!result.outputId) {
-          throw new Error("Generation completed, but no content was returned. Please check your document content.");
-      }
-
-      // 4. Completion
-      setProgress(100);
-      setStatus('Complete!');
+      if (!processRes.ok) throw new Error(`Process failed for ${type}`);
       
-      if (options.onSuccess) {
-          options.onSuccess(result.outputId, type);
-      } else {
-          const resultId = result.outputId;
-          if (type === 'quiz') router.push(`/quiz/${resultId}`);
-          if (type === 'notes') router.push(`/notes/${resultId}`);
-          if (type === 'flashcards') router.push(`/flashcards/${resultId}`);
-      }
-
-    } catch (error: any) {
-      console.error('Generation failed', error);
-      setStatus('error');
+      const data = await processRes.json();
       
-      if (options.onError) {
-        options.onError(error);
-      } else {
-        toast({
-            title: "Generation failed",
-            description: error.message || "An unexpected error occurred.",
-            variant: "destructive"
-        });
-      }
-    } finally {
-      setIsGenerating(false);
+      setResults(prev => ({ ...prev, [type]: data.outputId || true }));
+      setStatuses(prev => ({ ...prev, [type]: 'completed' }));
+
+    } catch (error) {
+      console.error(`Error in ${type} job:`, error);
+      setStatuses(prev => ({ ...prev, [type]: 'error' }));
     }
-  }, [router, toast, options, session]);
+  }, [documentId, session]);
+
+  // Main trigger function
+  const startTurbo = useCallback(() => {
+    runJob('quiz');
+    runJob('note');
+    runJob('flashcard');
+    runJob('podcast');
+    runJob('embedding'); 
+  }, [runJob]);
+
+  // Check completion
+  useEffect(() => {
+    const all = Object.values(statuses);
+    const isWorking = all.includes('generating') || all.every(s => s === 'idle'); // Wait if idle or working
+    
+    // We are done if we are NOT working, and at least some jobs have finished/errored
+    if (!isWorking && (all.includes('completed') || all.includes('error'))) {
+      setIsFullyComplete(true);
+    }
+  }, [statuses]);
 
   return {
-    generate,
-    isGenerating,
-    progress,
-    status
+    startTurbo,
+    statuses,
+    results,
+    isFullyComplete
   };
 }

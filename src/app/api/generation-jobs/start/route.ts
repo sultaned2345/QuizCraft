@@ -1,3 +1,4 @@
+// src/app/api/generation-jobs/start/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/getServerSession';
 import { prisma } from '@/lib/prisma';
@@ -29,21 +30,15 @@ export async function POST(req: Request) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     
     if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
-       // FIX: Truncate the log to prevent massive console output
-       const invalidVal = String(documentId);
-       const truncatedVal = invalidVal.length > 50 
-         ? `${invalidVal.substring(0, 50)}... [length: ${invalidVal.length}]` 
-         : invalidVal;
-
-       console.error(`[Job Validation] Invalid UUID received: "${truncatedVal}"`);
-       
        return NextResponse.json(
         { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
       );
     }
 
-    const validJobTypes = ['quiz', 'flashcard', 'summary', 'note'];
+    // ✅ UPDATE: Added 'podcast' and 'embedding' to this list
+    const validJobTypes = ['quiz', 'flashcard', 'note', 'podcast', 'embedding'];
+    
     if (!validJobTypes.includes(jobType)) {
       return NextResponse.json(
         { error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` },
