@@ -11,8 +11,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <UpgradeModalProvider>
         <NextThemesProvider 
           attribute="class" 
-          defaultTheme="system" 
-          enableSystem
+          defaultTheme="light" // CHANGED: Default to light mode as requested
+          enableSystem={false} // CHANGED: Disable system preference to enforce light mode "norm"
           disableTransitionOnChange
         >
           {children}
