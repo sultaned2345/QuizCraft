@@ -1,7 +1,7 @@
 // src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth"; // Use the new Server Component auth helper
+import { requireUser } from "@/lib/auth"; // Ensure this uses the new server-redirect helper
 import { getHeatmapData } from "@/lib/dashboard-data";
 
 // Components
@@ -17,35 +17,39 @@ export const dynamic = "force-dynamic";
 // --- Server-Side Data Fetching ---
 async function getDashboardData(userId: string) {
   try {
-    // 1. Safe Promise Execution
-    // We check if prisma.study_sessions exists to prevent crash if schema isn't synced
-    const studyTimePromise = prisma.study_sessions
-      ? prisma.study_sessions.aggregate({
+    // 1. Safe Database Access for 'study_sessions'
+    // If the table is missing in Prisma Client, this prevents a crash.
+    const studyTimePromise = (prisma as any).study_sessions
+      ? (prisma as any).study_sessions.aggregate({
           where: { user_id: userId },
           _sum: { duration_seconds: true },
         })
       : Promise.resolve({ _sum: { duration_seconds: 0 } });
 
+    // 2. Fetch Data in Parallel
     const [heatmap, studyAggregate, quizAttempts] = await Promise.all([
-      getHeatmapData(userId),
-      studyTimePromise,
+      getHeatmapData(userId).catch(err => {
+        console.error("Heatmap fetch failed:", err);
+        return []; // Fallback to empty array
+      }),
+      studyTimePromise.catch(() => ({ _sum: { duration_seconds: 0 } })),
       prisma.quiz_attempts.findMany({
         where: { user_id: userId },
         select: { score: true, total: true },
-      }),
+      }).catch(() => []),
     ]);
 
-    // 2. Calculate Study Hours
+    // 3. Calculate Study Hours
     const totalSeconds = studyAggregate?._sum?.duration_seconds || 0;
     const studyHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
-    // 3. Calculate Mastered Quizzes (>80%)
-    const quizzesMastered = quizAttempts.filter(
+    // 4. Calculate Mastered Quizzes (>80%)
+    const validAttempts = Array.isArray(quizAttempts) ? quizAttempts : [];
+    const quizzesMastered = validAttempts.filter(
       (q) => q.total > 0 && q.score / q.total >= 0.8
     ).length;
 
-    // 4. Calculate Streak
-    // Fix: Guard against heatmap being undefined/null
+    // 5. Calculate Streak (The source of your error)
     const validHeatmap = Array.isArray(heatmap) ? heatmap : [];
     
     const sortedDates = validHeatmap
@@ -82,26 +86,24 @@ async function getDashboardData(userId: string) {
       quizzesMastered,
     };
   } catch (error) {
-    console.error("Failed to fetch dashboard data:", error);
-    // Fallback if DB fails or table doesn't exist yet
+    console.error("CRITICAL: Failed to calculate dashboard data:", error);
+    // Absolute fallback to prevent page crash
     return { streak: 0, studyHours: 0, quizzesMastered: 0 };
   }
 }
 
 export default async function DashboardPage() {
+  // 1. Auth Guard
   const user = await requireUser();
   
-  // Fetch data in parallel with page load
+  // 2. Data Fetching
   const stats = await getDashboardData(user.id);
 
   return (
     <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500">
       <DashboardHeader user={user} />
 
-      {/* Top Section: Hero/Stats + Timer */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        
-        {/* Left Column: Welcome & Stats (Spans 4/7) */}
         <div className="col-span-4 flex flex-col gap-6">
           <WelcomeHero user={user} />
           
@@ -110,22 +112,22 @@ export default async function DashboardPage() {
           </Suspense>
         </div>
 
-        {/* Right Column: Glassmorphic Timer (Spans 3/7) */}
         <div className="col-span-3">
            <StudyTimer />
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        {/* Main Feed */}
         <div className="col-span-4 space-y-6">
           <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
-          <RecentActivity />
+          {/* RecentActivity also fetches data; if it fails, it might crash the page unless it handles its own errors */}
+          <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
+            <RecentActivity />
+          </Suspense>
         </div>
 
-        {/* Side Widgets */}
         <div className="col-span-3 space-y-6">
-           {/* Future Widgets */}
+           {/* Widgets */}
         </div>
       </div>
     </div>
