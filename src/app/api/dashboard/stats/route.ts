@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       recentActivity,
       heatmap,
       quizAttempts,
-      totalQuizzes
+      studySessionsAggregate
     ] = await Promise.all([
       getRecentActivity(user.id),
       getHeatmapData(user.id),
@@ -24,25 +24,25 @@ export async function GET(req: NextRequest) {
         where: { user_id: user.id },
         select: { score: true, total: true }
       }),
-      prisma.quiz_attempts.count({ where: { user_id: user.id } })
+      // Aggregate real study time
+      prisma.study_sessions.aggregate({
+        where: { user_id: user.id },
+        _sum: { duration_seconds: true }
+      })
     ]);
 
     // 2. Calculate Stats
     
-    // XP Calculation: 10 XP per question answered correctly (approx)
-    const xp = quizAttempts.reduce((acc, curr) => acc + (curr.score * 10), 0);
-
     // Mastered Quizzes: Score > 80%
     const quizzesMastered = quizAttempts.filter(q => 
       q.total > 0 && (q.score / q.total) >= 0.8
     ).length;
 
-    // Study Hours (Estimate): 5 mins (0.083 hrs) per quiz attempt + flat time for other actions
-    // This is a heuristic. For real tracking, we'd need a timer on the frontend.
-    const studyHours = Math.round((totalQuizzes * 5) / 60 * 10) / 10; // Round to 1 decimal
+    // Study Hours (Real Tracking)
+    const totalSeconds = studySessionsAggregate._sum.duration_seconds || 0;
+    const studyHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
     // Streak Calculation
-    // Sort dates descending
     const sortedDates = heatmap
       .map(h => h.date)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
@@ -54,11 +54,8 @@ export async function GET(req: NextRequest) {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    // Check if active today or yesterday to maintain streak
     if (sortedDates.includes(todayStr) || sortedDates.includes(yesterdayStr)) {
         streak = 1; 
-        // Simple consecutive check (naive implementation)
-        // In a real app, you'd iterate backwards checking for gaps < 24-48h
         let currentDate = new Date(sortedDates[0]);
         for (let i = 1; i < sortedDates.length; i++) {
             const prevDate = new Date(sortedDates[i]);
@@ -79,8 +76,8 @@ export async function GET(req: NextRequest) {
         stats: {
           streak,
           quizzesMastered,
-          studyHours,
-          xp
+          studyHours
+          // XP removed
         },
         recentActivity
       }
