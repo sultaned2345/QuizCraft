@@ -1,9 +1,9 @@
-// src/components/layout/AppSidebar.tsx
 'use client';
 
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useRouter } from "next/navigation"
 import {
   BookOpen,
   BrainCircuit,
@@ -18,7 +18,8 @@ import {
   Sparkles,
   HelpCircle,
   User,
-  CreditCard
+  CreditCard,
+  UploadCloud // ✅ NEW ICON
 } from "lucide-react"
 
 import {
@@ -45,12 +46,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Logo from "@/components/ui/Logo"
-import { useAuth } from "@/contexts/AuthContext" // Assuming you have this
-import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 
 // Menu Configuration
 const data = {
   navMain: [
+    {
+      title: "Quick Actions", // ✅ NEW SECTION for Turbo
+      items: [
+        {
+          title: "Turbo Upload",
+          url: "/upload",
+          icon: UploadCloud,
+          badge: "NEW", // Optional Badge
+          variant: "turbo" // Special flag for coloring
+        }
+      ]
+    },
     {
       title: "Learning Center",
       items: [
@@ -107,7 +119,7 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
-  const { user, signOut } = useAuth(); // Helper to get user data
+  const { user, signOut } = useAuth(); 
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -118,10 +130,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar variant="inset" collapsible="icon" className="border-r-orange-100 dark:border-r-border" {...props}>
       
-      {/* HEADER: Friendly Logo */}
+      {/* HEADER */}
       <SidebarHeader className="h-16 flex items-center justify-center border-b border-orange-100/50 dark:border-border/40 bg-orange-50/30 dark:bg-card/30 backdrop-blur-sm">
         <div className="w-full flex items-center px-2 group-data-[collapsible=icon]:justify-center">
-            {/* Show Full Logo when expanded, Icon only when collapsed (controlled by CSS/Sidebar logic) */}
             <div className="group-data-[collapsible=icon]:hidden">
                 <Logo size="md" />
             </div>
@@ -136,13 +147,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {/* NAV GROUPS */}
         {data.navMain.map((group) => (
           <SidebarGroup key={group.title}>
+            {/* Hide label for 'Quick Actions' to keep it clean, or keep it if you prefer */}
             <SidebarGroupLabel className="text-orange-900/60 dark:text-muted-foreground font-semibold px-4 py-2">
                 {group.title}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => {
+                {group.items.map((item: any) => {
                   const isActive = pathname === item.url || pathname?.startsWith(item.url + '/');
+                  const isTurbo = item.variant === "turbo"; // Check for our special flag
+
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton 
@@ -155,13 +169,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 ? 'bg-orange-200/50 text-orange-900 font-bold dark:bg-primary/20 dark:text-primary' 
                                 : 'text-muted-foreground hover:bg-orange-100/50 hover:text-orange-800 dark:hover:bg-accent'
                             }
+                            ${isTurbo ? 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 font-semibold' : ''} 
                         `}
                       >
                         <Link href={item.url}>
-                          <item.icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''}`} />
+                          <item.icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''} ${isTurbo ? 'text-indigo-500' : ''}`} />
                           <span>{item.title}</span>
                           {item.badge && (
-                              <span className="ml-auto text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
+                              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                  isTurbo 
+                                  ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400" 
+                                  : "bg-primary/10 text-primary"
+                              }`}>
                                   {item.badge}
                               </span>
                           )}
@@ -175,7 +194,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroup>
         ))}
 
-        {/* Upgrade Card (Optional Friendly Nudge) */}
+        {/* Upgrade Card */}
         <div className="mt-auto p-4 group-data-[collapsible=icon]:hidden">
             <div className="bg-gradient-to-br from-primary/10 to-orange-100/50 dark:from-primary/10 dark:to-background border border-orange-100 dark:border-border rounded-2xl p-4 text-center space-y-3">
                 <div className="w-10 h-10 bg-white dark:bg-card rounded-full flex items-center justify-center mx-auto shadow-sm text-lg">
@@ -193,7 +212,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarSeparator className="bg-orange-100 dark:bg-border" />
 
-      {/* FOOTER: User Profile */}
+      {/* FOOTER */}
       <SidebarFooter className="bg-orange-50/50 dark:bg-card/30">
         <SidebarMenu>
           <SidebarMenuItem>
