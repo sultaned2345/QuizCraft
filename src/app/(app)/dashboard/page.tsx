@@ -5,6 +5,7 @@ import {
   getSmartStudyQueue,
   getHeatmapData,
   getRecentActivity,
+  getStudyStreak, 
 } from "@/lib/dashboard-data";
 
 // Smart Components
@@ -14,6 +15,7 @@ import { PriorityTargets } from "@/components/dashboard/PriorityTargets";
 import { QuizPerformanceChart } from "@/components/dashboard/QuizPerformanceChart";
 import { StudyHeatmap } from "@/components/dashboard/StudyHeatmap";
 import { MissionLog } from "@/components/dashboard/MissionLog";
+import { QuickUploadWidget } from "@/components/dashboard/QuickUploadWidget";
 
 export const metadata = {
   title: "Dashboard | QuizCraft",
@@ -28,7 +30,8 @@ export default async function DashboardPage() {
   }
 
   // 2. Fetch All Dashboard Data in Parallel
-  const [queueData, heatmapData, recentActivity, quizAttempts] = await Promise.all([
+  // We add 'streak' to the Promise.all array to fetch it efficiently
+  const [queueData, heatmapData, recentActivity, quizAttempts, streak] = await Promise.all([
     getSmartStudyQueue(session.user.id),
     getHeatmapData(session.user.id),
     getRecentActivity(session.user.id),
@@ -42,13 +45,16 @@ export default async function DashboardPage() {
       orderBy: { created_at: "desc" },
       take: 20,
     }),
+    getStudyStreak(session.user.id),
   ]);
 
   return (
     <main className="container mx-auto p-4 md:p-8 space-y-8 animate-in fade-in duration-500">
       {/* 1. Hero Section: Greeting & Status */}
       <section>
-        <WelcomeHero user={session.user} />
+        {/* Pass the calculated streak to the WelcomeHero */}
+        {/* Note: Ensure WelcomeHero accepts the 'streak' prop if you haven't updated it yet */}
+        <WelcomeHero user={session.user} streak={streak} />
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -57,11 +63,16 @@ export default async function DashboardPage() {
           
           {/* A. Immediate Actions Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Daily Study Plan (Client Fetch) */}
+            {/* 1. Quick Upload Widget (Entry point for new study sessions) */}
+            <QuickUploadWidget />
+
+            {/* 2. Daily Study Plan (AI Recommendations) */}
             <DailyStudyWidget />
             
-            {/* 2. Priority Directives (Server Data) */}
-            <PriorityTargets data={queueData} />
+            {/* 3. Priority Directives (Urgent tasks - Spans full width) */}
+            <div className="md:col-span-2">
+              <PriorityTargets data={queueData} />
+            </div>
           </div>
 
           {/* B. Performance Analytics */}

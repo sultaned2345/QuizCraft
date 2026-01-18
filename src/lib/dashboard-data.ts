@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+// --- Types ---
+
 export type StudyQueueItem = 
   | { type: "flashcard_due"; id: string; title: string; dueCount: number; deckId: string }
   | { type: "low_score_quiz"; id: string; title: string; score: number; quizId: string };
@@ -23,6 +25,8 @@ export type TopicPerformance = {
   fullMark: number; // 100
 };
 
+// --- Data Fetching Functions ---
+
 /**
  * 1. Smart Study Queue
  * - Fetches Flashcard Decks that have cards due (review_at <= now).
@@ -33,9 +37,6 @@ export async function getSmartStudyQueue(userId: string) {
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // A. Flashcards Due
-  // We want to find decks, but filter them by cards that are due.
-  // Since we can't easily "count" filtered relations in one top-level query without raw SQL or grouping,
-  // we'll fetch decks that have at least one due card, then count them in JS or a second lightweight step.
   const decksWithDueCards = await prisma.flashcard_decks.findMany({
     where: {
       user_id: userId,
@@ -111,7 +112,7 @@ export async function getHeatmapData(userId: string): Promise<HeatmapPoint[]> {
     }),
     prisma.notes.findMany({
       where: { user_id: userId },
-      select: { updated_at: true }, // Use updated_at for notes as editing counts as activity
+      select: { updated_at: true },
     }),
     prisma.documents.findMany({
       where: { user_id: userId },
@@ -119,7 +120,7 @@ export async function getHeatmapData(userId: string): Promise<HeatmapPoint[]> {
     }),
     prisma.flashcards.findMany({
       where: { deck: { user_id: userId } },
-      select: { updated_at: true }, // Using updated_at to approximate study/edit time
+      select: { updated_at: true },
     }),
   ]);
 
@@ -145,7 +146,7 @@ export async function getHeatmapData(userId: string): Promise<HeatmapPoint[]> {
 }
 
 /**
- * 3. Recent Activity (Jump Back In)
+ * 3. Recent Activity (Mission Log)
  * Merges Documents, Quizzes, Notes, and Projects into a single timeline sorted by date.
  */
 export async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
@@ -203,7 +204,7 @@ export async function getRecentActivity(userId: string): Promise<ActivityItem[]>
       type: "quiz" as const,
       title: q.title,
       date: q.createdAt || new Date(),
-      url: `/quiz/${q.id}`,
+      url: `/quiz/${q.id}`, // Redirects to quiz overview
     })),
   ];
 
@@ -252,4 +253,74 @@ export async function getQuizPerformance(userId: string): Promise<TopicPerforman
 
   // Return top 6 topics to keep the chart clean
   return results.slice(0, 6);
+}
+
+/**
+ * 5. Study Streak Calculator
+ * Counts consecutive days of activity ending today or yesterday.
+ */
+export async function getStudyStreak(userId: string): Promise<number> {
+  // 1. Fetch all distinct dates of activity (optimized select)
+  const [attempts, notes, documents, flashcards] = await Promise.all([
+    prisma.quiz_attempts.findMany({
+      where: { user_id: userId },
+      select: { created_at: true },
+      orderBy: { created_at: 'desc' }
+    }),
+    prisma.notes.findMany({
+      where: { user_id: userId },
+      select: { updated_at: true },
+      orderBy: { updated_at: 'desc' }
+    }),
+    prisma.documents.findMany({
+      where: { user_id: userId },
+      select: { created_at: true },
+      orderBy: { created_at: 'desc' }
+    }),
+    prisma.flashcards.findMany({
+      where: { deck: { user_id: userId } },
+      select: { updated_at: true },
+      orderBy: { updated_at: 'desc' }
+    }),
+  ]);
+
+  // 2. Normalize to YYYY-MM-DD strings
+  const activityDates = new Set<string>();
+  const addDate = (d: Date | null) => {
+    if (d) activityDates.add(d.toISOString().split('T')[0]);
+  };
+
+  attempts.forEach(a => addDate(a.created_at));
+  notes.forEach(n => addDate(n.updated_at));
+  documents.forEach(d => addDate(d.created_at));
+  flashcards.forEach(f => addDate(f.updated_at));
+
+  // 3. Count backwards from today
+  let streak = 0;
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const todayStr = today.toISOString().split('T')[0];
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  // If no activity today OR yesterday, streak is broken (return 0)
+  if (!activityDates.has(todayStr) && !activityDates.has(yesterdayStr)) {
+    return 0;
+  }
+
+  // Start checking from today (or yesterday if today is empty but yesterday wasn't)
+  let currentDate = activityDates.has(todayStr) ? today : yesterday;
+
+  while (true) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+    if (activityDates.has(dateStr)) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1); // Go back one day
+    } else {
+      break; // Streak broken
+    }
+  }
+
+  return streak;
 }

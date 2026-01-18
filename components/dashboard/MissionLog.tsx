@@ -1,68 +1,64 @@
-// components/dashboard/MissionLog.tsx
 import { ActivityItem } from "@/lib/dashboard-data";
-import { FileText, FileQuestion, StickyNote, FolderKanban, Clock, ArrowUpRight } from "lucide-react";
+import { FileText, BrainCircuit, Layers, FolderKanban, Clock, ArrowUpRight, CircleDot } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
 const iconMap = {
   document: FileText,
-  quiz: FileQuestion,
-  note: StickyNote,
+  quiz: BrainCircuit,
+  note: Layers,
   project: FolderKanban,
-};
-
-const colorMap = {
-  document: "text-blue-400 bg-blue-400/10 border-blue-400/20",
-  quiz: "text-primary bg-primary/10 border-primary/20",
-  note: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
-  project: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
 };
 
 export function MissionLog({ items }: { items: ActivityItem[] }) {
   if (items.length === 0) {
-    return <div className="text-muted-foreground text-sm font-mono">Log is empty. Initialize first task.</div>;
+    return <div className="text-muted-foreground text-sm font-mono p-4">Log empty. Initialize activity.</div>;
   }
 
   return (
     <div className="h-full flex flex-col">
-      <h2 className="text-xl font-mono font-bold tracking-tight mb-6 flex items-center gap-2">
-        <Clock className="w-5 h-5 text-muted-foreground" />
-        MISSION LOG
-      </h2>
+      <div className="flex items-center gap-2 mb-6 px-1">
+         <Clock className="w-4 h-4 text-muted-foreground" />
+         <h2 className="text-sm font-mono font-bold tracking-wider text-muted-foreground uppercase">
+           Mission Log
+         </h2>
+      </div>
       
-      <div className="space-y-3">
-        {items.map((item) => {
+      <div className="space-y-0 relative">
+        {/* Timeline Line */}
+        <div className="absolute left-6 top-4 bottom-4 w-px bg-border/50" />
+
+        {items.map((item, index) => {
           const Icon = iconMap[item.type];
-          const colorClass = colorMap[item.type];
-
+          
           return (
-            <Link 
-              key={`${item.type}-${item.id}`} 
-              href={item.url}
-              className="group flex items-center gap-4 rounded-xl border border-white/5 bg-card/40 p-3 transition-all hover:bg-card/80 hover:border-white/10 hover:shadow-lg hover:shadow-primary/5"
-            >
-              {/* Icon Box */}
-              <div className={`h-10 w-10 shrink-0 rounded-lg border flex items-center justify-center ${colorClass}`}>
-                <Icon className="h-5 w-5" />
-              </div>
-
-              {/* Text Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                  {item.title}
-                </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mt-0.5">
-                  <span className="uppercase tracking-wider opacity-70">{item.type}</span>
-                  <span>•</span>
-                  <span>{formatDistanceToNow(new Date(item.date), { addSuffix: true })}</span>
+            <div key={`${item.type}-${item.id}`} className="relative group">
+              
+              <Link 
+                href={item.url}
+                className="flex items-center gap-4 p-3 rounded-2xl hover:bg-muted/50 transition-all duration-200"
+              >
+                {/* Timeline Dot & Icon */}
+                <div className="relative z-10 h-12 w-12 shrink-0 rounded-xl border border-border bg-background flex items-center justify-center group-hover:border-primary/50 group-hover:text-primary transition-colors shadow-sm">
+                  <Icon className="h-5 w-5" />
                 </div>
-              </div>
 
-              {/* Arrow Action */}
-              <div className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
-              </div>
-            </Link>
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                     <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                        {item.title}
+                     </p>
+                     <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mt-0.5">
+                    <span className="uppercase tracking-wider text-[10px]">{item.type}</span>
+                    <span className="w-1 h-1 rounded-full bg-border" />
+                    <span>{formatDistanceToNow(new Date(item.date), { addSuffix: true })}</span>
+                  </div>
+                </div>
+              </Link>
+            </div>
           );
         })}
       </div>

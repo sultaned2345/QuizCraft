@@ -1,85 +1,101 @@
-// components/dashboard/PriorityTargets.tsx
 'use client';
 
 import { StudyQueueItem } from '@/lib/dashboard-data';
-import { BrainCircuit, AlertTriangle, ChevronRight, Layers, Crosshair } from 'lucide-react';
+import { 
+  AlertTriangle, 
+  ChevronRight, 
+  Target, 
+  Flame, 
+  Zap, 
+  CheckCircle2 
+} from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 export function PriorityTargets({ data }: { data: { dueFlashcards: StudyQueueItem[]; recentLowScores: StudyQueueItem[] } }) {
   const hasItems = data.dueFlashcards.length > 0 || data.recentLowScores.length > 0;
 
   if (!hasItems) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-card/40 p-6 flex flex-col items-center justify-center text-center h-full min-h-[300px]">
-        <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-          <BrainCircuit className="w-8 h-8 text-green-500" />
+      <div className="h-full min-h-[250px] rounded-3xl border border-dashed border-border/60 bg-card/30 p-8 flex flex-col items-center justify-center text-center">
+        <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4 ring-1 ring-green-500/20">
+          <CheckCircle2 className="w-8 h-8 text-green-500" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">All Systems Nominal</h3>
-        <p className="text-muted-foreground max-w-xs">
-          No urgent directives. You are fully caught up. Initiate new learning protocols via the Library.
+        <h3 className="text-lg font-medium mb-1">All Systems Nominal</h3>
+        <p className="text-muted-foreground text-sm max-w-xs">
+          No urgent directives found. You are completely caught up.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-mono font-bold tracking-tight flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-primary" />
-          ACTIVE DIRECTIVES
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 px-1">
+        <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+        <h2 className="text-sm font-mono font-bold tracking-wider text-muted-foreground uppercase">
+          Active Directives
         </h2>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         {/* 1. Recall Missions (Flashcards) */}
         {data.dueFlashcards.map((item) => (
-          <div key={item.id} className="group relative overflow-hidden rounded-xl border border-primary/30 bg-primary/5 p-1 transition-all hover:bg-primary/10">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent translate-x-[-100%] group-hover:animate-[shimmer_2s_infinite]" />
-            <div className="flex items-center gap-4 p-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary ring-1 ring-primary/40">
-                <Layers className="h-6 w-6" />
+          <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-card/50 hover:bg-primary/5 transition-all duration-300">
+            {/* Hover Glow */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            
+            <div className="relative p-4 flex items-center gap-4">
+              <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                <Zap className="h-6 w-6 text-primary fill-primary/20" />
               </div>
+              
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-sm font-medium text-primary font-mono tracking-wide uppercase">Recall Protocol</h4>
-                  <span className="inline-flex items-center rounded-full bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-inset ring-primary/40">
-                    {item.type === 'flashcard_due' ? item.dueCount : 0} PENDING
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                    Recall Protocol
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                     • {item.type === 'flashcard_due' ? item.dueCount : 0} ITEMS
                   </span>
                 </div>
-                <p className="truncate text-base font-semibold text-foreground">{item.title}</p>
+                <p className="font-semibold text-foreground truncate">{item.title}</p>
               </div>
-              <Link 
-                href={`/flashcards/${item.deckId}/study`}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-card hover:bg-primary hover:text-white transition-colors"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Link>
+
+              <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
+                <Link href={`/flashcards/${item.deckId}/study`}>
+                  <ChevronRight className="h-5 w-5" />
+                </Link>
+              </Button>
             </div>
           </div>
         ))}
 
         {/* 2. Optimization Missions (Low Scores) */}
         {data.recentLowScores.map((item) => (
-          <div key={item.id} className="group relative overflow-hidden rounded-xl border border-orange-500/30 bg-orange-500/5 p-1 transition-all hover:bg-orange-500/10">
-             <div className="flex items-center gap-4 p-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-orange-500/20 text-orange-500 ring-1 ring-orange-500/40">
-                <Crosshair className="h-6 w-6" />
+          <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-card/50 hover:bg-orange-500/5 transition-all duration-300">
+             <div className="relative p-4 flex items-center gap-4">
+              <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                <AlertTriangle className="h-6 w-6 text-orange-500" />
               </div>
+              
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-sm font-medium text-orange-500 font-mono tracking-wide uppercase">Optimization Required</h4>
-                  <span className="text-xs font-mono text-orange-400">SCORE: {item.type === 'low_score_quiz' ? item.score : 0}%</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                    Optimization Req.
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                     • SCORE: {item.type === 'low_score_quiz' ? item.score : 0}%
+                  </span>
                 </div>
-                <p className="truncate text-base font-semibold text-foreground">{item.title}</p>
+                <p className="font-semibold text-foreground truncate">{item.title}</p>
               </div>
-              <Link 
-                href={`/quiz/${item.quizId}`}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-card hover:bg-orange-500 hover:text-white transition-colors"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Link>
+
+              <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-orange-500 hover:text-white transition-colors" asChild>
+                <Link href={`/quiz/${item.quizId}`}>
+                  <ChevronRight className="h-5 w-5" />
+                </Link>
+              </Button>
             </div>
           </div>
         ))}

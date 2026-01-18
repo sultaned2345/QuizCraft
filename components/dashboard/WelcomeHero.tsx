@@ -1,10 +1,14 @@
-// components/dashboard/WelcomeHero.tsx
 'use client';
 
 import { User } from '@supabase/supabase-js';
 import { Sparkles, Zap, Battery, ShieldCheck } from 'lucide-react';
 
-export function WelcomeHero({ user }: { user: User | null }) {
+interface WelcomeHeroProps {
+  user: User | null;
+  streak?: number; // Added streak prop
+}
+
+export function WelcomeHero({ user, streak = 0 }: WelcomeHeroProps) {
   const date = new Date();
   const hour = date.getHours();
   
@@ -16,9 +20,9 @@ export function WelcomeHero({ user }: { user: User | null }) {
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Operative';
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-card/50 via-card/30 to-transparent p-8 backdrop-blur-xl">
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-card/50 via-card/30 to-transparent p-8 backdrop-blur-xl group">
       {/* Background Decorative Glow */}
-      <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/20 blur-[100px]" />
+      <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/20 blur-[100px] group-hover:bg-primary/30 transition-colors duration-500" />
       
       <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
@@ -41,15 +45,17 @@ export function WelcomeHero({ user }: { user: User | null }) {
           </p>
         </div>
 
-        {/* Quick Action / Motivation */}
+        {/* Real Streak Display */}
         <div className="hidden md:block">
-           <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                 <Zap className="w-5 h-5 fill-primary" />
+           <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors">
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center transition-all duration-300 ${streak > 0 ? 'bg-primary/20 text-primary shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-muted/20 text-muted-foreground'}`}>
+                 <Zap className={`w-5 h-5 ${streak > 0 ? 'fill-primary' : ''}`} />
               </div>
               <div>
                  <div className="text-xs text-muted-foreground font-mono uppercase">Current Streak</div>
-                 <div className="text-xl font-bold font-mono">12 Days</div>
+                 <div className="text-xl font-bold font-mono">
+                    {streak} {streak === 1 ? 'Day' : 'Days'}
+                 </div>
               </div>
            </div>
         </div>
