@@ -4,7 +4,8 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { User, LogOut, CreditCard, Activity, Zap } from 'lucide-react';
+import { User, LogOut, CreditCard, Activity, Zap, Target } from 'lucide-react';
+import { GlobalFocusTimer } from '@/components/layout/GlobalFocusTimer'; // Import added
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,26 +29,33 @@ export function HUDHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 bg-background/50 backdrop-blur-md px-6 border-b border-white/5">
       
-      {/* Left: Status Indicators (Decorative) */}
+      {/* Left: Status Indicators */}
       <div className="hidden md:flex items-center gap-6 text-xs font-mono text-muted-foreground">
          <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_var(--color-green-500)] animate-pulse" />
             <span className="tracking-widest opacity-70">SYSTEM ONLINE</span>
          </div>
-         <div className="flex items-center gap-2">
-            <Activity className="w-3 h-3 text-primary" />
-            <span className="opacity-70">LATENCY: 12ms</span>
-         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-4">
-        {/* Gamification Stats (Placeholder) */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/40 border border-white/5">
-            <Zap className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-            <span className="text-xs font-mono font-bold text-foreground">12 DAY STREAK</span>
+      {/* CENTER: GLOBAL FOCUS TIMER */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <GlobalFocusTimer />
+      </div>
+
+      <div className="ml-auto flex items-center gap-3">
+        {/* Daily Goal Progress (Mini Analytics) */}
+        <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-full bg-card/40 border border-white/5">
+            <div className="flex items-center gap-1.5 border-r border-white/10 pr-3">
+                <Target className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs font-mono font-medium text-foreground">GOAL: 85%</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                <span className="text-xs font-mono font-bold text-foreground">12</span>
+            </div>
         </div>
 
-        <div className="h-6 w-px bg-white/10 mx-2" />
+        <div className="h-6 w-px bg-white/10 mx-1" />
 
         <ThemeToggle />
         
