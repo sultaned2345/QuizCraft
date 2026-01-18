@@ -1,8 +1,8 @@
+// src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
-import { getHeatmapData } from "@/lib/dashboard-data"; // Assumes you have this from previous context
+import { requireUser } from "@/lib/auth"; // <--- UPDATED IMPORT
+import { getHeatmapData } from "@/lib/dashboard-data"; 
 
 // Components
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -82,7 +82,8 @@ async function getDashboardData(userId: string) {
 }
 
 export default async function DashboardPage() {
-  const user = await requireAuth();
+  // Fix: Use Server Component guard which handles redirects automatically
+  const user = await requireUser();
   
   // Fetch data in parallel with page load
   const stats = await getDashboardData(user.id);
