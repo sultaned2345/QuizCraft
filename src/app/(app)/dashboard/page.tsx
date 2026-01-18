@@ -1,8 +1,8 @@
 // src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth"; // <--- UPDATED IMPORT
-import { getHeatmapData } from "@/lib/dashboard-data"; 
+import { requireUser } from "@/lib/auth";
+import { getHeatmapData } from "@/lib/dashboard-data";
 
 // Components
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -17,31 +17,35 @@ export const dynamic = "force-dynamic";
 // --- Server-Side Data Fetching ---
 async function getDashboardData(userId: string) {
   try {
+    // 1. Safe Aggregate Check
+    // If prisma.study_sessions is undefined (schema mismatch), return 0 immediately.
+    const studyTimePromise = prisma.study_sessions
+      ? prisma.study_sessions.aggregate({
+          where: { user_id: userId },
+          _sum: { duration_seconds: true },
+        })
+      : Promise.resolve({ _sum: { duration_seconds: 0 } });
+
     const [heatmap, studyAggregate, quizAttempts] = await Promise.all([
       getHeatmapData(userId),
-      // Aggregate real study time (Safe check in case table is empty)
-      prisma.study_sessions.aggregate({
-        where: { user_id: userId },
-        _sum: { duration_seconds: true },
-      }),
-      // Fetch quiz scores for "Mastered" calc
+      studyTimePromise,
       prisma.quiz_attempts.findMany({
         where: { user_id: userId },
         select: { score: true, total: true },
       }),
     ]);
 
-    // 1. Calculate Study Hours
-    const totalSeconds = studyAggregate._sum.duration_seconds || 0;
+    // 2. Calculate Study Hours
+    const totalSeconds = studyAggregate?._sum?.duration_seconds || 0;
     const studyHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
-    // 2. Calculate Mastered Quizzes (>80%)
+    // 3. Calculate Mastered Quizzes (>80%)
     const quizzesMastered = quizAttempts.filter(
       (q) => q.total > 0 && q.score / q.total >= 0.8
     ).length;
 
-    // 3. Calculate Streak
-    const sortedDates = heatmap
+    // 4. Calculate Streak
+    const sortedDates = (heatmap || []) // Guard against null heatmap
       .map((h) => h.date)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
@@ -52,7 +56,6 @@ async function getDashboardData(userId: string) {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split("T")[0];
 
-    // Simple streak logic checks if today or yesterday is present
     if (sortedDates.includes(todayStr) || sortedDates.includes(yesterdayStr)) {
       streak = 1;
       let currentDate = new Date(sortedDates[0]);
@@ -76,50 +79,39 @@ async function getDashboardData(userId: string) {
     };
   } catch (error) {
     console.error("Failed to fetch dashboard data:", error);
-    // Fallback if DB fails or table doesn't exist yet
     return { streak: 0, studyHours: 0, quizzesMastered: 0 };
   }
 }
 
 export default async function DashboardPage() {
-  // Fix: Use Server Component guard which handles redirects automatically
   const user = await requireUser();
-  
-  // Fetch data in parallel with page load
   const stats = await getDashboardData(user.id);
 
   return (
     <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500">
       <DashboardHeader user={user} />
 
-      {/* Top Section: Hero/Stats + Timer */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        
-        {/* Left Column: Welcome & Stats (Spans 4/7) */}
         <div className="col-span-4 flex flex-col gap-6">
           <WelcomeHero user={user} />
-          
           <Suspense fallback={<Skeleton className="h-32 w-full rounded-xl" />}>
             <DashboardStatsGrid stats={stats} />
           </Suspense>
         </div>
 
-        {/* Right Column: Glassmorphic Timer (Spans 3/7) */}
         <div className="col-span-3">
            <StudyTimer />
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        {/* Main Feed */}
         <div className="col-span-4 space-y-6">
           <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
           <RecentActivity />
         </div>
 
-        {/* Side Widgets (Placeholder for future: Weaknesses/StudyPlan) */}
         <div className="col-span-3 space-y-6">
-           {/* You can add PriorityTargets or Calendar here later */}
+           {/* Future Widgets */}
         </div>
       </div>
     </div>
