@@ -18,36 +18,20 @@ import {
   Zap,
   ArrowRight,
   Leaf,
-  Coffee,
-  Headphones,
   BarChart3,
-  Play,
-  Laptop,
-  Smartphone,
   Calendar,
-  Bell,
-  FileText,
-  Layers,
-  TrendingUp,
-  GraduationCap,
-  Lightbulb,
-  Check,
-  X,
-  Globe,
-  Pause,
-  Timer,
-  Flame,
-  Trophy,
-  Download,
-  Volume2,
-  Settings,
-  Search,
-  Plus,
-  MoreHorizontal,
-  ArrowUpRight,
   ChevronDown,
   Heart,
   Shield,
+  Pause,
+  Timer,
+  Flame,
+  TrendingUp,
+  Lightbulb,
+  GraduationCap,
+  Coffee,
+  Headphones,
+  Trophy,
 } from "lucide-react"
 
 export default function LandingPage() {
@@ -194,10 +178,6 @@ export default function LandingPage() {
       a: "Yes! StudySpace offers a generous free tier with core features. Premium plans unlock additional capabilities like AI-powered flashcards and advanced analytics.",
     },
     {
-      q: "Can I use it offline?",
-      a: "Absolutely. Our mobile apps work fully offline, syncing your progress when you reconnect.",
-    },
-    {
       q: "How does the AI flashcard system work?",
       a: "Our AI analyzes your learning patterns and uses spaced repetition to show cards right when you're about to forget them, maximizing retention.",
     },
@@ -222,9 +202,6 @@ export default function LandingPage() {
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Features
-              </a>
-              <a href="#demo" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Demo
               </a>
               <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Stories
@@ -362,14 +339,6 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>
             </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              className="rounded-2xl h-14 px-8 text-base text-muted-foreground hover:text-foreground group"
-            >
-              <Play className="mr-2 h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
-              Watch demo
-            </Button>
           </div>
 
           <div className="flex items-center justify-center gap-8 mt-14 text-sm text-muted-foreground">
@@ -393,56 +362,6 @@ export default function LandingPage() {
               <Award className="h-4 w-4 text-secondary" />
               <span>Best of 2025</span>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* As Featured In */}
-      <section className="py-10 border-y border-border/30 bg-muted/10">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-muted-foreground mb-6">As featured in</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-            {["TechCrunch", "The Verge", "Wired", "Forbes", "Fast Company"].map((pub) => (
-              <span
-                key={pub}
-                className="font-serif text-lg text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-              >
-                {pub}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* University Marquee */}
-      <section className="py-10 border-b border-border/30 bg-muted/20 overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 mb-6">
-          <p className="text-center text-sm text-muted-foreground">Trusted by students at top universities</p>
-        </div>
-        <div className="relative">
-          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-muted/20 to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-muted/20 to-transparent z-10" />
-          <div className="flex animate-marquee">
-            {[...Array(2)].map((_, setIndex) => (
-              <div key={setIndex} className="flex gap-16 px-8">
-                {[
-                  "Harvard",
-                  "Stanford",
-                  "MIT",
-                  "Yale",
-                  "Princeton",
-                  "Columbia",
-                  "Oxford",
-                  "Cambridge",
-                  "Berkeley",
-                  "UCLA",
-                ].map((uni) => (
-                  <div key={`${setIndex}-${uni}`} className="flex-none">
-                    <span className="font-serif text-xl text-muted-foreground/60 whitespace-nowrap">{uni}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -487,17 +406,13 @@ export default function LandingPage() {
                 {features[activeFeature].description}
               </p>
               <ul className="space-y-3 mb-8">
-                {["Customizable settings", "Works offline", "Syncs across devices"].map((item, i) => (
+                {["Customizable settings", "Syncs across devices"].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-foreground">
                     <CheckCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
-              <Button className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-6 group">
-                Learn more
-                <ArrowUpRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-              </Button>
             </div>
             <div className="order-1 md:order-2">
               <div className="rounded-3xl bg-card border border-border/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)] overflow-hidden min-h-[320px]">
@@ -529,139 +444,6 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Product Demo */}
-      <section id="demo" className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 rounded-full bg-secondary/15 px-4 py-2 text-sm text-secondary-foreground mb-6">
-              <Play className="h-4 w-4" />
-              <span>See it in action</span>
-            </div>
-            <h2 className="font-serif text-4xl sm:text-5xl text-foreground text-balance tracking-tight mb-4">
-              A study experience you'll love
-            </h2>
-            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Watch how StudySpace transforms your learning journey
-            </p>
-          </div>
-
-          <div className="relative mx-auto max-w-4xl">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-transparent to-secondary/20 rounded-[2rem] blur-3xl opacity-50" />
-
-            <div className="relative rounded-[2rem] bg-card border border-border/60 shadow-[0_20px_60px_rgba(0,0,0,0.1)] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-muted/30">
-                <div className="flex gap-1.5">
-                  <div className="h-3 w-3 rounded-full bg-destructive/60" />
-                  <div className="h-3 w-3 rounded-full bg-secondary/60" />
-                  <div className="h-3 w-3 rounded-full bg-primary/60" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-background/60 text-xs text-muted-foreground">
-                    <Globe className="h-3 w-3" />
-                    app.studyspace.com
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </div>
-
-              <div className="p-6 sm:p-8">
-                <div className="grid md:grid-cols-3 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/10">
-                      <Clock className="h-5 w-5 text-primary" />
-                      <span className="text-sm font-medium text-foreground">Focus Mode</span>
-                    </div>
-                    {[
-                      { icon: Brain, label: "Flashcards" },
-                      { icon: FileText, label: "Notes" },
-                      { icon: Calendar, label: "Schedule" },
-                      { icon: BarChart3, label: "Analytics" },
-                    ].map((item, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors cursor-pointer"
-                      >
-                        <item.icon className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">{item.label}</span>
-                      </div>
-                    ))}
-                    <div className="pt-4 border-t border-border/40">
-                      <button className="w-full flex items-center gap-2 p-3 rounded-xl bg-secondary/10 hover:bg-secondary/20 transition-colors text-sm text-secondary-foreground">
-                        <Plus className="h-4 w-4" />
-                        <span>Quick Add</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-2 space-y-6">
-                    <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground mb-2">Deep Focus Session</p>
-                      <p className="font-serif text-6xl text-foreground tracking-tight">24:38</p>
-                      <p className="text-xs text-secondary mt-2">Biology Study Session</p>
-                      <div className="flex items-center justify-center gap-4 mt-6">
-                        <button className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
-                          <Volume2 className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                        <button className="h-14 w-14 rounded-full bg-primary flex items-center justify-center hover:bg-primary/90 transition-colors shadow-lg">
-                          <Pause className="h-6 w-6 text-primary-foreground" />
-                        </button>
-                        <button className="h-10 w-10 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
-                          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Session progress</span>
-                        <span className="text-foreground">3 of 4 pomodoros</span>
-                      </div>
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className={`flex-1 h-2 rounded-full ${i <= 3 ? "bg-primary/80" : "bg-muted"}`} />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      {[
-                        { value: "2.5h", label: "Today" },
-                        { value: "47", label: "Cards reviewed" },
-                        { value: "12", label: "Day streak" },
-                      ].map((item, i) => (
-                        <div
-                          key={i}
-                          className="p-4 rounded-xl bg-muted/50 text-center hover:bg-muted/70 transition-colors cursor-pointer"
-                        >
-                          <p className="font-serif text-2xl text-foreground">{item.value}</p>
-                          <p className="text-xs text-muted-foreground">{item.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="absolute -left-4 top-1/4 hidden lg:block animate-float">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border/60 shadow-lg">
-                <Bell className="h-4 w-4 text-secondary" />
-                <span className="text-xs text-foreground">Gentle reminders</span>
-              </div>
-            </div>
-            <div className="absolute -right-4 top-1/3 hidden lg:block animate-float-delayed">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border/60 shadow-lg">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                <span className="text-xs text-foreground">Smart insights</span>
-              </div>
             </div>
           </div>
         </div>
@@ -747,131 +529,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Platforms */}
-      <section className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="font-serif text-4xl text-foreground tracking-tight mb-6">Study anywhere, on any device</h2>
-              <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-                Your study progress syncs seamlessly across all your devices. Start a session on your laptop, continue
-                on your phone.
-              </p>
-              <div className="space-y-4">
-                {[
-                  { icon: Laptop, text: "Web app for focused desktop study" },
-                  { icon: Smartphone, text: "iOS & Android apps with offline mode" },
-                  { icon: Layers, text: "Browser extension for quick captures" },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-2xl bg-card border border-border/40 flex items-center justify-center shadow-sm">
-                      <item.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <span className="text-foreground">{item.text}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-3 mt-8">
-                <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-sm hover:opacity-90 transition-opacity">
-                  <Download className="h-4 w-4" />
-                  <div className="text-left">
-                    <p className="text-xs opacity-80">Download on</p>
-                    <p className="font-medium">App Store</p>
-                  </div>
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-sm hover:opacity-90 transition-opacity">
-                  <Download className="h-4 w-4" />
-                  <div className="text-left">
-                    <p className="text-xs opacity-80">Get it on</p>
-                    <p className="font-medium">Google Play</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-secondary/20 to-primary/20 rounded-3xl blur-2xl opacity-50" />
-              <div className="relative grid grid-cols-2 gap-4">
-                <div className="col-span-2 p-4 rounded-2xl bg-card border border-border/40 shadow-lg card-hover-lift">
-                  <div className="aspect-video rounded-lg bg-muted/50 flex items-center justify-center">
-                    <div className="text-center">
-                      <Clock className="h-8 w-8 text-primary mx-auto mb-2" />
-                      <span className="font-serif text-2xl text-foreground">25:00</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-3 rounded-2xl bg-card border border-border/40 shadow-lg card-hover-lift">
-                  <div className="aspect-[9/16] rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Brain className="h-6 w-6 text-secondary" />
-                  </div>
-                </div>
-                <div className="p-3 rounded-2xl bg-card border border-border/40 shadow-lg card-hover-lift">
-                  <div className="aspect-[9/16] rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Target className="h-6 w-6 text-primary" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Comparison */}
-      <section className="py-16 sm:py-24 bg-muted/30">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-4xl">
-            <div className="text-center mb-12">
-              <h2 className="font-serif text-4xl text-foreground tracking-tight mb-4">
-                Why students choose QuizCraft
-              </h2>
-              <p className="text-muted-foreground text-lg">See how we compare to other study apps</p>
-            </div>
-
-            <div className="rounded-3xl bg-card border border-border/40 overflow-hidden shadow-lg">
-              <div className="grid grid-cols-4 gap-4 p-4 bg-muted/30 border-b border-border/40">
-                <div className="text-sm font-medium text-foreground">Feature</div>
-                <div className="text-sm font-medium text-foreground text-center">QuizCraft</div>
-                <div className="text-sm text-muted-foreground text-center">App A</div>
-                <div className="text-sm text-muted-foreground text-center">App B</div>
-              </div>
-              {[
-                { feature: "Calm, distraction-free design", us: true, a: false, b: false },
-                { feature: "AI-powered flashcards", us: true, a: true, b: false },
-                { feature: "Offline mode", us: true, a: false, b: true },
-                { feature: "Cross-device sync", us: true, a: true, b: true },
-                { feature: "Focus timer with breaks", us: true, a: true, b: false },
-                { feature: "Student discount", us: true, a: false, b: false },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 p-4 border-b border-border/20 last:border-0">
-                  <div className="text-sm text-foreground">{row.feature}</div>
-                  <div className="text-center">
-                    {row.us ? (
-                      <Check className="h-5 w-5 text-secondary mx-auto" />
-                    ) : (
-                      <X className="h-5 w-5 text-muted-foreground/40 mx-auto" />
-                    )}
-                  </div>
-                  <div className="text-center">
-                    {row.a ? (
-                      <Check className="h-5 w-5 text-muted-foreground/60 mx-auto" />
-                    ) : (
-                      <X className="h-5 w-5 text-muted-foreground/40 mx-auto" />
-                    )}
-                  </div>
-                  <div className="text-center">
-                    {row.b ? (
-                      <Check className="h-5 w-5 text-muted-foreground/60 mx-auto" />
-                    ) : (
-                      <X className="h-5 w-5 text-muted-foreground/40 mx-auto" />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Pricing */}
       <section id="pricing" className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
         <div className="mx-auto max-w-5xl">
@@ -909,7 +566,6 @@ export default function LandingPage() {
                   "AI-powered learning",
                   "Advanced analytics",
                   "Unlimited devices",
-                  "Offline mode",
                   "Priority support",
                 ],
                 cta: "Start free trial",
