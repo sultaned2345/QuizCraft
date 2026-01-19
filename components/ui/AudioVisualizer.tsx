@@ -43,7 +43,11 @@ export function AudioVisualizer({ stream, isRecording, className, barColor }: Au
       if (!isRecording) return;
       
       animationRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArrayRef.current!);
+      
+      // FIX: Cast to any to resolve "Uint8Array<ArrayBufferLike>" mismatch error
+      if (dataArrayRef.current && analyserRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
+      }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -79,7 +83,12 @@ export function AudioVisualizer({ stream, isRecording, className, barColor }: Au
 
         // Draw Rounded Pill
         ctx.beginPath();
-        ctx.roundRect(x, y, barWidth, height, 4);
+        // Check for roundRect support (it's relatively new)
+        if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, height, 4);
+        } else {
+            ctx.rect(x, y, barWidth, height); // Fallback
+        }
         ctx.fill();
       }
     };
