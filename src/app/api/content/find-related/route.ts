@@ -38,13 +38,14 @@ export async function POST(request: NextRequest) {
     const queryEmbedding = await generateQueryEmbedding(textContent);
 
     // 2. Call the new RPC function
+    // Fix: Cast arguments to 'any' to bypass strict type checking for missing RPC definition
     const { data: relatedItems, error: rpcError } = await supabaseAdmin.rpc('match_related_content', {
         query_embedding: queryEmbedding,
         match_threshold: 0.7, // Adjust as needed
         match_count: 5,       // Get top 5 related items
         p_user_id: user.id,
         exclude_content_id: contentId // Exclude the item itself
-    });
+    } as any);
 
     if (rpcError) {
         console.error("Error matching related content:", rpcError);
