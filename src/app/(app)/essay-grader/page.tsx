@@ -104,7 +104,6 @@ export default function EssayGraderPage() {
     mutate: mutateUsage
   } = useSWR<AIUsageStatus>(
     session ? '/api/usage/ai' : null,
-    // FIX: Explicitly handle undefined data to ensure return type is Promise<AIUsageStatus>
     (url: string) => fetcher<AIUsageStatus>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => {
         if (!res.data) throw new Error("Failed to load usage data");
         return res.data;
@@ -117,16 +116,15 @@ export default function EssayGraderPage() {
     error: historyError, 
     isLoading: isHistoryLoading,
     mutate: mutateHistory
-  } = useSWR<GradedEssayListItem[] | { data: GradedEssayListItem[] }>(
+  } = useSWR<GradedEssayListItem[]>( // FIX: Simplified generic type
     session ? '/api/graded-essays' : null,
-    (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
+    // FIX: Unwrap response to guarantee GradedEssayListItem[] return type
+    (url: string) => fetcher<GradedEssayListItem[]>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => res.data || []), 
     { revalidateOnFocus: true }
   );
 
-  // FIX: Safely extract the array from the API response
-  const history: GradedEssayListItem[] = Array.isArray(historyData) 
-      ? historyData 
-      : (historyData as any)?.data || [];
+  // FIX: historyData is now guaranteed to be an array (or undefined while loading), so we can use it directly
+  const history: GradedEssayListItem[] = historyData || [];
   
   useEffect(() => {
     if (gradedEssay?.id) {
@@ -196,7 +194,6 @@ export default function EssayGraderPage() {
     setOutputTab('feedback');
     
     try {
-        // FIX: Handle API response structure here as well
         const result = await fetcher<any>(
             `/api/graded-essays/${essayId}`, 
             { headers: { 'Authorization': `Bearer ${session.access_token}` } }
@@ -631,7 +628,6 @@ export default function EssayGraderPage() {
                                         <RefreshCw className={cn("w-4 h-4 mr-2", isHistoryLoading && "animate-spin")} />
                                         Refresh History
                                     </Button>
-                                    {/* FIX: Use the sanitized 'history' array here */}
                                     <div className="space-y-2">
                                         {history.map(item => (
                                             <div
