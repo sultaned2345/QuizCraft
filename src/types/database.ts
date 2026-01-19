@@ -13,7 +13,7 @@ export type QuestionType =
   | 'TRUE_FALSE'
   | 'FILL_IN_THE_BLANK'
   | 'MATCHING'
-  | 'ORDERING'; // --- ADDED ---
+  | 'ORDERING';
 
 // --- Quiz Types ---
 export interface Quiz {
@@ -367,6 +367,23 @@ export interface Database {
           p_increment_by: number;
         };
         Returns: void;
+      };
+      // FIX: Added missing match_content_chunks RPC definition
+      match_content_chunks: {
+        Args: {
+          query_embedding: number[]; // Vector embedding
+          match_threshold: number;
+          match_count: number;
+          p_user_id: string;
+          p_content_id: string | null;
+        };
+        Returns: {
+          content_id: string;
+          content_type: 'note' | 'document';
+          content_title: string;
+          content_chunk: string;
+          similarity: number;
+        }[];
       };
     };
     Enums: {};
