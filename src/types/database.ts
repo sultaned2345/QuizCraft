@@ -368,10 +368,10 @@ export interface Database {
         };
         Returns: void;
       };
-      // FIX: Added missing match_content_chunks RPC definition
+      // FIX: Added missing RPC definition
       match_content_chunks: {
         Args: {
-          query_embedding: number[]; // Vector embedding
+          query_embedding: number[];
           match_threshold: number;
           match_count: number;
           p_user_id: string;
@@ -379,7 +379,7 @@ export interface Database {
         };
         Returns: {
           content_id: string;
-          content_type: 'note' | 'document';
+          content_type: 'note' | 'document' | 'project';
           content_title: string;
           content_chunk: string;
           similarity: number;
