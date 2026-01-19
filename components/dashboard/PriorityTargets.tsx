@@ -4,8 +4,6 @@ import { StudyQueueItem } from '@/lib/dashboard-data';
 import { 
   AlertTriangle, 
   ChevronRight, 
-  Target, 
-  Flame, 
   Zap, 
   CheckCircle2 
 } from 'lucide-react';
@@ -40,65 +38,73 @@ export function PriorityTargets({ data }: { data: { dueFlashcards: StudyQueueIte
 
       <div className="grid gap-3">
         {/* 1. Recall Missions (Flashcards) */}
-        {data.dueFlashcards.map((item) => (
-          <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-card/50 hover:bg-primary/5 transition-all duration-300">
-            {/* Hover Glow */}
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            
-            <div className="relative p-4 flex items-center gap-4">
-              <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                <Zap className="h-6 w-6 text-primary fill-primary/20" />
-              </div>
+        {data.dueFlashcards.map((item) => {
+          if (item.type !== 'flashcard_due') return null;
+          
+          return (
+            <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-card/50 hover:bg-primary/5 transition-all duration-300">
+              {/* Hover Glow */}
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                    Recall Protocol
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground">
-                     • {item.type === 'flashcard_due' ? item.dueCount : 0} ITEMS
-                  </span>
+              <div className="relative p-4 flex items-center gap-4">
+                <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <Zap className="h-6 w-6 text-primary fill-primary/20" />
                 </div>
-                <p className="font-semibold text-foreground truncate">{item.title}</p>
-              </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                      Recall Protocol
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      • {item.dueCount} ITEMS
+                    </span>
+                  </div>
+                  <p className="font-semibold text-foreground truncate">{item.title}</p>
+                </div>
 
-              <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
-                <Link href={`/flashcards/${item.deckId}/study`}>
-                  <ChevronRight className="h-5 w-5" />
-                </Link>
-              </Button>
+                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
+                  <Link href={`/flashcards/${item.deckId}/study`}>
+                    <ChevronRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* 2. Optimization Missions (Low Scores) */}
-        {data.recentLowScores.map((item) => (
-          <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-card/50 hover:bg-orange-500/5 transition-all duration-300">
-             <div className="relative p-4 flex items-center gap-4">
-              <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                <AlertTriangle className="h-6 w-6 text-orange-500" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
-                    Optimization Req.
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground">
-                     • SCORE: {item.type === 'low_score_quiz' ? item.score : 0}%
-                  </span>
-                </div>
-                <p className="font-semibold text-foreground truncate">{item.title}</p>
-              </div>
+        {data.recentLowScores.map((item) => {
+          if (item.type !== 'low_score_quiz') return null;
 
-              <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-orange-500 hover:text-white transition-colors" asChild>
-                <Link href={`/quiz/${item.quizId}`}>
-                  <ChevronRight className="h-5 w-5" />
-                </Link>
-              </Button>
+          return (
+            <div key={item.id} className="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-card/50 hover:bg-orange-500/5 transition-all duration-300">
+              <div className="relative p-4 flex items-center gap-4">
+                <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                  <AlertTriangle className="h-6 w-6 text-orange-500" />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                      Optimization Req.
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      • SCORE: {item.score}%
+                    </span>
+                  </div>
+                  <p className="font-semibold text-foreground truncate">{item.title}</p>
+                </div>
+
+                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full hover:bg-orange-500 hover:text-white transition-colors" asChild>
+                  <Link href={`/quiz/${item.quizId}`}>
+                    <ChevronRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
