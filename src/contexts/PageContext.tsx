@@ -1,3 +1,4 @@
+// src/contexts/PageContext.tsx
 'use client';
 
 import { createContext, useContext, useState, ReactNode } from 'react';
@@ -7,7 +8,8 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 export type PageContextType =
   | { type: 'quiz'; id: string }
   | { type: 'essay'; id: string }
-  | { type: 'document'; id: string } // Added this line
+  | { type: 'document'; id: string }
+  | { type: 'project'; id: string } // FIX: Added 'project' type to support project pages
   | { type: 'page'; name: string } // For generic pages like 'essay-grader'
   | null;
 
