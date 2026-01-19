@@ -104,7 +104,8 @@ export default function EssayGraderPage() {
     mutate: mutateUsage
   } = useSWR<AIUsageStatus>(
     session ? '/api/usage/ai' : null,
-    (url: string) => fetcher(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }),
+    // FIX: Unwrap response to match AIUsageStatus type using .then(res => res.data)
+    (url: string) => fetcher<AIUsageStatus>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => res.data),
     { revalidateOnFocus: true }
   );
 
