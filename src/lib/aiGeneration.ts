@@ -33,7 +33,7 @@ function cleanAndParseJSON(text: string) {
 }
 
 // ------------------------------------------------------------------
-// 1. QUIZ GENERATION (FIXED)
+// 1. QUIZ GENERATION
 // ------------------------------------------------------------------
 export async function generateQuizFromContent(
   content: string, 
@@ -85,16 +85,16 @@ export async function generateQuizFromContent(
 }
 
 // ------------------------------------------------------------------
-// 2. FLASHCARD GENERATION
+// 2. FLASHCARD GENERATION (FIXED)
 // ------------------------------------------------------------------
-export async function generateFlashcardsFromContent(content: string) {
+export async function generateFlashcardsFromContent(content: string, numCards: number = 10) { // FIX: Added numCards parameter
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
     const safeContent = content.substring(0, 30000);
     
     const prompt = `
-      Create 10 educational flashcards based on this text. Focus on key terms, definitions, and core concepts.
+      Create ${numCards} educational flashcards based on this text. Focus on key terms, definitions, and core concepts.
       "${safeContent}"
       
       Return ONLY a raw JSON array (no markdown) with this structure:
@@ -123,7 +123,7 @@ export async function generateFlashcardsFromContent(content: string) {
 // 3. NOTES GENERATION
 // ------------------------------------------------------------------
 export async function generateNotesFromContent(content: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // Using Pro for better writing
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); 
 
   try {
     const safeContent = content.substring(0, 40000);
@@ -233,7 +233,7 @@ export async function generatePodcastForDocument(
 }
 
 // ------------------------------------------------------------------
-// 6. EXPORTS (Matches route usage)
+// 6. EXPORTS
 // ------------------------------------------------------------------
 export const callAIToGenerateQuiz = generateQuizFromContent;
 export const callAIToGenerateFlashcards = generateFlashcardsFromContent;
