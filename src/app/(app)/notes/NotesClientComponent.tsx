@@ -1,3 +1,4 @@
+// src/app/(app)/notes/NotesClientComponent.tsx
 'use client';
 
 import { useState } from 'react';
@@ -223,11 +224,12 @@ export function NotesClientComponent({ initialData }: NotesClientComponentProps)
         )}
       </div>
 
-      {/* 3. AI Generation Dialog */}
+      {/* 3. AI Generation Dialog - FIX: Updated props to match component definition */}
       <GenerateNotesDialog 
-        open={isGenerateOpen} 
-        onOpenChange={setIsGenerateOpen}
-        onGenerate={handleGenerateSuccess} 
+        isOpen={isGenerateOpen} 
+        onClose={() => setIsGenerateOpen(false)}
+        onSuccess={() => handleGenerateSuccess()} 
+        onError={(msg) => toast({ title: "Generation Error", description: msg, variant: "destructive" })}
       />
     </div>
   );
