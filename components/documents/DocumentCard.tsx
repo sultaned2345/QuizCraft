@@ -1,3 +1,4 @@
+// components/documents/DocumentCard.tsx
 'use client';
 
 import Link from 'next/link';
@@ -24,10 +25,11 @@ import { cn } from '@/lib/utils';
 
 interface DocumentCardProps {
   doc: any;
-  viewMode: 'grid' | 'list';
+  viewMode?: 'grid' | 'list'; // FIX: Made optional
+  onDelete?: (id: string) => void; // FIX: Added onDelete prop
 }
 
-export function DocumentCard({ doc, viewMode }: DocumentCardProps) {
+export function DocumentCard({ doc, viewMode = 'grid', onDelete }: DocumentCardProps) {
   const isProcessing = doc.processing_status === 'processing' || doc.processing_status === 'pending';
   const isFailed = doc.processing_status === 'failed';
 
@@ -63,6 +65,26 @@ export function DocumentCard({ doc, viewMode }: DocumentCardProps) {
         <Link href={`/documents/${doc.id}`}>
           <Button variant="outline" size="sm">Open</Button>
         </Link>
+        
+        {/* List View Menu - Added Delete */}
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.(doc.id);
+                  }}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
       </div>
     );
   }
@@ -93,7 +115,15 @@ export function DocumentCard({ doc, viewMode }: DocumentCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+              <DropdownMenuItem 
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.(doc.id);
+                }}
+              >
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
