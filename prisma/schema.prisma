@@ -18,7 +18,7 @@ datasource db {
 
 // Represents public user profile data, linked 1-to-1 with auth.users
 model profiles {
-  id                 String    @id @db.Uuid
+  id                 String   @id @db.Uuid
   email              String    @unique
   subscription_plan  String?   @default("free")
   created_at         DateTime? @default(now()) @db.Timestamptz(6)
@@ -32,12 +32,14 @@ model profiles {
   graded_essays      graded_essays[]
   quiz_attempts      quiz_attempts[]
   ai_usage           ai_usage[]
+  
   chat_history       chat_history[]
   content_embeddings content_embeddings[]
   projects           projects[]
   project_links      project_content_links[]
   generation_jobs    generation_jobs[]
   recordings         recordings[]
+  study_sessions     study_sessions[]
 
   @@map("profiles")
   @@schema("public")
@@ -149,8 +151,8 @@ model Quiz {
 
   // Relationships
   questions questions[]
-  profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
-  document  documents?  @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  profile   profiles?       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
+  document  documents?      @relation(fields: [document_id], references: [id], onDelete: Cascade)
   attempts  quiz_attempts[]
 
   @@map("quizzes")
@@ -268,6 +270,23 @@ model quiz_attempts {
   @@index([user_id])
   @@index([quiz_id])
   @@map("quiz_attempts")
+  @@schema("public")
+}
+
+model study_sessions {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  content_id       String?   @db.Uuid // Optional: link to document/quiz/deck
+  content_type     String?   // 'quiz', 'flashcards', 'document'
+  duration_seconds Int       @default(0)
+  started_at       DateTime? @default(now()) @db.Timestamptz(6)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  profile          profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+  @@map("study_sessions")
   @@schema("public")
 }
 
