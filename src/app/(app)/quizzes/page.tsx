@@ -28,7 +28,7 @@ interface DashboardData {
   quizzesTotalPages: number;
   quizzesCurrentPage: number;
   dueCardCount: number;
-  recentAttempts: ExtendedQuizAttempt[]; // <--- UPDATED THIS TYPE
+  recentAttempts: ExtendedQuizAttempt[];
 }
 
 // --- Server-Side Data Fetching Function ---
@@ -53,6 +53,7 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
           createdAt: true,
           is_public: true,
           share_link: true,
+          time_limit_minutes: true, // FIX: Added missing field selection
           _count: { select: { questions: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -74,8 +75,8 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
       prisma.quiz_attempts.findMany({
         where: { user_id: userId },
         orderBy: { created_at: 'desc' },
-        take: 10, // <--- CHANGED FROM 5 TO 10
-        include: { // <--- ADDED THIS RELATION
+        take: 10,
+        include: {
            quiz: {
              select: { title: true }
            }
@@ -84,12 +85,13 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
     ]);
 
     // Map quiz data
-    const quizzes = quizzesData.map((q) => ({
+    const quizzes: DashboardQuiz[] = quizzesData.map((q) => ({
       id: q.id,
       title: q.title,
       share_link: q.share_link ?? null,
       created_at: q.createdAt?.toISOString() || '',
       is_public: q.is_public ?? false,
+      time_limit_minutes: q.time_limit_minutes, // FIX: Mapped missing field
       questionsCount: q._count.questions,
     }));
 
@@ -97,7 +99,6 @@ async function getDashboardData(userId: string, page: number = 1, limit: number 
     const formattedAttempts = recentAttempts.map(att => ({
       ...att,
       created_at: att.created_at?.toISOString() || '',
-      // The 'quiz' object is automatically included here via the spread ...att
     }));
 
     const totalPages = Math.ceil(totalQuizCount / limit);
