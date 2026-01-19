@@ -1,28 +1,26 @@
-/*/** @type {import('next').NextConfig} */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
+  // 1. Critical Fix for PDF Parsing 500 Error
+  experimental: {
+    serverComponentsExternalPackages: ['pdf-parse-fork', 'pdfjs-dist'],
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  
+  // 2. Existing config (keep yours if different)
   images: {
-    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Ignore pdf-parse test files that cause build errors
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        canvas: false,
-      };
-      
-      // Add externals to prevent bundling test files
-      config.externals = config.externals || [];
-      config.externals.push({
-        canvas: 'canvas',
-      });
-    }
+  
+  // 3. Webpack config (optional, but helps with some binary modules)
+  webpack: (config) => {
+    config.externals.push({
+      'utf-8-validate': 'commonjs utf-8-validate',
+      'bufferutil': 'commonjs bufferutil',
+    });
     return config;
   },
 };

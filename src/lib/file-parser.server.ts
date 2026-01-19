@@ -1,5 +1,6 @@
 // src/lib/file-parser.server.ts
-import pdfParse from 'pdf-parse-fork';
+// ✅ REFACTOR: Using pdfjs-dist directly for better stability
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'; 
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
@@ -9,11 +10,33 @@ export const runtime = 'nodejs';
 
 // --- Text Extraction Helpers ---
 
-function getTextFromPPTXNodes(
-  node: Node,
-  tagName: string,
-  namespaceURI: string
-): string {
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  // Convert Buffer to Uint8Array for pdfjs-dist
+  const data = new Uint8Array(buffer);
+  
+  const loadingTask = getDocument({
+    data,
+    useSystemFonts: true, // Reduces font errors
+    disableFontFace: true, // Disables font loading to prevent "TT: undefined" warnings
+  });
+
+  const pdfDocument = await loadingTask.promise;
+  const numPages = pdfDocument.numPages;
+  let fullText = '';
+
+  for (let i = 1; i <= numPages; i++) {
+    const page = await pdfDocument.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    fullText += pageText + '\n';
+  }
+
+  return fullText;
+}
+
+function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string): string {
   let text = '';
   const textNodes = (node as Element).getElementsByTagNameNS(namespaceURI, tagName);
   for (let i = 0; i < textNodes.length; i++) {
@@ -31,8 +54,6 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
     const aNamespace = 'http://schemas.openxmlformats.org/drawingml/2006/main';
     let fullText = '';
     let slideIndex = 1;
-    
-    // Safety break to prevent infinite loops on corrupted files
     const MAX_SLIDES = 500; 
 
     while (slideIndex <= MAX_SLIDES) {
@@ -40,9 +61,6 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
       const slideFile = zip.file(fileName);
       
       if (!slideFile) {
-        // Check if we skipped a number or if we are truly done.
-        // Some PPTX might skip numbers, but usually sequential. 
-        // Try one more ahead just in case, otherwise break.
         const nextFile = zip.file(`ppt/slides/slide${slideIndex + 1}.xml`);
         if(!nextFile) break;
         slideIndex++;
@@ -54,15 +72,13 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
       const xmlDoc = parser.parseFromString(slideXmlStr, 'application/xml');
 
       const slideText = getTextFromPPTXNodes(xmlDoc, 't', aNamespace);
-      if (slideText) {
-          fullText += slideText + ' \n';
-      }
+      if (slideText) fullText += slideText + ' \n';
       slideIndex++;
     }
     return fullText.trim();
   } catch (err: any) {
     console.error('Error extracting text from PPTX:', err);
-    throw new Error(`Failed to parse PPTX file: ${err.message || 'Unknown error'}`);
+    throw new Error(`Failed to parse PPTX: ${err.message}`);
   }
 }
 
@@ -79,42 +95,26 @@ export async function extractTextFromServerFile(
 
   try {
     if (fileType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
-      // Wrap pdf-parse in a promise with timeout to prevent server hanging
-      const pdfPromise = pdfParse(buffer);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("PDF parsing timed out")), 10000)
-      );
-
-      const result: any = await Promise.race([pdfPromise, timeoutPromise]);
-      rawText = result.text || '';
+      // Use the new pdfjs-dist helper
+      rawText = await extractTextFromPDF(buffer);
 
     } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {
       rawText = buffer.toString('utf8');
 
-    } else if (
-      fileType.includes('wordprocessingml') || 
-      fileNameLower.endsWith('.docx')
-    ) {
+    } else if (fileType.includes('wordprocessingml') || fileNameLower.endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer });
       rawText = result.value || '';
 
-    } else if (
-      fileType.includes('presentationml') || 
-      fileNameLower.endsWith('.pptx')
-    ) {
+    } else if (fileType.includes('presentationml') || fileNameLower.endsWith('.pptx')) {
       rawText = await extractTextFromPPTX(buffer);
 
     } else {
-      throw new Error(
-        `Unsupported file type: ${fileType}. Please upload PDF, DOCX, PPTX, or TXT.`
-      );
+      throw new Error(`Unsupported file type: ${fileType}. Please upload PDF, DOCX, PPTX, or TXT.`);
     }
 
-    // CLEANUP & VALIDATION
     if (!rawText || rawText.trim().length < 50) {
-      // Specific error for "Scanned" PDFs
-      if (fileNameLower.endsWith('.pdf') && rawText.trim().length === 0) {
-         throw new Error('No text found. This PDF appears to be a scanned image. Please use a text-based PDF.');
+      if ((fileNameLower.endsWith('.pdf') || fileType === 'application/pdf') && rawText.trim().length === 0) {
+         throw new Error('No text found. This PDF appears to be a scanned image. Please use OCR.');
       }
       throw new Error('File contains insufficient text for analysis.');
     }
@@ -122,10 +122,9 @@ export async function extractTextFromServerFile(
     return cleanExtractedText(rawText);
 
   } catch (error: any) {
-    // Preserve specific error messages
+    console.error("Extraction Logic Error:", error);
     throw new Error(error.message || `Text extraction failed`);
   }
 }
 
-// --- FIX: Export alias for compatibility ---
 export const extractTextFromFile = extractTextFromServerFile;
