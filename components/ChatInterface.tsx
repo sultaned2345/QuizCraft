@@ -11,12 +11,14 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '@/lib/utils';
-import { AudioVisualizer } from '@/components/ui/AudioVisualizer'; // Import our new component
+import { AudioVisualizer } from '@/components/ui/AudioVisualizer';
 
 interface ChatInterfaceProps {
   documentId?: string;
   projectId?: string;
   initialMessage?: string;
+  embedded?: boolean; // FIX: Added prop
+  className?: string; // FIX: Added prop
 }
 
 interface Message {
@@ -26,7 +28,13 @@ interface Message {
   createdAt: Date;
 }
 
-export function ChatInterface({ documentId, projectId, initialMessage }: ChatInterfaceProps) {
+export function ChatInterface({ 
+  documentId, 
+  projectId, 
+  initialMessage, 
+  embedded = false, 
+  className 
+}: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -91,8 +99,6 @@ export function ChatInterface({ documentId, projectId, initialMessage }: ChatInt
                 return prev + (needsSpace ? ' ' : '') + finalTranscript;
              });
           }
-          // Note: We aren't showing interim results in this specific UI to keep state simple, 
-          // but you could add a separate preview state if desired.
         };
 
         recognition.onerror = (event: any) => {
@@ -101,7 +107,6 @@ export function ChatInterface({ documentId, projectId, initialMessage }: ChatInt
         };
 
         recognition.onend = () => {
-           // If we didn't manually stop, restart (for continuous listening) or just stop
            if (isListening) {
              // Optional: recognition.start(); 
            }
@@ -186,7 +191,11 @@ export function ChatInterface({ documentId, projectId, initialMessage }: ChatInt
   };
 
   return (
-    <div className="flex flex-col h-full bg-background border-l border-border/50">
+    <div className={cn(
+      "flex flex-col h-full bg-background",
+      !embedded && "border-l border-border/50", // FIX: Conditionally apply border
+      className // FIX: Apply custom classes
+    )}>
       
       {/* Messages Area */}
       <ScrollArea className="flex-1 p-4">
