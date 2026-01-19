@@ -1,9 +1,11 @@
+// src/api-examples/notes-example.ts
+
 /**
  * Example usage of the Notes API
  * This shows how to interact with the notes endpoints
  */
 
-import { ApiResponse, NotesResponse, CreateNoteData } from '@/types/database';
+import { ApiResponse, PaginatedNotesResponse, CreateNoteData } from '@/types/database';
 
 // Example: How to call the notes API endpoints
 export class NotesAPIClient {
@@ -20,7 +22,8 @@ export class NotesAPIClient {
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
+    // Explicitly cast headers to handle type compatibility
+    const headers: any = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
@@ -43,7 +46,8 @@ export class NotesAPIClient {
   }
 
   // Get all notes for the user
-  async getNotes(): Promise<NotesResponse> {
+  // Fix: Use PaginatedNotesResponse instead of NotesResponse
+  async getNotes(): Promise<PaginatedNotesResponse> {
     const response = await this.makeRequest('/notes');
     return response.data;
   }
@@ -105,11 +109,6 @@ export async function exampleUsage() {
       content: 'This note has been updated!'
     });
     console.log('Updated note:', updatedNote);
-
-    // Delete the note (optional - comment out to keep the note)
-    // console.log('Deleting note...');
-    // await client.deleteNote(newNote.id);
-    // console.log('Note deleted');
 
   } catch (error) {
     console.error('API Error:', error);
