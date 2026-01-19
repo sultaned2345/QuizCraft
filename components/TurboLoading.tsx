@@ -15,13 +15,17 @@ const LOADING_STEPS = [
   "FINALIZING_OUTPUT_STREAMS..."
 ];
 
+interface TurboLoadingProps {
+  status?: string;
+  statuses?: Record<string, any>; // FIX: Added statuses prop to match usage
+  className?: string;
+}
+
 export function TurboLoading({ 
   status = "PROCESSING",
+  statuses,
   className 
-}: { 
-  status?: string;
-  className?: string; 
-}) {
+}: TurboLoadingProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   // Cycle through "fake" logs to keep user engaged
@@ -67,6 +71,17 @@ export function TurboLoading({
             {LOADING_STEPS[currentStep]}
           </div>
         </div>
+        
+        {/* Optional: Show granular statuses if useful */}
+        {statuses && (
+           <div className="flex gap-2 justify-center text-xs text-muted-foreground mt-2">
+              <span className={cn(statuses.quiz ? "text-green-500" : "opacity-50")}>Quiz</span>
+              <span className="opacity-30">•</span>
+              <span className={cn(statuses.note ? "text-green-500" : "opacity-50")}>Notes</span>
+              <span className="opacity-30">•</span>
+              <span className={cn(statuses.flashcards ? "text-green-500" : "opacity-50")}>Decks</span>
+           </div>
+        )}
 
         <p className="text-muted-foreground text-sm">
           This may take up to 60 seconds depending on file size.
