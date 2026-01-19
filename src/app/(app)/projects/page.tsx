@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-// FIX: Added 'Folder' to imports
 import { Plus, Search, Filter, Folder } from 'lucide-react';
 import { Project } from '@/types/database';
 import { fetcher } from '@/lib/fetcher';
@@ -19,9 +18,12 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
+  // FIX: Explicitly typed 'url' as string and added generic to 'fetcher'
   const { data: projectsData, error, isLoading, mutate } = useSWR<{ data: Project[] }>(
     session ? '/api/projects' : null,
-    (url) => fetcher(url, { headers: { Authorization: `Bearer ${session?.access_token}` } })
+    (url: string) => fetcher<Project[]>(url, { 
+      headers: { Authorization: `Bearer ${session?.access_token}` } 
+    })
   );
 
   const handleDelete = async (id: string) => {
