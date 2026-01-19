@@ -104,8 +104,11 @@ export default function EssayGraderPage() {
     mutate: mutateUsage
   } = useSWR<AIUsageStatus>(
     session ? '/api/usage/ai' : null,
-    // FIX: Unwrap response to match AIUsageStatus type using .then(res => res.data)
-    (url: string) => fetcher<AIUsageStatus>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => res.data),
+    // FIX: Explicitly handle undefined data to ensure return type is Promise<AIUsageStatus>
+    (url: string) => fetcher<AIUsageStatus>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => {
+        if (!res.data) throw new Error("Failed to load usage data");
+        return res.data;
+    }),
     { revalidateOnFocus: true }
   );
 
