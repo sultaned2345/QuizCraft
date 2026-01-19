@@ -43,12 +43,15 @@ export function StudyHeatmap({ data }: { data: ActivityData[] }) {
                 tooltipDataAttrs={(value: any) => {
                     // Tooltip logic for react-tooltip
                     if (!value || !value.date) {
-                        return { 'data-tooltip-id': 'heatmap-tooltip', 'data-tooltip-content': 'No activity' };
+                        return { 
+                          'data-tooltip-id': 'heatmap-tooltip', 
+                          'data-tooltip-content': 'No activity' 
+                        } as any;
                     }
                     return {
                         'data-tooltip-id': 'heatmap-tooltip',
                         'data-tooltip-content': `${value.date}: ${value.count} activities`,
-                    };
+                    } as any;
                 }}
                 showWeekdayLabels
                 gutterSize={3} // Spacing between squares
