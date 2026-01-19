@@ -493,15 +493,14 @@ export async function POST(request: NextRequest) {
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
       const queryEmbedding = await generateQueryEmbedding(message);
       
-      // FIX: Cast args to any to bypass strict overload checks causing "parameter of type undefined" error
-      // FIX: Ensure p_content_id is null if undefined
+      // FIX: Cast return type to { data: any[] | null, error: any } to avoid 'never' inference on chunks
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.60, 
           match_count: 6,
           p_user_id: user.id,
           p_content_id: context.id || null 
-      } as any);
+      } as any) as { data: any[] | null, error: any };
       
       if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
 
@@ -609,14 +608,14 @@ ${JSON.stringify(gradedEssay.feedback)}`;
       await saveChatHistory(userId, 'user', message, null);
       const queryEmbedding = await generateQueryEmbedding(message);
       
-      // FIX: Cast args to any to bypass strict overload checks
+      // FIX: Cast return type to { data: any[] | null, error: any } to avoid 'never' inference
       const { data: chunks } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7,
           match_count: 5,
           p_user_id: user.id,
           p_content_id: null
-      } as any);
+      } as any) as { data: any[] | null, error: any };
 
       if (chunks && chunks.length > 0) {
         let contextString = chunks.map((c: any, i: number) => `[${i+1}] ${c.content_chunk}`).join("\n\n");
