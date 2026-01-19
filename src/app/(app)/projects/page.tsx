@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Plus, Search, Filter, Folder } from 'lucide-react';
-import { Project } from '@/types/database';
+// FIX: Imported ApiResponse to match the fetcher's return type
+import { Project, ApiResponse } from '@/types/database';
 import { fetcher } from '@/lib/fetcher';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,8 +19,8 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // FIX: Explicitly typed 'url' as string and added generic to 'fetcher'
-  const { data: projectsData, error, isLoading, mutate } = useSWR<{ data: Project[] }>(
+  // FIX: Updated generic to ApiResponse<Project[]> to match the fetcher's return type
+  const { data: projectsData, error, isLoading, mutate } = useSWR<ApiResponse<Project[]>>(
     session ? '/api/projects' : null,
     (url: string) => fetcher<Project[]>(url, { 
       headers: { Authorization: `Bearer ${session?.access_token}` } 
