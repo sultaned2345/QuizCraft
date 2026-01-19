@@ -384,7 +384,7 @@ export interface Database {
           similarity: number;
         }[];
       };
-      // FIX: Added missing match_related_content definition
+      // FIX: Added missing RPC definition matching the call in route.ts
       match_related_content: {
         Args: {
           query_embedding: number[];
@@ -395,7 +395,7 @@ export interface Database {
         };
         Returns: {
           content_id: string;
-          content_type: 'note' | 'document' | 'project';
+          content_type: 'note' | 'document';
           content_title: string;
           content_chunk: string;
           similarity: number;
