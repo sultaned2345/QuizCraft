@@ -1,3 +1,4 @@
+// components/PdfViewer.tsx
 'use client';
 
 import * as React from 'react';
@@ -13,8 +14,9 @@ if (typeof window !== 'undefined') {
 }
 
 interface PdfViewerProps {
-  url: string;
-  onTextSelect: (e: React.MouseEvent) => void;
+  url?: string;
+  documentId?: string;
+  onTextSelect?: (e: React.MouseEvent) => void;
   className?: string;
 }
 
@@ -22,7 +24,7 @@ interface PdfPageProps {
   doc: pdfjs.PDFDocumentProxy;
   pageNum: number;
   width: number;
-  onTextSelect: (e: React.MouseEvent) => void;
+  onTextSelect?: (e: React.MouseEvent) => void;
 }
 
 // --- Custom Hook for Visibility (Lazy Rendering) ---
@@ -151,10 +153,11 @@ function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
   );
 }
 
-export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
+export function PdfViewer({ url, documentId, onTextSelect, className }: PdfViewerProps) {
   const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [resolvedUrl, setResolvedUrl] = React.useState<string | null>(null);
   
   // Responsive Width
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -177,19 +180,45 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     return () => observer.disconnect();
   }, [isLoading]);
 
-  // 2. Load PDF Document (Robust Fix)
+  // 2. Resolve URL: Use prop or fetch via documentId
+  React.useEffect(() => {
+    if (url) {
+      setResolvedUrl(url);
+      return;
+    }
+
+    if (documentId) {
+      setIsLoading(true);
+      fetch(`/api/documents/${documentId}/url`)
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to fetch document URL');
+          return res.json();
+        })
+        .then(data => {
+          if (data.url) setResolvedUrl(data.url);
+          else throw new Error('URL not found in response');
+        })
+        .catch(err => {
+          console.error("Error fetching PDF URL:", err);
+          setError("Could not retrieve document.");
+          setIsLoading(false);
+        });
+    } else {
+        // No source provided
+        setIsLoading(false);
+        setError("No document source provided.");
+    }
+  }, [url, documentId]);
+
+  // 3. Load PDF Document
   React.useEffect(() => {
     const loadPdf = async () => {
-      // Guard: Ensure url is a valid string.
-      // This prevents "Invalid parameter" crash if url is null/undefined/object.
-      if (!url || typeof url !== 'string') {
-        return; 
-      }
+      if (!resolvedUrl) return;
 
       setIsLoading(true);
       setError(null);
       try {
-        const loadingTask = pdfjs.getDocument(url);
+        const loadingTask = pdfjs.getDocument(resolvedUrl);
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
       } catch (e: any) {
@@ -201,7 +230,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
     };
 
     loadPdf();
-  }, [url]);
+  }, [resolvedUrl]);
 
   if (isLoading) {
     return (
@@ -219,9 +248,7 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>
-                    Unable to load this document.
-                    <br/>
-                    <span className="text-xs opacity-70 mt-2 block">{error}</span>
+                    {error}
                 </AlertDescription>
             </Alert>
         </div>
@@ -250,5 +277,4 @@ export function PdfViewer({ url, onTextSelect, className }: PdfViewerProps) {
   );
 }
 
-// FIX: Added default export to satisfy import in projects/[projectId]/page.tsx
 export default PdfViewer;
