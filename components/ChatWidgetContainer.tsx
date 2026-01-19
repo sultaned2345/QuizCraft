@@ -1,5 +1,3 @@
-// components/ChatWidgetContainer.tsx
-// NEW FILE
 'use client';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -40,6 +38,11 @@ export function ChatWidgetContainer({
     return 'AI Tutor';
   };
 
+  // Determine the correct ID to pass based on context type
+  const documentId = pageContext?.type === 'document' ? pageContext.id : undefined;
+  // NOTE: If you have logic for Quizzes/Essays in ChatInterface, map them here too.
+  // currently passing undefined for non-documents to avoid errors.
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -66,12 +69,11 @@ export function ChatWidgetContainer({
                 <span className="sr-only">Close chat</span>
               </Button>
             </CardHeader>
-            <CardContent className="p-4 flex-1 overflow-hidden">
-              {/* ChatInterface now fills this container */}
-              <DynamicChatInterface
-                context={pageContext}
-                className="h-full" // Pass className to fill height
-              />
+            <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
+               {/* Wrapped in a flex container to ensure height fill */}
+               <div className="h-full w-full">
+                  <DynamicChatInterface documentId={documentId} />
+               </div>
             </CardContent>
           </Card>
         </motion.div>
