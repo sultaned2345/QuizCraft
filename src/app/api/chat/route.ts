@@ -298,6 +298,11 @@ async function handleCreateQuizFromContext(args: {
 
     const aiQuizData = await callAIToGenerateQuiz(content.text, args.numQuestions); 
 
+    // FIX: Checked for null aiQuizData
+    if (!aiQuizData) {
+      return { success: false, error: "Failed to generate quiz content from AI." };
+    }
+
     const newQuiz = await prisma.quiz.create({
       data: {
         title: args.title || aiQuizData.title || `Quiz from ${content.title}`,
@@ -338,6 +343,11 @@ async function handleCreateFlashcardsFromContext(args: {
     if (!content.success) return content;
 
     const aiCardsData = await callAIToGenerateFlashcards(content.text, args.numCards);
+    
+    // FIX: Checked for null aiCardsData
+    if (!aiCardsData) {
+      return { success: false, error: "Failed to generate flashcards content from AI." };
+    }
 
     const newDeck = await prisma.flashcard_decks.create({
       data: {
