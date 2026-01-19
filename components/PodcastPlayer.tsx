@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { Play, Pause, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import AudioVisualizer from "@/components/ui/AudioVisualizer"; // Using your existing component
 
 interface PodcastPlayerProps {
   content: string;
@@ -98,7 +97,6 @@ export function PodcastPlayer({ content, title, sourceId, sourceType, existingPo
 
             {/* Visualizer & Controls */}
             <div className="w-full h-24 bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
-              {/* Use your existing visualizer here if it accepts a stream or analyze via WebAudio API */}
               {/* Fallback simplified visualizer */}
               {isPlaying && (
                 <div className="flex gap-1 items-end h-1/2">
