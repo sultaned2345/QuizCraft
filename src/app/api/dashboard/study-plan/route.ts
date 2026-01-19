@@ -3,15 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
-import { generateQueryEmbedding } from '@/lib/embedding'; // <-- 1. IMPORT EMBEDDING FUNCTION
-import { supabaseAdmin } from '@/lib/supabaseAdmin'; // <-- 2. IMPORT SUPABASE ADMIN
+import { generateQueryEmbedding } from '@/lib/embedding';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export interface StudySuggestion {
-  type: 'flashcard' | 'quiz' | 'note' | 'document'; // <-- 3. ADD NEW TYPES
-  id: string; // Deck ID, Quiz ID, Note ID, or Document ID
+  type: 'flashcard' | 'quiz' | 'note' | 'document';
+  id: string;
   title: string;
   reason: string;
 }
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         id: true,
         title: true,
       },
-      take: 2, // Reduced to make space for other suggestion types
+      take: 2,
     });
 
     dueDecks.forEach(deck => {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       });
     });
     const suggestedDeckIds = dueDecks.map(d => d.id);
-    const suggestedQuizIds = new Set<string>(); // Keep track of quizzes we've handled
+    const suggestedQuizIds = new Set<string>();
 
     // --- 2. Get recent attempts to find candidates for RAG ---
     const recentAttempts = await prisma.quiz_attempts.findMany({
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { created_at: 'desc' },
-      take: 20, // Look at last 20 attempts
+      take: 20,
     });
     
     // --- 3. NEW: Attempt to add one RAG-based suggestion ---
@@ -82,13 +82,14 @@ export async function GET(request: NextRequest) {
             const embedding = await generateQueryEmbedding(contentToEmbed);
 
             // Call our RPC function
+            // FIX: Added "as any" to args to bypass strict type checking if definition is missing
             const { data: relatedItems, error: rpcError } = await supabaseAdmin.rpc('match_related_content', {
                 query_embedding: embedding,
-                match_threshold: 0.7, // 70% similarity threshold
-                match_count: 1,       // Find the single best match
+                match_threshold: 0.7,
+                match_count: 1,
                 p_user_id: user.id,
-                exclude_content_id: quizWithQuestions.id // Exclude the quiz itself (though it's not in the table)
-            });
+                exclude_content_id: quizWithQuestions.id
+            } as any);
 
             if (rpcError) throw rpcError;
 
@@ -102,13 +103,12 @@ export async function GET(request: NextRequest) {
                     title: topMatch.content_title,
                     reason: `This may help with '${quizWithQuestions.title}', where you scored ${scorePercent.toFixed(0)}%.`
                 });
-                ragSuggestionAdded = true; // Set flag
-                suggestedQuizIds.add(quizWithQuestions.id); // Don't suggest this quiz again
+                ragSuggestionAdded = true;
+                suggestedQuizIds.add(quizWithQuestions.id);
             }
           }
         } catch (ragError) {
             console.error(`Failed to generate RAG suggestion for quiz ${attempt.quiz.id}:`, ragError);
-            // Don't block other suggestions if this fails
         }
       }
     }
@@ -119,7 +119,6 @@ export async function GET(request: NextRequest) {
         if (!attempt.quiz) continue;
         const scorePercent = (attempt.score / attempt.total) * 100;
         
-        // If score is low AND we haven't already suggested it (via RAG) AND we need more quiz suggestions
         if (scorePercent < 70 && !suggestedQuizIds.has(attempt.quiz.id) && quizzesToReview.length < 2) {
             quizzesToReview.push({
                 type: 'quiz',
@@ -136,7 +135,7 @@ export async function GET(request: NextRequest) {
     const newCardDecks = await prisma.flashcard_decks.findMany({
         where: {
             user_id: user.id,
-            id: { notIn: suggestedDeckIds }, // Don't suggest if already in "due" list
+            id: { notIn: suggestedDeckIds },
             flashcards: { some: { review_at: { lte: now }, ease_factor: 2.5 } }
         },
         select: { id: true, title: true },
@@ -175,7 +174,7 @@ export async function GET(request: NextRequest) {
     // --- 7. Shuffle and take top 5 suggestions ---
     const finalSuggestions = suggestions
       .sort(() => 0.5 - Math.random())
-      .slice(0, 5); // Return up to 5 suggestions
+      .slice(0, 5);
 
     return NextResponse.json<ApiResponse<StudySuggestion[]>>({
       success: true,

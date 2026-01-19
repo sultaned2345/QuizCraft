@@ -384,7 +384,7 @@ export interface Database {
           similarity: number;
         }[];
       };
-      // FIX: Added missing RPC definition matching the call in route.ts
+      // FIX: Added missing match_related_content definition
       match_related_content: {
         Args: {
           query_embedding: number[];
