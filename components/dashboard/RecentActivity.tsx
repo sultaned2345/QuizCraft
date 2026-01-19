@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Clock, FileText, Folder, CheckCircle } from "lucide-react";
 import { getUser } from "@/lib/auth"; 
-import { getRecentActivity } from "@/lib/dashboard-data";
+import { getRecentActivity, type ActivityItem } from "@/lib/dashboard-data"; // Import the type
 import { formatDistanceToNow } from "date-fns";
 import {
   Card,
@@ -27,8 +27,8 @@ export async function RecentActivity() {
   const user = await getUser();
   if (!user) return null;
 
-  // Ensure activities is an array
-  let activities = [];
+  // Ensure activities is an array with explicit typing
+  let activities: ActivityItem[] = []; 
   try {
     activities = await getRecentActivity(user.id);
   } catch (e) {
