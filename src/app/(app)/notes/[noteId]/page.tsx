@@ -53,5 +53,12 @@ export default async function EditNotePage({ params }: { params: { noteId: strin
     redirect('/notes');
   }
 
-  return <NoteEditor note={note} />;
+  // FIX: Map the 'note' object to the individual props expected by NoteEditor
+  return (
+    <NoteEditor 
+      noteId={note.id}
+      initialTitle={note.title}
+      initialContent={note.content}
+    />
+  );
 }
