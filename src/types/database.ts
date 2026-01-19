@@ -368,7 +368,6 @@ export interface Database {
         };
         Returns: void;
       };
-      // FIX: Added missing RPC definition
       match_content_chunks: {
         Args: {
           query_embedding: number[];
@@ -376,6 +375,23 @@ export interface Database {
           match_count: number;
           p_user_id: string;
           p_content_id: string | null;
+        };
+        Returns: {
+          content_id: string;
+          content_type: 'note' | 'document' | 'project';
+          content_title: string;
+          content_chunk: string;
+          similarity: number;
+        }[];
+      };
+      // FIX: Added missing match_related_content definition
+      match_related_content: {
+        Args: {
+          query_embedding: number[];
+          match_threshold: number;
+          match_count: number;
+          p_user_id: string;
+          exclude_content_id: string | null;
         };
         Returns: {
           content_id: string;
