@@ -9,7 +9,7 @@ export type PageContextType =
   | { type: 'quiz'; id: string }
   | { type: 'essay'; id: string }
   | { type: 'document'; id: string }
-  | { type: 'project'; id: string } // FIX: Added 'project' type to support project pages
+  | { type: 'project'; id: string; name: string } // FIX: Added name to support project titles in UI
   | { type: 'page'; name: string } // For generic pages like 'essay-grader'
   | null;
 
