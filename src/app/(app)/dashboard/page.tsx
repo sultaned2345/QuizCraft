@@ -97,7 +97,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500">
-      <DashboardHeader user={user} />
+      {/* FIX: Removed 'user' prop as DashboardHeader fetches user via useAuth context */}
+      <DashboardHeader />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4 flex flex-col gap-6">
