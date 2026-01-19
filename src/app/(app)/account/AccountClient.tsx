@@ -36,7 +36,7 @@ import {
   Sun, 
   Laptop, 
   Check, 
-  Infinity, 
+  Infinity as InfinityIcon, // FIX: Alias to avoid shadowing global Infinity
   Loader2, 
   LogOut,
   Mail,
@@ -393,9 +393,10 @@ export function AccountClient({ initialData, user }: AccountClientProps) {
 }
 
 // Helper for Usage Bars
-function UsageItem({ label, icon: Icon, used, limit }: { label: string, icon: any, used: number, limit: number | typeof Infinity }) {
-  const isUnlimited = limit === Infinity;
-  const percentage = isUnlimited ? 0 : Math.min((used / (limit as number)) * 100, 100);
+function UsageItem({ label, icon: Icon, used, limit }: { label: string, icon: any, used: number, limit: number }) { // FIX: Type limit as number only
+  // FIX: limit now refers to the global Infinity number, not the shadowed Icon component
+  const isUnlimited = limit === Infinity; 
+  const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
   
   return (
     <div className="space-y-2">
@@ -407,7 +408,8 @@ function UsageItem({ label, icon: Icon, used, limit }: { label: string, icon: an
         <span className="text-muted-foreground">
           {isUnlimited ? (
             <span className="flex items-center text-primary text-xs font-bold gap-1">
-              <Infinity className="h-3 w-3" /> Unlimited
+              <InfinityIcon className="h-3 w-3" /> {/* FIX: Use renamed icon */}
+              Unlimited
             </span>
           ) : (
             <span>{used} / {limit}</span>
