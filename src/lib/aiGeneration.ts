@@ -19,7 +19,7 @@ function cleanAndParseJSON(text: string) {
     const lastBrace = cleaned.search(/[}\]]/);
     
     if (firstBrace === -1 || lastBrace === -1) {
-        // Fallback: try parsing the whole string if no braces found (unlikely but possible)
+        // Fallback: try parsing the whole string if no braces found
         return JSON.parse(cleaned);
     }
     
@@ -33,9 +33,14 @@ function cleanAndParseJSON(text: string) {
 }
 
 // ------------------------------------------------------------------
-// 1. QUIZ GENERATION (Standard)
+// 1. QUIZ GENERATION (FIXED)
 // ------------------------------------------------------------------
-export async function generateQuizFromContent(content: string, title: string) {
+export async function generateQuizFromContent(
+  content: string, 
+  numQuestions: number = 5, 
+  difficulty: string = "medium", 
+  questionType: string = "MIXED"
+) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   
   try {
@@ -44,15 +49,18 @@ export async function generateQuizFromContent(content: string, title: string) {
     
     const prompt = `
       You are an expert educational content creator.
-      Create a quiz with 5 multiple-choice questions based on the following text:
+      Create a ${difficulty} difficulty quiz with ${numQuestions} questions based on the following text.
+      The questions should be of type: ${questionType} (If "MIXED", use a variety of Multiple Choice, True/False, and Fill in the Blank).
+      
+      Text to analyze:
       "${safeContent}"
       
       Return ONLY a raw JSON array (no markdown) with this structure:
       [
         {
           "question_text": "Question?",
-          "question_type": "multiple-choice",
-          "options": ["A", "B", "C", "D"],
+          "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "FILL_IN_THE_BLANK",
+          "options": ["A", "B", "C", "D"], // Include options for Multiple Choice. Null for Fill in Blank.
           "correct_answer": "The correct option string",
           "explanation": "Brief explanation"
         }
@@ -66,7 +74,7 @@ export async function generateQuizFromContent(content: string, title: string) {
     if (!questions || !Array.isArray(questions)) return null;
 
     return {
-      title: `Quiz: ${title}`,
+      title: `Generated ${difficulty} Quiz`,
       description: "AI Generated Quiz",
       questions: questions
     };
@@ -142,15 +150,15 @@ export async function generateNotesFromContent(content: string) {
 }
 
 // ------------------------------------------------------------------
-// 4. YOUTUBE GENERATION (Keep Existing Logic)
+// 4. YOUTUBE GENERATION
 // ------------------------------------------------------------------
 export async function generateFromYoutube(videoId: string) {
     console.log("YouTube generation triggered for:", videoId);
-    return null; // Placeholder as I focus on the new Podcast feature
+    return null; // Placeholder
 }
 
 // ------------------------------------------------------------------
-// 5. PODCAST GENERATION (NEW FEATURE)
+// 5. PODCAST GENERATION
 // ------------------------------------------------------------------
 export async function generatePodcastForDocument(
   content: string,
@@ -163,7 +171,6 @@ export async function generatePodcastForDocument(
     console.log(`🎙️ Generating Podcast for: ${title}`);
 
     // A. Generate Script (Host vs Expert)
-    // We truncate to ~15k chars to save tokens/costs while keeping context
     const script = await generatePodcastScript(content.substring(0, 15000));
     
     if (!script || !Array.isArray(script) || script.length === 0) {
@@ -221,18 +228,16 @@ export async function generatePodcastForDocument(
 
   } catch (error) {
     console.error("❌ Podcast Gen Failed:", error);
-    // Return null so the entire generation process doesn't fail if just the podcast fails
     return null; 
   }
 }
 
 // ------------------------------------------------------------------
-// 6. BACKWARD COMPATIBILITY EXPORTS (Fixes Build Errors)
+// 6. EXPORTS (Matches route usage)
 // ------------------------------------------------------------------
 export const callAIToGenerateQuiz = generateQuizFromContent;
 export const callAIToGenerateFlashcards = generateFlashcardsFromContent;
 export const callAIToGenerateNote = generateNotesFromContent;
 export async function callAIToGenerateInsights(content: string) {
-    // Mapping "Insights" to Notes generation for now to pass build
     return generateNotesFromContent(content); 
 }

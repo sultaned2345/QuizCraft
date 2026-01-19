@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 1. RESTORED: Strict File Type Validation
+    // 1. Strict File Type Validation
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       return NextResponse.json({ 
         success: false,
@@ -31,8 +31,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 2. IMPROVED: Increased Size Limit (10MB)
-    // Increased from 3MB to 10MB to handle textbooks/slides without crashing
+    // 2. Size Limit (10MB)
+    // Increased to handle textbooks/slides without crashing
     const maxSize = 10 * 1024 * 1024; 
     if (file.size > maxSize) {
       return NextResponse.json({ 
@@ -45,25 +45,27 @@ export async function POST(request: NextRequest) {
     let buffer: Buffer;
     try {
       const arrayBuffer = await file.arrayBuffer();
+      // Safe Buffer usage (avoids DeprecationWarning)
       buffer = Buffer.from(arrayBuffer);
     } catch (bufferError) {
+      console.error("Buffer conversion error:", bufferError);
       return NextResponse.json({ 
         success: false,
         error: "Failed to read file. Please try another PDF file." 
       }, { status: 400 });
     }
 
-    // 3. RESTORED & IMPROVED: Parsing with Scanned Doc Detection
+    // 3. Parsing with Scanned Doc Detection
     let extractedText: string;
     try {
       const result = await pdfParse(buffer, {
         max: 0, // No page limit
-        version: 'v1.10.100', // Restored: Use specific version for stability
+        version: 'v1.10.100', // Specific version for stability
       });
       
       extractedText = result.text || "";
       
-      // New Check: Scanned Document Detection
+      // Check: Scanned Document Detection
       // If text is empty or extremely short, it's likely an image-only PDF
       if (!extractedText || extractedText.trim().length < 50) {
         return NextResponse.json({ 
@@ -72,8 +74,9 @@ export async function POST(request: NextRequest) {
         }, { status: 422 });
       }
 
-    } catch (error) {
-      console.error("PDF parsing error:", error);
+    } catch (error: any) {
+      // Log specific error to help debug "TT: undefined function" or password issues
+      console.error("PDF parsing internal error:", error.message || error);
       return NextResponse.json({ 
         success: false,
         error: "This PDF might be locked, corrupted, or unreadable. Try another file." 
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error("PDF parsing API error:", error);
+    console.error("PDF parsing API fatal error:", error);
     return NextResponse.json({ 
       success: false,
       error: "Internal server error during PDF parsing" 
