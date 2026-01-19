@@ -1,15 +1,12 @@
 // src/app/api/account/plan/route.ts
-// NEW FILE
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse } from '@/types/database';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+// FIX: Removed unused import 'createRouteHandlerClient' which caused the build error
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; // <-- ADD THIS LINE AT THE TOP
-
+export const dynamic = 'force-dynamic';
 
 /**
  * @route POST /api/account/plan
