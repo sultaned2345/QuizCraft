@@ -1,3 +1,4 @@
+// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -59,11 +60,9 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
 
           {/* Chat Body */}
           <div className="flex-1 overflow-hidden relative">
+             {/* FIX: Passed correct prop 'documentId' instead of 'contextId'/'contextType' */}
              <ChatInterface 
-                contextId={params.documentId} 
-                contextType="document"
-                // Pass a prop to ChatInterface to make it look cleaner if supported
-                // minimal={true} 
+                documentId={params.documentId} 
              />
           </div>
         </ResizablePanel>
