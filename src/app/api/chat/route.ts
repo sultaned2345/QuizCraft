@@ -298,7 +298,6 @@ async function handleCreateQuizFromContext(args: {
 
     const aiQuizData = await callAIToGenerateQuiz(content.text, args.numQuestions); 
 
-    // FIX: Checked for null aiQuizData
     if (!aiQuizData) {
       return { success: false, error: "Failed to generate quiz content from AI." };
     }
@@ -344,7 +343,6 @@ async function handleCreateFlashcardsFromContext(args: {
 
     const aiCardsData = await callAIToGenerateFlashcards(content.text, args.numCards);
     
-    // FIX: Checked for null aiCardsData
     if (!aiCardsData) {
       return { success: false, error: "Failed to generate flashcards content from AI." };
     }
@@ -495,13 +493,15 @@ export async function POST(request: NextRequest) {
       model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig, safetySettings });
       const queryEmbedding = await generateQueryEmbedding(message);
       
+      // FIX: Cast args to any to bypass strict overload checks causing "parameter of type undefined" error
+      // FIX: Ensure p_content_id is null if undefined
       const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.60, 
           match_count: 6,
           p_user_id: user.id,
-          p_content_id: context.id 
-      });
+          p_content_id: context.id || null 
+      } as any);
       
       if (rpcError) throw new Error(`Failed to retrieve study materials: ${rpcError.message}`);
 
@@ -608,13 +608,15 @@ ${JSON.stringify(gradedEssay.feedback)}`;
       
       await saveChatHistory(userId, 'user', message, null);
       const queryEmbedding = await generateQueryEmbedding(message);
+      
+      // FIX: Cast args to any to bypass strict overload checks
       const { data: chunks } = await supabaseAdmin.rpc('match_content_chunks', {
           query_embedding: queryEmbedding,
           match_threshold: 0.7,
           match_count: 5,
           p_user_id: user.id,
           p_content_id: null
-      });
+      } as any);
 
       if (chunks && chunks.length > 0) {
         let contextString = chunks.map((c: any, i: number) => `[${i+1}] ${c.content_chunk}`).join("\n\n");
