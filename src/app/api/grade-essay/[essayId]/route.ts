@@ -1,4 +1,3 @@
-// src/app/api/graded-essays/[essayId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -39,7 +38,8 @@ export async function GET(
         ...essay,
         essay_title: essay.essay_title || null,
         rubric_or_criteria: essay.rubric_or_criteria || null,
-        feedback: essay.feedback || null,
+        // Fix: Cast Prisma JSON to any to satisfy the complex union type
+        feedback: (essay.feedback as any) || null,
         score: essay.score || null,
         graded_at: essay.graded_at?.toISOString() || '',
     };
