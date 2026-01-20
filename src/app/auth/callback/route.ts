@@ -1,5 +1,5 @@
 // src/app/auth/callback/route.ts
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -9,18 +9,38 @@ export async function GET(request: Request) {
   try {
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get('code');
+    // Allow redirecting to a specific page after auth, default to dashboard
+    const next = requestUrl.searchParams.get('next') ?? '/dashboard';
 
     if (code) {
       const cookieStore = cookies();
-      const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+
+      // Create a Supabase client using @supabase/ssr for the server context
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value;
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              cookieStore.set({ name, value, ...options });
+            },
+            remove(name: string, options: CookieOptions) {
+              cookieStore.delete({ name, ...options });
+            },
+          },
+        }
+      );
       
       // Exchange the code for a session
-      await supabase.auth.exchangeCodeForSession(code);
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
     }
 
     // URL to redirect to after sign in process completes
-    // FIX: Redirect explicitly to the dashboard (Workspace)
-    return NextResponse.redirect(`${requestUrl.origin}/dashboard`);
+    return NextResponse.redirect(`${requestUrl.origin}${next}`);
     
   } catch (error) {
     console.error('Auth Callback Error:', error);
