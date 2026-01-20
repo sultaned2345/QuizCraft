@@ -1,15 +1,10 @@
 // src/lib/supabase.ts
 import { createClient, PostgrestError } from '@supabase/supabase-js';
 import { Database, Note, Quiz, Question, User } from '@/types/database';
-// --- REMOVED PRISMA IMPORT ---
-// import { prisma } from '@/lib/prisma'; // <-- REMOVED
 // --- IMPORT THE SHARED CLIENT ---
 import { supabase } from '@/lib/supabaseClient';
 
-// --- REMOVE THE OLD CLIENT CREATION ---
-// ... (removed) ...
-
-// --- Error Handling Helper (Keep) ---
+// --- Error Handling Helper ---
 function handleSupabaseError(
   error: PostgrestError | null,
   context: string
@@ -48,15 +43,11 @@ export const supabaseHelpers = {
       console.warn(
         `No profile found for user ${userId}, assuming 'free' plan.`
       );
-      // --- MODIFICATION: REMOVED ADMIN CALL ---
-      // The client-side helper CANNOT perform this fallback.
-      // The caller must handle the 'null' case.
       return null;
-      // --- END MODIFICATION ---
     }
     const plan = (data as any).subscription_plan === 'pro' ? 'pro' : 'free';
     
-    // FIX: Cast data to 'any' to avoid "Spread types may only be created from object types" error
+    // Cast data to 'any' to avoid spread type errors
     return { ...(data as any), subscription_plan: plan } as User & {
       subscription_plan: 'free' | 'pro';
     };
@@ -112,7 +103,8 @@ export const supabaseHelpers = {
     console.log(
       `[supabaseHelpers.getQuiz] Supabase response for ID ${quizId}:`,
       {
-        data: data ? `Quiz found (Title: ${data.title})` : null,
+        // FIX: Cast data to 'any' because TS might infer it as 'never' if types are mismatched
+        data: data ? `Quiz found (Title: ${(data as any).title})` : null,
         error: error,
       }
     );
@@ -135,7 +127,8 @@ export const supabaseHelpers = {
       );
     }
 
-    return data;
+    // Cast return to match the Promise signature if needed, though 'never' is usually assignable
+    return data as (Quiz & { questions: Question[] }) | null;
   },
 
   async deleteQuiz(quizId: string): Promise<void> {
