@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
     console.log("DEBUG: Authentication successful, user ID:", user.id);
 
     const body = await request.json();
-    // Destructure documentId along with sources
     const { text, url, youtubeUrl, documentId } = body;
 
     if (!url && !text && !youtubeUrl) { 
@@ -97,8 +96,17 @@ export async function POST(request: NextRequest) {
     }
 
     const incrementCount = 1;
-    if (!usage.canGenerate || (usage.currentCount !== undefined && usage.limit !== Infinity && (usage.currentCount + incrementCount) > usage.limit)) {
-      const remaining = usage.limit !== Infinity && usage.currentCount !== undefined ? Math.max(0, usage.limit - usage.currentCount) : 0;
+    // FIX: Added explicit undefined checks for usage.limit
+    const isLimitDefined = usage.limit !== undefined && usage.limit !== Infinity;
+    const isOverLimit = isLimitDefined && 
+                        usage.currentCount !== undefined && 
+                        (usage.currentCount + incrementCount) > (usage.limit as number);
+
+    if (!usage.canGenerate || isOverLimit) {
+      const limitVal = usage.limit !== undefined && usage.limit !== Infinity ? usage.limit : 0;
+      const currentVal = usage.currentCount !== undefined ? usage.currentCount : 0;
+      const remaining = Math.max(0, limitVal - currentVal);
+      
       return NextResponse.json<ApiResponse>({ 
           success: false, 
           error: usage.error, 
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
     // 5. Generate with AI
     const generatedNote = await callAIToGenerateNote(sourceContent.trim());
     
-    if (!isContentMeaningful(generatedNote.content)) {
+    if (!generatedNote || !isContentMeaningful(generatedNote.content)) {
         throw new Error("AI failed to generate meaningful content for this note.");
     }
     
@@ -120,7 +128,6 @@ export async function POST(request: NextRequest) {
         
         let validDocumentId = null;
         if (documentId) {
-             // Validate UUID format to prevent DB errors
              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
              if (uuidRegex.test(documentId)) {
                  validDocumentId = documentId;
@@ -134,7 +141,7 @@ export async function POST(request: NextRequest) {
                 user_id: user.id, 
                 title: generatedNote.title.trim() || `${noteTitlePrefix}`, 
                 content: generatedNote.content.trim(),
-                document_id: validDocumentId // Link to document if valid
+                document_id: validDocumentId
             } 
         });
     } catch (dbError: any) {
@@ -151,8 +158,6 @@ export async function POST(request: NextRequest) {
         console.error("CRITICAL DEBUG: Failed to update AI usage count AFTER saving note:", usageError);
     }
 
-    // 8. Return Success
-    // FIX: Included noteId in data so frontend can redirect
     return NextResponse.json<ApiResponse<{ count: number; noteId: string }>>({
         success: true,
         data: { count: 1, noteId: savedNote.id }, 
