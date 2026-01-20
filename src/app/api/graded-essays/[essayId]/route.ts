@@ -1,10 +1,8 @@
-// src/app/api/graded-essays/[essayId]/route.ts
-// (This is the new, correct path for this file)
-
+file: src/app/api/graded-essays/[essayId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { ApiResponse, GradedEssay } from '@/types/database';
+import { ApiResponse, GradedEssay, GradedEssayFeedback, GenericJsonValue } from '@/types/database'; // Added imports
 import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
@@ -41,7 +39,8 @@ export async function GET(
         ...essay,
         essay_title: essay.essay_title || null,
         rubric_or_criteria: essay.rubric_or_criteria || null,
-        feedback: essay.feedback || null,
+        // FIX: Double-cast to unknown, then to your custom type to satisfy TypeScript
+        feedback: (essay.feedback as unknown as GradedEssayFeedback | GenericJsonValue) || null,
         score: essay.score || null,
         graded_at: essay.graded_at?.toISOString() || '',
     };
