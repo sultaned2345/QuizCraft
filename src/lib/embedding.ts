@@ -167,14 +167,35 @@ export async function generateEmbeddingsForContent(
         throw new Error(`Mismatch: ${textChunks.length} chunks vs ${allEmbeddings.length} embeddings.`);
     }
 
-    // 3. Prepare data for Prisma
-    const embeddingsToSave = allEmbeddings.map((embedding, index) => ({
-      user_id: userId,
-      content_id: contentId,
-      content_type: contentType,
-      content_chunk: textChunks[index],
-      embedding: embedding.values, // This is the vector
-    }));
+    // 3. Prepare raw insert operations
+    // We cannot use createMany with Unsupported("vector") types in Prisma.
+    // We must use executeRaw and cast the vector string properly.
+    const insertOperations = allEmbeddings.map((embedding, index) => {
+      const chunkText = textChunks[index];
+      // Format array as string: "[0.123, 0.456, ...]"
+      const vectorString = `[${embedding.values.join(',')}]`;
+      
+      return prisma.$executeRaw`
+        INSERT INTO "content_embeddings" (
+          "id", 
+          "user_id", 
+          "content_id", 
+          "content_type", 
+          "content_chunk", 
+          "embedding", 
+          "created_at"
+        )
+        VALUES (
+          gen_random_uuid(), 
+          ${userId}::uuid, 
+          ${contentId}::uuid, 
+          ${contentType}, 
+          ${chunkText}, 
+          ${vectorString}::vector, 
+          now()
+        )
+      `;
+    });
 
     // 4. Delete old embeddings and save new ones in a transaction
     await prisma.$transaction([
@@ -185,10 +206,8 @@ export async function generateEmbeddingsForContent(
                 user_id: userId
             }
         }),
-        // Create new chunks
-        prisma.content_embeddings.createMany({
-            data: embeddingsToSave
-        })
+        // Execute individual raw inserts
+        ...insertOperations
     ]);
 
     console.log(`Successfully generated and saved ${allEmbeddings.length} embeddings for ${contentType} ${contentId}.`);
