@@ -1,6 +1,7 @@
+// src/app/api/flashcards/[flashcardId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth, validateRequestBody } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { ApiResponse, UpdateFlashcardData, Flashcard } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
@@ -91,15 +92,18 @@ export async function PUT(
             data: updates,
         });
 
-        // FIX: Convert Date objects to strings to match Flashcard interface
+        // 5. Transform Prisma result (Date objects) to API Interface (strings)
+        // This fixes the build error: "Type 'Date | null' is not assignable to type 'string'"
+        const formattedFlashcard: Flashcard = {
+            ...updatedFlashcard,
+            created_at: updatedFlashcard.created_at?.toISOString() ?? new Date().toISOString(),
+            updated_at: updatedFlashcard.updated_at?.toISOString() ?? new Date().toISOString(),
+            review_at: updatedFlashcard.review_at?.toISOString() ?? null,
+        };
+
         return NextResponse.json<ApiResponse<Flashcard>>({
             success: true,
-            data: {
-                ...updatedFlashcard,
-                created_at: updatedFlashcard.created_at?.toISOString() || '',
-                updated_at: updatedFlashcard.updated_at?.toISOString() || '',
-                review_at: updatedFlashcard.review_at?.toISOString() || null,
-            },
+            data: formattedFlashcard,
             message: 'Flashcard updated successfully.',
         });
 
@@ -124,7 +128,7 @@ export async function PUT(
     }
 }
 
-// --- DELETE Handler: Delete a flashcard ---
+// --- DELETE Handler: Delete a flashcard (Unchanged) ---
 export async function DELETE(
     request: NextRequest,
     { params }: { params: { flashcardId: string } }
