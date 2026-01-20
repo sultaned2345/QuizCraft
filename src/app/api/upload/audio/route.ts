@@ -77,7 +77,8 @@ export async function POST(req: Request) {
     }
 
     // 6. Create Record in 'documents' table
-    // FIX: Cast insertion object to 'any' to resolve "parameter of type never" build error
+    // We use 'as any' on insert to bypass strict input typing, 
+    // but this causes the result 'docData' to be inferred as 'never'.
     const { data: docData, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
@@ -98,7 +99,8 @@ export async function POST(req: Request) {
     // 7. Success Response
     return NextResponse.json({ 
       success: true, 
-      documentId: docData.id,
+      // FIX: Cast docData to any to allow access to .id
+      documentId: (docData as any)?.id,
       preview: transcriptionText.substring(0, 100)
     });
 
