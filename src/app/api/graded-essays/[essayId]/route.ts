@@ -1,4 +1,3 @@
-file: src/app/api/graded-essays/[essayId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
