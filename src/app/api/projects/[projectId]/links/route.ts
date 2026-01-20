@@ -1,9 +1,9 @@
-// src/app/api/projects/[projectId]/links/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client'; // <--- ADD THIS IMPORT
 import { requireAuth } from '@/lib/auth';
 import { ApiResponse, ProjectContentLink } from '@/types/database';
-import { ProjectContentDetails } from '@/types/database'; // Import the specific type for the response
+import { ProjectContentDetails } from '@/types/database';
 
 export const runtime = 'nodejs';
 
@@ -53,8 +53,9 @@ export async function POST(
           contentItem = { id: doc.id, title: doc.file_name, desc: doc.ai_summary, type: 'document' };
         break;
       case 'quiz':
+        // Note: Using 'userId' here as per your schema fix
         const quiz = await prisma.quiz.findFirst({
-          where: { id: contentId, userId: user.id }, // Note: 'userId'
+          where: { id: contentId, userId: user.id }, 
           select: { id: true, title: true, _count: { select: { questions: true } } },
         });
         if (quiz)
@@ -113,6 +114,8 @@ export async function POST(
   } catch (error: any) {
     if (error instanceof Response) return error;
     console.error(`[API /api/projects/links/POST] Error:`, error);
+    
+    // Now this check will work correctly
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
        return NextResponse.json<ApiResponse>(
         { success: false, error: 'This item is already in the project.' },
