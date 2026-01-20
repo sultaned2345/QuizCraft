@@ -1,4 +1,3 @@
-file: src/app/api/knowledge-graph/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthenticatedUser } from "@/lib/auth"; // Changed import to use the direct function name
