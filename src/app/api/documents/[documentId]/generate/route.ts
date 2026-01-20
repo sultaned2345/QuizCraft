@@ -24,12 +24,10 @@ export async function POST(
     const { documentId } = params;
 
     // 1. Fetch Document
-    // FIX: Model is 'documents' (plural), not 'document'
     const document = await prisma.documents.findUnique({
       where: { id: documentId },
     });
 
-    // FIX: Field is 'extracted_text', not 'extractedText'
     if (!document || !document.extracted_text) {
       return NextResponse.json(
         { error: "Document not found or has no text content." },
@@ -38,12 +36,10 @@ export async function POST(
     }
 
     // 2. Check Ownership
-    // FIX: Field is 'user_id', not 'userId'
     if (document.user_id !== session.user.id) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    // FIX: Document uses 'file_name', not 'title'
     const docTitle = document.file_name; 
     const docText = document.extracted_text;
 
@@ -52,13 +48,13 @@ export async function POST(
     // 3. Run All Generators in Parallel
     const results = await Promise.allSettled([
       // A. Quiz
-      generateQuizFromContent(docText, docTitle).then(
+      // FIX: Removed 'docTitle' argument which caused the type error.
+      generateQuizFromContent(docText).then(
         async (qData) => {
           if (!qData) return null;
-          // FIX: Model 'Quiz' exists (capitalized in schema), but property is 'quiz'
           return prisma.quiz.create({
             data: {
-              title: qData.title,
+              title: `${docTitle} Quiz`, // Apply document title here
               user_id: session.user.id, 
               document_id: document.id,
               questions: { create: qData.questions },
@@ -71,13 +67,11 @@ export async function POST(
       generateFlashcardsFromContent(docText).then(
         async (fData) => {
           if (!fData) return null;
-          // FIX: Model is 'flashcard_decks'
           return prisma.flashcard_decks.create({
             data: {
               title: `${docTitle} Flashcards`,
               user_id: session.user.id,
               document_id: document.id,
-              // FIX: Relation is 'flashcards', not 'cards'
               flashcards: { create: fData },
             },
           });
@@ -87,7 +81,6 @@ export async function POST(
       // C. Notes
       generateNotesFromContent(docText).then(async (nContent) => {
         if (!nContent) return null;
-        // FIX: Model is 'notes' (plural)
         return prisma.notes.create({
           data: {
             title: `${docTitle} Summary`,
@@ -98,7 +91,7 @@ export async function POST(
         });
       }),
 
-      // D. Podcast (The New Feature)
+      // D. Podcast
       generatePodcastForDocument(
         docText,
         docTitle,
