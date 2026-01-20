@@ -44,7 +44,6 @@ export async function GET(
 
         return NextResponse.json<ApiResponse<AIDocumentInsights | null>>({
             success: true,
-            // FIX: Cast to 'unknown' first to satisfy TypeScript compiler
             data: (document.ai_insights as unknown as AIDocumentInsights) || null,
         });
 
@@ -77,6 +76,11 @@ export async function POST(
         // 2. Call AI Service
         const insights = await callAIToGenerateInsights(document.extracted_text);
 
+        // FIX: Handle potential null return from AI service
+        if (!insights) {
+             return NextResponse.json<ApiResponse>({ success: false, error: 'Failed to generate insights from AI.' }, { status: 500 });
+        }
+
         // 3. Save to DB
         await prisma.documents.update({
             where: { id: documentId },
@@ -85,7 +89,7 @@ export async function POST(
 
         return NextResponse.json<ApiResponse<AIDocumentInsights>>({
             success: true,
-            data: insights
+            data: insights // TypeScript should now be happy as we checked !insights
         });
 
     } catch (error: any) {
