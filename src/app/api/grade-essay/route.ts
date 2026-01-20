@@ -214,7 +214,8 @@ export async function POST(request: NextRequest) {
                  essay_title: essayTitle?.trim() || `Graded Essay - ${new Date().toLocaleDateString()}`,
                  essay_content: essayText,
                  rubric_or_criteria: rubricText,
-                 feedback: aiResult.feedback as Prisma.JsonObject,
+                 // FIX: Double-cast to unknown first to satisfy Prisma type check
+                 feedback: aiResult.feedback as unknown as Prisma.JsonObject,
                  score: aiResult.score,
              },
              select: { id: true, graded_at: true }
