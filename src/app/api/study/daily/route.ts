@@ -6,17 +6,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   // Pass the request to the auth helper
-  const session = await getUserSession(request);
+  const user = await getUserSession(request);
   
-  if (!session) return new NextResponse("Unauthorized", { status: 401 });
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
   
-  // Handle different return types from auth helpers (User object vs Session object)
-  // If getUserSession returns a User directly (like getAuthenticatedUser), handle that.
-  // If it returns { user: ... }, handle that. 
-  // Based on the existing code 'session.user.id', it expects a Session object.
-  const userId = session.user?.id || (session as any).id;
-
-  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+  // FIX: getUserSession returns the User object directly, so we access .id directly
+  const userId = user.id;
 
   const now = new Date();
 
