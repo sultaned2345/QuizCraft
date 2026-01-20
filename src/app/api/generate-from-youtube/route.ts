@@ -91,13 +91,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Proceed with Quiz Generation
-    // Note: We use the existing 'callAIToGenerateQuiz' from aiGeneration.ts
     const quizData = await callAIToGenerateQuiz(
       transcriptText,
       10, // numQuestions
       'medium', // difficulty
       'MIXED' // questionType
     );
+
+    // FIX: Check if quizData is null before accessing properties
+    if (!quizData) {
+        return NextResponse.json<ApiResponse>(
+            { success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz from transcript.' },
+            { status: 500 }
+        );
+    }
 
     // 5. Save quiz to database
     const questionsToCreate = quizData.questions.map((q: any) => ({
