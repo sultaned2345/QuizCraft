@@ -55,7 +55,13 @@ export async function GET(
             title: deck.title,
             created_at: deck.created_at?.toISOString() || '',
             updated_at: deck.updated_at?.toISOString() || '',
-            flashcards: deck.flashcards,
+            // Fix: Map over flashcards to convert Date objects to strings
+            flashcards: deck.flashcards.map(card => ({
+                ...card,
+                created_at: card.created_at ? card.created_at.toISOString() : '',
+                updated_at: card.updated_at ? card.updated_at.toISOString() : '',
+                review_at: card.review_at ? card.review_at.toISOString() : null,
+            })),
             cardCount: deck.flashcards.length, // Count included cards
             cardLimit: cardLimit, // Add limit info to response
         };
