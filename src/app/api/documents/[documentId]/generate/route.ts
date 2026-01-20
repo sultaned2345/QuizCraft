@@ -24,11 +24,13 @@ export async function POST(
     const { documentId } = params;
 
     // 1. Fetch Document
-    const document = await prisma.document.findUnique({
+    // FIX: Model is 'documents' (plural), not 'document'
+    const document = await prisma.documents.findUnique({
       where: { id: documentId },
     });
 
-    if (!document || !document.extractedText) {
+    // FIX: Field is 'extracted_text', not 'extractedText'
+    if (!document || !document.extracted_text) {
       return NextResponse.json(
         { error: "Document not found or has no text content." },
         { status: 404 }
@@ -36,18 +38,24 @@ export async function POST(
     }
 
     // 2. Check Ownership
-    if (document.userId !== session.user.id) {
+    // FIX: Field is 'user_id', not 'userId'
+    if (document.user_id !== session.user.id) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    console.log(`🚀 Starting Full Generation for: ${document.title}`);
+    // FIX: Document uses 'file_name', not 'title'
+    const docTitle = document.file_name; 
+    const docText = document.extracted_text;
+
+    console.log(`🚀 Starting Full Generation for: ${docTitle}`);
 
     // 3. Run All Generators in Parallel
     const results = await Promise.allSettled([
       // A. Quiz
-      generateQuizFromContent(document.extractedText, document.title).then(
+      generateQuizFromContent(docText, docTitle).then(
         async (qData) => {
           if (!qData) return null;
+          // FIX: Model 'Quiz' exists (capitalized in schema), but property is 'quiz'
           return prisma.quiz.create({
             data: {
               title: qData.title,
@@ -60,26 +68,29 @@ export async function POST(
       ),
 
       // B. Flashcards
-      generateFlashcardsFromContent(document.extractedText).then(
+      generateFlashcardsFromContent(docText).then(
         async (fData) => {
           if (!fData) return null;
-          return prisma.flashcardDeck.create({
+          // FIX: Model is 'flashcard_decks'
+          return prisma.flashcard_decks.create({
             data: {
-              title: `${document.title} Flashcards`,
+              title: `${docTitle} Flashcards`,
               user_id: session.user.id,
               document_id: document.id,
-              cards: { create: fData },
+              // FIX: Relation is 'flashcards', not 'cards'
+              flashcards: { create: fData },
             },
           });
         }
       ),
 
       // C. Notes
-      generateNotesFromContent(document.extractedText).then(async (nContent) => {
+      generateNotesFromContent(docText).then(async (nContent) => {
         if (!nContent) return null;
-        return prisma.note.create({
+        // FIX: Model is 'notes' (plural)
+        return prisma.notes.create({
           data: {
-            title: `${document.title} Summary`,
+            title: `${docTitle} Summary`,
             content: nContent,
             user_id: session.user.id,
             document_id: document.id,
@@ -89,8 +100,8 @@ export async function POST(
 
       // D. Podcast (The New Feature)
       generatePodcastForDocument(
-        document.extractedText,
-        document.title,
+        docText,
+        docTitle,
         session.user.id,
         document.id,
         "document"
