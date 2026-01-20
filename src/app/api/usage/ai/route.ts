@@ -22,21 +22,25 @@ export async function GET(request: NextRequest) {
         // Use the existing check function to get current count and limit
         const usageCheck = await checkAIGenerationUsageLimit(user.id);
 
+        // FIX: Ensure limit is defined before using it in math operations
+        // defaulting to 0 or 5 is safe for calculation purposes to prevent build error
+        const limit = usageCheck.limit ?? 5; 
+
         let remaining: number | typeof Infinity;
-        if (usageCheck.limit === Infinity) {
+        if (limit === Infinity) {
             remaining = Infinity;
         } else if (usageCheck.currentCount !== undefined) {
-            remaining = Math.max(0, usageCheck.limit - usageCheck.currentCount);
+            remaining = Math.max(0, limit - usageCheck.currentCount);
         } else {
             // If count is undefined (e.g., error during fetch), assume limit remains
-            remaining = usageCheck.limit;
+            remaining = limit;
         }
 
         const responseData: AIUsageStatus = {
             currentCount: usageCheck.currentCount,
-            limit: usageCheck.limit,
+            limit: limit,
             remaining: remaining,
-            isPro: usageCheck.limit === Infinity, // Determine if user is Pro based on limit
+            isPro: limit === Infinity, // Determine if user is Pro based on limit
         };
 
         return NextResponse.json<ApiResponse<AIUsageStatus>>({
