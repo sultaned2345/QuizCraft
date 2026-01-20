@@ -97,6 +97,12 @@ export async function POST(request: NextRequest) {
 
         // 5. Call AI (Using Shared Library)
         const generatedCards = await callAIToGenerateFlashcards(sourceText.trim(), numberOfCards);
+
+        // FIX: Added null check for generatedCards
+        if (!generatedCards || generatedCards.length === 0) {
+             return NextResponse.json<ApiResponse>({ success: false, error: 'AI failed to generate valid flashcards.' }, { status: 500 });
+        }
+
         const actualGeneratedCount = generatedCards.length;
 
         // 6. Save to DB
