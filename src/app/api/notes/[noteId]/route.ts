@@ -1,4 +1,3 @@
-// src/app/api/notes/[noteId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -32,13 +31,14 @@ export async function GET(
             return NextResponse.json<ApiResponse>({ success: false, error: 'Note not found or access denied.' }, { status: 404 });
         }
 
-        // Serialize dates
+        // Serialize dates safely handling nulls
         const responseNote: Note = {
             ...note,
             tags: note.tags || [],
-            linked_note_ids: note.linked_note_ids || [], // Add this line
-            created_at: note.created_at.toISOString(),
-            updated_at: note.updated_at.toISOString(),
+            linked_note_ids: note.linked_note_ids || [],
+            // FIX: Handle nullable dates from Prisma
+            created_at: note.created_at ? note.created_at.toISOString() : new Date().toISOString(),
+            updated_at: note.updated_at ? note.updated_at.toISOString() : new Date().toISOString(),
         };
 
         return NextResponse.json<ApiResponse<Note>>({
