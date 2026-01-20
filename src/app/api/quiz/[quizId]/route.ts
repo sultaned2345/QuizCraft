@@ -1,8 +1,7 @@
-// src/app/api/quiz/[quizId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { Question, Quiz, ApiResponse } from '@/types/database';
+import { Question, Quiz, ApiResponse, QuestionType } from '@/types/database';
 import { Prisma } from '@prisma/client';
 
 // --- GET HANDLER ---
@@ -15,7 +14,6 @@ export async function GET(
     const user = await requireAuth(request);
     const { quizId } = params;
 
-    // FIX: Explicitly check for "null" string or undefined to prevent 500 crashes
     if (!quizId || quizId === 'null' || quizId === 'undefined') {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Quiz ID is missing or invalid.' },
@@ -25,20 +23,20 @@ export async function GET(
 
     // 2. Define the shape the client (page.tsx) expects
     interface QuizData {
-      quiz: Omit<Quiz, 'questions'>; // Quiz data *without* the nested questions
-      questions: Question[]; // Questions as a separate top-level array
+      quiz: Omit<Quiz, 'questions'>;
+      questions: Question[];
     }
 
-    // 3. Fetch the quiz and its questions, ensuring user ownership
+    // 3. Fetch the quiz and its questions
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: quizId,
-        userId: user.id, // RLS also protects, but this is explicit
+        userId: user.id,
       },
       include: {
         questions: {
           orderBy: {
-            createdAt: 'asc', // Ensure consistent question order
+            createdAt: 'asc',
           },
         },
       },
@@ -51,55 +49,48 @@ export async function GET(
       );
     }
 
-    // 4. Separate the quiz data from the questions to match client expectation
+    // 4. Separate and Map Data
     const { questions, ...quizData } = quiz;
 
-    // 5. Format the data for the client, ensuring types are correct
+    // FIX: Manually map Prisma fields (camelCase) to Interface (snake_case)
+    const formattedQuiz: Quiz = {
+      id: quizData.id,
+      user_id: quizData.userId || '', // Prisma: userId -> Interface: user_id
+      title: quizData.title,
+      share_link: quizData.share_link || null,
+      created_at: quizData.createdAt?.toISOString() || new Date().toISOString(), // Prisma: createdAt -> Interface: created_at
+      is_public: quizData.is_public || false,
+      immediate_feedback: quizData.immediate_feedback || true,
+      time_limit_minutes: quizData.time_limit_minutes || null,
+    };
+
+    const formattedQuestions: Question[] = questions.map((q) => ({
+      id: q.id,
+      quiz_id: q.quiz_id || '',
+      question_text: q.question_text,
+      question_type: q.question_type as QuestionType,
+      options: q.options || [],
+      prompts: q.prompts || [],
+      correct_answer: q.correct_answer,
+      explanation: q.explanation || null,
+      created_at: q.createdAt?.toISOString() || new Date().toISOString(),
+    }));
+
+    // 5. Construct Final Response
     const responseData: QuizData = {
-      quiz: {
-        ...quizData,
-        // Serialize dates and ensure nulls
-        share_link: quizData.share_link || null,
-        time_limit_minutes: quizData.time_limit_minutes || null,
-        created_at: quizData.createdAt?.toISOString() || '',
-      } as Quiz, 
-      questions: questions.map((q) => ({
-        ...q,
-        // Ensure options/prompts are null if undefined, and serialize dates
-        options: q.options || null,
-        prompts: q.prompts || null,
-        explanation: q.explanation || null,
-        created_at: q.createdAt?.toISOString() || '',
-      })),
-    };
-    
-    // The types in database.ts use snake_case (created_at), 
-    // but Prisma returns camelCase (createdAt). Let's fix the mapping.
-    const finalQuizData: Quiz = {
-        id: quizData.id,
-        user_id: quizData.userId!,
-        title: quizData.title,
-        share_link: quizData.share_link || null,
-        created_at: quizData.createdAt?.toISOString() || '',
-        is_public: quizData.is_public || false,
-        immediate_feedback: quizData.immediate_feedback || true,
-        time_limit_minutes: quizData.time_limit_minutes || null,
-    };
-    
-    const finalResponseData: QuizData = {
-        quiz: finalQuizData,
-        questions: responseData.questions
+      quiz: formattedQuiz,
+      questions: formattedQuestions,
     };
 
     return NextResponse.json<ApiResponse<QuizData>>({
       success: true,
-      data: finalResponseData,
+      data: responseData,
     });
+
   } catch (error: any) {
-    if (error instanceof Response) return error; // Auth error
+    if (error instanceof Response) return error;
     console.error(`Error fetching quiz ${params.quizId}:`, error);
 
-    // Handle Prisma errors regarding invalid UUIDs
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === 'P2023' || error.code === '22P02')
@@ -126,7 +117,6 @@ export async function PUT(
     const user = await requireAuth(request);
     const { quizId } = params;
 
-    // Expect a body with title and an array of questions
     const body = await request.json();
     const { title, questions } = body as {
       title: string;
@@ -146,7 +136,6 @@ export async function PUT(
       );
     }
 
-    // --- Verify Ownership ---
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: quizId,
@@ -162,7 +151,6 @@ export async function PUT(
       );
     }
 
-    // --- Prepare Question data for creation ---
     const questionsToCreate: Prisma.questionsCreateManyInput[] = questions.map(
       (q) => ({
         question_text: q.question_text,
@@ -171,52 +159,43 @@ export async function PUT(
         options: q.options || Prisma.JsonNull,
         prompts: q.prompts || Prisma.JsonNull,
         explanation: q.explanation || '',
-        // quiz_id will be set by the nested createMany
+        quiz_id: quizId,
       })
     );
 
-    // --- Database Transaction ---
     const transaction = await prisma.$transaction([
-      // 1. Update the quiz title
       prisma.quiz.update({
         where: { id: quizId },
-        data: {
-          title: title.trim(),
-        },
+        data: { title: title.trim() },
       }),
-
-      // 2. Delete all existing questions for this quiz
       prisma.questions.deleteMany({
         where: { quiz_id: quizId },
       }),
-
-      // 3. Create all the new questions
       prisma.questions.createMany({
-        data: questionsToCreate.map((q) => ({
-          ...q,
-          quiz_id: quizId,
-        })),
+        data: questionsToCreate,
       }),
     ]);
 
     const updatedQuiz = transaction[0];
 
+    // Map response safely
+    const finalQuiz: Quiz = {
+      id: updatedQuiz.id,
+      user_id: updatedQuiz.userId || '',
+      title: updatedQuiz.title,
+      share_link: updatedQuiz.share_link || null,
+      created_at: updatedQuiz.createdAt?.toISOString() || new Date().toISOString(),
+      is_public: updatedQuiz.is_public || false,
+      immediate_feedback: updatedQuiz.immediate_feedback || true,
+      time_limit_minutes: updatedQuiz.time_limit_minutes || null,
+    };
+
     return NextResponse.json<ApiResponse<Quiz>>({
       success: true,
-      data: {
-        ...updatedQuiz,
-        user_id: updatedQuiz.userId!,
-        share_link: updatedQuiz.share_link || null,
-        created_at: updatedQuiz.createdAt?.toISOString() || '',
-        is_public: updatedQuiz.is_public || false,
-        immediate_feedback: updatedQuiz.immediate_feedback || true,
-        time_limit_minutes: updatedQuiz.time_limit_minutes || null,
-      },
+      data: finalQuiz,
     });
   } catch (error) {
-    if (error instanceof Response) {
-      return error;
-    }
+    if (error instanceof Response) return error;
     console.error('Error updating quiz:', error);
 
     if (error instanceof Prisma.PrismaClientValidationError) {
@@ -249,11 +228,10 @@ export async function DELETE(
       );
     }
 
-    // --- Secure Deletion using Prisma ---
     const deleteResult = await prisma.quiz.deleteMany({
       where: {
         id: quizId,
-        userId: user.id, // Ensures user can only delete their own quizzes
+        userId: user.id,
       },
     });
 
@@ -269,10 +247,7 @@ export async function DELETE(
       message: 'Quiz deleted successfully.',
     });
   } catch (error) {
-    if (error instanceof Response) {
-      return error;
-    }
-
+    if (error instanceof Response) return error;
     console.error('Error deleting quiz:', error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
