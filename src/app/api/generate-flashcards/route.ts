@@ -16,28 +16,28 @@ async function updateAIUsage(userId: string, month: Date, count: number = 1) {
     const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1)).toISOString().split('T')[0];
     const supabase = supabaseAdmin; 
     try {
-        // FIX: Cast 'ai_usage' to any to bypass missing type definition in Database interface
-        const { data: currentUsage, error: fetchError } = await supabase
-            .from('ai_usage' as any)
+        // FIX: Cast the query builder to 'any' to completely bypass strict typing for this unknown table
+        const { data: currentUsage, error: fetchError } = await (supabase
+            .from('ai_usage' as any) as any)
             .select('usage_count')
             .eq('user_id', userId)
             .eq('usage_month', firstDayOfMonth)
-            .maybeSingle() as { data: { usage_count: number } | null, error: any };
+            .maybeSingle();
 
         if (fetchError && fetchError.code !== 'PGRST116') throw new Error(`Failed fetching usage: ${fetchError.message}`);
         
         const currentCount = currentUsage?.usage_count ?? 0;
         const newCount = currentCount + count;
         
-        // FIX: Cast 'ai_usage' to any for upsert as well
-        const { error: upsertError } = await supabase
-            .from('ai_usage' as any)
+        // FIX: Cast the query builder to 'any' here as well for upsert
+        const { error: upsertError } = await (supabase
+            .from('ai_usage' as any) as any)
             .upsert({ 
                 user_id: userId, 
                 usage_month: firstDayOfMonth, 
                 usage_count: newCount, 
                 updated_at: new Date().toISOString(), 
-            }, { onConflict: 'user_id, usage_month' } as any);
+            }, { onConflict: 'user_id, usage_month' });
 
         if (upsertError) throw new Error(`Failed upserting usage: ${upsertError.message}`);
     } catch (error) { console.error(`[Admin] Error updating AI usage:`, error); }
