@@ -48,14 +48,14 @@ export async function POST(
     // 3. Run All Generators in Parallel
     const results = await Promise.allSettled([
       // A. Quiz
-      // FIX: Removed 'docTitle' argument which caused the type error.
       generateQuizFromContent(docText).then(
         async (qData) => {
           if (!qData) return null;
           return prisma.quiz.create({
             data: {
-              title: `${docTitle} Quiz`, // Apply document title here
-              user_id: session.user.id, 
+              title: `${docTitle} Quiz`,
+              // FIX: Schema uses 'userId' for Quiz model, not 'user_id'
+              userId: session.user.id, 
               document_id: document.id,
               questions: { create: qData.questions },
             },
