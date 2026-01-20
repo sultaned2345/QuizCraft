@@ -44,7 +44,8 @@ export async function GET(
 
         return NextResponse.json<ApiResponse<AIDocumentInsights | null>>({
             success: true,
-            data: (document.ai_insights as AIDocumentInsights) || null,
+            // FIX: Cast to 'unknown' first to satisfy TypeScript compiler
+            data: (document.ai_insights as unknown as AIDocumentInsights) || null,
         });
 
     } catch (error: any) {
@@ -79,7 +80,7 @@ export async function POST(
         // 3. Save to DB
         await prisma.documents.update({
             where: { id: documentId },
-            data: { ai_insights: insights as Prisma.JsonObject }
+            data: { ai_insights: insights as unknown as Prisma.JsonObject }
         });
 
         return NextResponse.json<ApiResponse<AIDocumentInsights>>({
