@@ -40,6 +40,7 @@ model profiles {
   generation_jobs    generation_jobs[]
   recordings         recordings[]
   study_sessions     study_sessions[]
+  podcasts           Podcast[]
 
   @@map("profiles")
   @@schema("public")
@@ -111,6 +112,7 @@ model documents {
   
   // Chat Context
   chats           chat_history[]
+  podcasts        Podcast[]
 
   @@map("documents")
   @@schema("public")
@@ -219,6 +221,7 @@ model notes {
   // Relationships
   profile  profiles   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notes_user_id_fkey")
   document documents? @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  podcasts Podcast[]
 
   @@map("notes")
   @@schema("public")
