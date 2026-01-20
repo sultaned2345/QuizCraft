@@ -1,5 +1,5 @@
 // src/lib/embedding.ts
-import { GoogleGenerativeAI } from "@google/generative-ai"; 
+import { GoogleGenerativeAI, TaskType } from "@google/generative-ai"; 
 import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from './supabaseAdmin';
 
@@ -154,7 +154,8 @@ export async function generateEmbeddingsForContent(
             requests: batch.map(chunk => ({
                 // FIX: Added role: 'user' to meet Content interface requirements
                 content: { role: 'user', parts: [{ text: chunk }] }, 
-                taskType: "RETRIEVAL_DOCUMENT"
+                // FIX: Use Enum instead of string literal
+                taskType: TaskType.RETRIEVAL_DOCUMENT
             }))
         });
         if (result.embeddings) {
@@ -208,7 +209,8 @@ export async function generateQueryEmbedding(text: string): Promise<number[]> {
     const result = await model.embedContent({
         // FIX: Added role: 'user' here as well for consistency
         content: { role: 'user', parts: [{ text }] },
-        taskType: "RETRIEVAL_QUERY"
+        // FIX: Use Enum instead of string literal
+        taskType: TaskType.RETRIEVAL_QUERY
     });
     
     return result.embedding.values;
