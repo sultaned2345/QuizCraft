@@ -1,9 +1,8 @@
-// src/app/api/generation-jobs/process/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { 
-  generateNotesFromContent,      // Ensure these match your aiGeneration.ts exports
+  generateNotesFromContent,
   generateFlashcardsFromContent, 
   generateQuizFromContent, 
   generatePodcastForDocument     
@@ -93,8 +92,9 @@ export async function POST(req: NextRequest) {
       }
 
       case 'quiz': {
-        // Passing title/filename to helper if needed
-        const quizResult = await generateQuizFromContent(text, fileName);
+        // Fix: Removed 'fileName' argument. The function expects (content, numQuestions, ...).
+        // Filename is used for the title fallback below anyway.
+        const quizResult = await generateQuizFromContent(text);
         
         if (!quizResult || !quizResult.questions || quizResult.questions.length === 0) {
             throw new Error("AI generated 0 questions.");
