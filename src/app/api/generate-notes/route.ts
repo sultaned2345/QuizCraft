@@ -96,7 +96,6 @@ export async function POST(request: NextRequest) {
     }
 
     const incrementCount = 1;
-    // FIX: Added explicit undefined checks for usage.limit
     const isLimitDefined = usage.limit !== undefined && usage.limit !== Infinity;
     const isOverLimit = isLimitDefined && 
                         usage.currentCount !== undefined && 
@@ -115,9 +114,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Generate with AI
-    const generatedNote = await callAIToGenerateNote(sourceContent.trim());
+    // FIX: callAIToGenerateNote returns a string (the content) directly, or has a different signature.
+    // Assuming it returns the generated markdown string based on the error.
+    const generatedContent = await callAIToGenerateNote(sourceContent.trim());
     
-    if (!generatedNote || !isContentMeaningful(generatedNote.content)) {
+    // FIX: Check generatedContent directly
+    if (!generatedContent || !isContentMeaningful(generatedContent)) {
         throw new Error("AI failed to generate meaningful content for this note.");
     }
     
@@ -136,11 +138,19 @@ export async function POST(request: NextRequest) {
              }
         }
 
+        // FIX: Use 'generatedContent' for content. For title, extract from content or use default.
+        // A simple heuristic for title: first line if it starts with #, else default.
+        let noteTitle = noteTitlePrefix;
+        const lines = generatedContent.split('\n');
+        if (lines.length > 0 && lines[0].startsWith('# ')) {
+             noteTitle = lines[0].substring(2).trim();
+        }
+
         savedNote = await prisma.notes.create({ 
             data: { 
                 user_id: user.id, 
-                title: generatedNote.title.trim() || `${noteTitlePrefix}`, 
-                content: generatedNote.content.trim(),
+                title: noteTitle.substring(0, 255), // Ensure title fits
+                content: generatedContent.trim(),
                 document_id: validDocumentId
             } 
         });
