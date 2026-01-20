@@ -58,7 +58,7 @@ export async function getSmartStudyQueue(userId: string) {
     }).catch(() => []); // Safety catch
 
     const flashcardItems: StudyQueueItem[] = (decksWithDueCards || []).map((deck) => ({
-      type: "flashcard_due",
+      type: "flashcard_due" as const, // FIX: Use as const to match literal type
       id: deck.id,
       title: deck.title,
       dueCount: deck.flashcards?.length || 0,
@@ -87,11 +87,11 @@ export async function getSmartStudyQueue(userId: string) {
         return percentage < 70;
       })
       .map((attempt) => ({
-        type: "low_score_quiz",
+        type: "low_score_quiz" as const, // FIX: Use as const to match literal type
         id: attempt.id,
         title: attempt.quiz?.title || "Untitled Quiz",
         score: Math.round((attempt.score / attempt.total) * 100),
-        quizId: attempt.quiz?.id,
+        quizId: attempt.quiz?.id || "", // FIX: Ensure quizId is a string, not undefined
       }))
       .slice(0, 3);
 
