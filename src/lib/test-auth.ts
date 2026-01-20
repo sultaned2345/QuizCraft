@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 // Test utility to verify authentication flow
 // This can be used in browser console to test API calls
 
