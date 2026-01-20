@@ -11,10 +11,9 @@ type ReviewQuality = 'again' | 'good' | 'easy';
 
 interface ReviewRequestBody {
   quality: ReviewQuality;
-  isCramming?: boolean; // --- 1. ADD isCramming flag ---
+  isCramming?: boolean;
 }
 
-// (calculateNextReview helper function is unchanged)
 function calculateNextReview(
   quality: ReviewQuality,
   oldEaseFactor: number,
@@ -75,27 +74,30 @@ export async function POST(
         try { body = await request.json(); } 
         catch (e) { return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON body.' }, { status: 400 }); }
 
-        // --- 2. DESTRUCTURE isCramming ---
         const { quality, isCramming } = body;
         if (!['again', 'good', 'easy'].includes(quality)) {
              return NextResponse.json<ApiResponse>({ success: false, error: "Invalid review quality. Must be 'again', 'good', or 'easy'." }, { status: 400 });
         }
         
-        // --- 3. CHECK CRAM FLAG ---
-        // If cramming, don't update stats. Just return success.
+        // --- CHECK CRAM FLAG ---
         if (isCramming) {
+            // Fix: Convert Date objects to strings to match Flashcard interface
             return NextResponse.json<ApiResponse<Flashcard>>({
                 success: true,
-                data: card, // Return the original card data
+                data: {
+                    ...card,
+                    created_at: card.created_at?.toISOString() || '',
+                    updated_at: card.updated_at?.toISOString() || '',
+                    review_at: card.review_at?.toISOString() || null,
+                },
                 message: 'Flashcard review acknowledged (cram mode).',
             });
         }
-        // --- (End of modification) ---
         
         const { newEaseFactor, nextReviewDate } = calculateNextReview(
             quality,
             card.ease_factor || 2.5,
-            0 // Repetitions not used here
+            0 
         );
 
         const updatedFlashcard = await prisma.flashcards.update({
@@ -108,9 +110,15 @@ export async function POST(
             },
         });
 
+        // Fix: Convert Date objects to strings here as well
         return NextResponse.json<ApiResponse<Flashcard>>({
             success: true,
-            data: updatedFlashcard,
+            data: {
+                ...updatedFlashcard,
+                created_at: updatedFlashcard.created_at?.toISOString() || '',
+                updated_at: updatedFlashcard.updated_at?.toISOString() || '',
+                review_at: updatedFlashcard.review_at?.toISOString() || null,
+            },
             message: 'Flashcard review status updated.',
         });
 
