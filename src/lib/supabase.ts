@@ -55,7 +55,9 @@ export const supabaseHelpers = {
       // --- END MODIFICATION ---
     }
     const plan = (data as any).subscription_plan === 'pro' ? 'pro' : 'free';
-    return { ...data, subscription_plan: plan } as User & {
+    
+    // FIX: Cast data to 'any' to avoid "Spread types may only be created from object types" error
+    return { ...(data as any), subscription_plan: plan } as User & {
       subscription_plan: 'free' | 'pro';
     };
   },
@@ -156,9 +158,4 @@ export const supabaseHelpers = {
     handleSupabaseError(error, `fetching notes for user ${userId}`);
     return data || [];
   },
-
-  // --- REMOVED ALL AI USAGE FUNCTIONS ---
-  // async getAIGenerationCount(...)
-  // async getAIGenerationUsageForMonth(...)
-  // async incrementAIGenerationUsage(...)
 };
