@@ -1,12 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
+
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const session = await getUserSession();
+export async function GET(request: NextRequest) {
+  // Pass the request to the auth helper
+  const session = await getUserSession(request);
+  
   if (!session) return new NextResponse("Unauthorized", { status: 401 });
-  const userId = session.user.id;
+  
+  // Handle different return types from auth helpers (User object vs Session object)
+  // If getUserSession returns a User directly (like getAuthenticatedUser), handle that.
+  // If it returns { user: ... }, handle that. 
+  // Based on the existing code 'session.user.id', it expects a Session object.
+  const userId = session.user?.id || (session as any).id;
+
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
   const now = new Date();
 
@@ -24,7 +34,7 @@ export async function GET() {
   const weakAttempts = await prisma.quiz_attempts.findMany({
     where: {
       user_id: userId,
-      score: { lt: 60 }, // Assuming score is percentage, adjust logic if raw score
+      score: { lt: 60 },
     },
     orderBy: { created_at: 'desc' },
     take: 3,
