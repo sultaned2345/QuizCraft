@@ -16,6 +16,14 @@ export interface StudySuggestion {
   reason: string;
 }
 
+// Define the expected shape of the RPC response
+interface RelatedContentMatch {
+  content_type: 'note' | 'document';
+  content_id: string;
+  content_title: string;
+  similarity: number;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -82,14 +90,14 @@ export async function GET(request: NextRequest) {
             const embedding = await generateQueryEmbedding(contentToEmbed);
 
             // Call our RPC function
-            // FIX: Added "as any" to args to bypass strict type checking if definition is missing
+            // FIX: Added explicit casting to return type to prevent 'never' type error
             const { data: relatedItems, error: rpcError } = await supabaseAdmin.rpc('match_related_content', {
                 query_embedding: embedding,
                 match_threshold: 0.7,
                 match_count: 1,
                 p_user_id: user.id,
                 exclude_content_id: quizWithQuestions.id
-            } as any);
+            } as any) as { data: RelatedContentMatch[] | null, error: any };
 
             if (rpcError) throw rpcError;
 
