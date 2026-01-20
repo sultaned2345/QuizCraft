@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthenticatedUser } from "@/lib/auth"; // Changed import to use the direct function name
+import { getAuthenticatedUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  // FIX: Pass 'request' to the auth helper
   const user = await getAuthenticatedUser(request);
   
-  // FIX: Check 'user' directly (getAuthenticatedUser returns User | null, not { user: ... })
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const userId = user.id;
 
   // 1. Fetch Nodes (Documents, Notes, Quizzes)
+  // Note: Schema inconsistency - 'documents' and 'notes' use 'user_id', but 'Quiz' uses 'userId'
   const [docs, notes, quizzes] = await Promise.all([
     prisma.documents.findMany({ where: { user_id: userId }, select: { id: true, file_name: true } }),
     prisma.notes.findMany({ where: { user_id: userId }, select: { id: true, title: true } }),
-    // FIX: Changed 'userId' to 'user_id' to match standard Supabase/Prisma schema naming
-    prisma.quiz.findMany({ where: { user_id: userId }, select: { id: true, title: true } }),
+    prisma.quiz.findMany({ where: { userId: userId }, select: { id: true, title: true } }),
   ]);
 
   const nodes = [
@@ -28,7 +26,6 @@ export async function GET(request: NextRequest) {
   ];
 
   // 2. Fetch Edges (Semantic Similarity)
-  // This query finds pairs of content with high cosine similarity (> 0.8)
   const similarityThreshold = 0.8;
   
   try {
@@ -45,7 +42,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ nodes, links });
   } catch (error) {
     console.error("Error fetching knowledge graph links:", error);
-    // Return nodes even if links fail (e.g. if pgvector is missing)
     return NextResponse.json({ nodes, links: [] });
   }
 }
