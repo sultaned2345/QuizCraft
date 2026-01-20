@@ -152,7 +152,8 @@ export async function generateEmbeddingsForContent(
         const batch = textChunks.slice(i, i + BATCH_SIZE);
         const result = await model.batchEmbedContents({
             requests: batch.map(chunk => ({
-                content: { parts: [{ text: chunk }] },
+                // FIX: Added role: 'user' to meet Content interface requirements
+                content: { role: 'user', parts: [{ text: chunk }] }, 
                 taskType: "RETRIEVAL_DOCUMENT"
             }))
         });
@@ -205,7 +206,8 @@ export async function generateQueryEmbedding(text: string): Promise<number[]> {
     
     const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
     const result = await model.embedContent({
-        content: { parts: [{ text }] },
+        // FIX: Added role: 'user' here as well for consistency
+        content: { role: 'user', parts: [{ text }] },
         taskType: "RETRIEVAL_QUERY"
     });
     
