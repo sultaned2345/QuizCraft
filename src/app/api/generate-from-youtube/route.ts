@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       'MIXED' // questionType
     );
 
-    // FIX: Check if quizData is null before accessing properties
+    // FIX: Check if quizData is null
     if (!quizData) {
         return NextResponse.json<ApiResponse>(
             { success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz from transcript.' },
@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
       explanation: q.explanation || '',
     }));
 
+    // FIX: Removed 'select' to get full object, enabling proper mapping
     const savedQuiz = await prisma.quiz.create({
       data: {
         title: quizData.title || 'Quiz from YouTube Video',
@@ -126,19 +127,27 @@ export async function POST(request: NextRequest) {
           create: questionsToCreate,
         },
       },
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-      },
     });
 
     // 6. Increment usage
     await incrementAIGenerationUsage(user.id, 1);
 
+    // FIX: Manually map Prisma result to Quiz interface
+    const responseQuiz: Quiz = {
+      id: savedQuiz.id,
+      user_id: savedQuiz.userId!, // Non-null assertion as we just created it with user.id
+      title: savedQuiz.title,
+      share_link: savedQuiz.share_link,
+      created_at: savedQuiz.createdAt ? savedQuiz.createdAt.toISOString() : new Date().toISOString(),
+      is_public: savedQuiz.is_public ?? false,
+      immediate_feedback: savedQuiz.immediate_feedback ?? true,
+      time_limit_minutes: savedQuiz.time_limit_minutes,
+      questions: [], // We didn't include questions in the return, which is optional in the interface
+    };
+
     return NextResponse.json<ApiResponse<Quiz>>({
       success: true,
-      data: savedQuiz as Quiz,
+      data: responseQuiz,
     });
 
   } catch (error: any) {
