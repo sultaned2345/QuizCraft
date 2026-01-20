@@ -135,6 +135,31 @@ model recordings {
 
 // --- OUTPUT TOOLS (Quizzes, Notes, Flashcards) ---
 
+// ... existing models ...
+
+model Podcast {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  
+  title       String
+  audioUrl    String    @map("audio_url")
+  transcript  Json?     // Stores the structured script (speaker/text segments)
+  
+  // Links to source content
+  documentId  String?   @map("document_id") @db.Uuid
+  noteId      String?   @map("note_id") @db.Uuid
+  
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relationships
+  profile   profiles   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document  documents? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  note      notes?     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@map("podcasts")
+  @@schema("public")
+}
+
 model Quiz {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId             String?   @map("user_id") @db.Uuid
