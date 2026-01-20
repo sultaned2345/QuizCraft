@@ -65,6 +65,11 @@ export async function POST(request: NextRequest) {
     // 3. Call AI (Using Shared Library)
     const quizData = await callAIToGenerateQuiz(text, numQuestions, difficulty, questionType);
 
+    // FIX: Check if quizData is null
+    if (!quizData) {
+        return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
+    }
+
     // 4. Save to DB
     const questionsToCreate = quizData.questions.map((q) => ({
       question_text: q.question_text,
