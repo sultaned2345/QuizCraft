@@ -4,7 +4,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, FileText, Loader2, Sparkles, FolderPlus } from 'lucide-react';
+import { UploadCloud, FileText, Loader2, BookOpen, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -37,16 +37,14 @@ export default function UploadPage() {
       const documentId = uploadData.id || uploadData.documentId;
       const fileName = file.name.split('.').slice(0, -1).join('.');
 
-      // 2. Create a "Project" for this file (Turbo Mode)
-      // We assume you have an endpoint for creating projects. 
-      // If not, you might need to rely on the backend doing this or create a simple API route.
+      // 2. Create a "Project"
       const projectRes = await fetch('/api/projects/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           title: fileName || "New Study Project",
-          description: "Auto-generated from Turbo Upload",
-          initialDocumentId: documentId // Optional: Tell backend to link this doc
+          description: "Auto-generated from Upload",
+          initialDocumentId: documentId
         })
       });
 
@@ -55,20 +53,15 @@ export default function UploadPage() {
         const projectData = await projectRes.json();
         projectId = projectData.id;
       } else {
-        // Fallback: If project creation fails (or API doesn't exist yet), 
-        // we might just redirect to the document study page.
-        // But for "One Big File" feel, we really want a Project.
         console.warn("Could not create project object, defaulting to document view");
       }
 
-      toast({ title: "Turbo Initialized", description: "Building your workspace..." });
+      toast({ title: "Success", description: "Preparing your study space..." });
 
       // 3. Redirect
       if (projectId) {
-        // Pass 'turbo=true' and 'docId' so the project page knows to start generation
         router.push(`/projects/${projectId}?turbo=true&docId=${documentId}`);
       } else {
-        // Fallback to the study hub we built before
         router.push(`/study/${documentId}`);
       }
 
@@ -87,63 +80,92 @@ export default function UploadPage() {
   });
 
   return (
-    <div className="container max-w-5xl mx-auto py-12 min-h-[85vh] flex flex-col items-center justify-center">
-      <div className="text-center space-y-6 mb-12">
-        <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-in fade-in slide-in-from-bottom-4 duration-1000">
-          TURBO WORKSPACE
+    <div className="container max-w-4xl mx-auto py-16 min-h-[85vh] flex flex-col items-center justify-center animate-in fade-in duration-700">
+      
+      {/* Header Section */}
+      <div className="text-center space-y-4 mb-10">
+        <div className="flex justify-center mb-4">
+          <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+            <BookOpen className="w-6 h-6" />
+          </div>
+        </div>
+        <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-foreground">
+          Upload Material
         </h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Upload a file to generate a complete <strong>Project</strong>. <br/>
-          Includes: Quiz, Podcast, Notes, Chat, and Flashcards in one view.
+        <p className="text-lg text-muted-foreground max-w-xl mx-auto font-serif leading-relaxed">
+          Drop your PDF or notes here. We'll organize them into a project with quizzes, summaries, and flashcards.
         </p>
       </div>
 
+      {/* Upload Card */}
       <Card
         {...getRootProps()}
         className={cn(
-          "relative w-full max-w-3xl h-[400px] border-2 border-dashed rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all duration-500 overflow-hidden group bg-background/50 backdrop-blur-sm",
-          isDragActive ? "border-indigo-500 bg-indigo-500/5 scale-[1.01] shadow-2xl shadow-indigo-500/20" : "border-muted-foreground/20 hover:border-indigo-500/50 hover:bg-muted/30",
+          "relative w-full max-w-2xl h-[350px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm",
+          isDragActive 
+            ? "border-secondary bg-secondary/5 scale-[1.01] shadow-xl" 
+            : "border-border hover:border-primary/50 hover:bg-muted/30",
           isUploading ? "pointer-events-none" : ""
         )}
       >
         <input {...getInputProps()} />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col items-center space-y-8 p-8 text-center transition-all duration-300">
+        {/* Subtle texture overlay */}
+        <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col items-center space-y-6 p-8 text-center">
           {isUploading ? (
-            <div className="flex flex-col items-center gap-4">
-               <div className="relative w-24 h-24">
-                  <div className="absolute inset-0 border-t-4 border-indigo-500 rounded-full animate-spin" />
-                  <div className="absolute inset-2 border-b-4 border-purple-500 rounded-full animate-spin direction-reverse" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <FolderPlus className="w-8 h-8 text-indigo-500 animate-pulse" />
-                  </div>
+            <div className="flex flex-col items-center gap-6">
+               <div className="relative w-20 h-20 flex items-center justify-center">
+                  <Loader2 className="w-12 h-12 text-primary animate-spin" />
                </div>
-               <div className="space-y-1">
-                 <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500">
-                   Creating Project...
+               <div className="space-y-2">
+                 <h3 className="text-xl font-serif font-semibold text-foreground">
+                   Analyzing content...
                  </h3>
-                 <p className="text-muted-foreground">Synthesizing AI assets</p>
+                 <p className="text-muted-foreground font-sans text-sm">
+                   Creating your personalized study guide.
+                 </p>
                </div>
             </div>
           ) : (
             <>
-              <div className={cn("p-8 rounded-full bg-muted/50 transition-transform duration-300", isDragActive ? "scale-110 bg-indigo-500/10" : "group-hover:scale-105")}>
-                <UploadCloud className={cn("w-16 h-16 transition-colors", isDragActive ? "text-indigo-500" : "text-muted-foreground group-hover:text-indigo-500")} />
+              <div className={cn(
+                "p-6 rounded-full transition-all duration-300", 
+                isDragActive ? "bg-secondary/20 text-secondary" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+              )}>
+                <UploadCloud className="w-10 h-10" />
               </div>
+              
               <div className="space-y-2">
-                <h3 className="text-3xl font-bold tracking-tight">Drop Source File</h3>
-                <p className="text-base text-muted-foreground">
-                  PDF or TXT (Max 10MB)
+                <h3 className="text-2xl font-serif font-semibold text-foreground">
+                  {isDragActive ? "Drop file now" : "Click or drag file"}
+                </h3>
+                <p className="text-sm text-muted-foreground font-sans max-w-xs mx-auto">
+                  Supports PDF or TXT (Max 10MB)
                 </p>
               </div>
-              <Button size="lg" className="mt-4 rounded-full px-8 font-bold shadow-lg shadow-indigo-500/20">
-                Select File
+
+              <Button 
+                variant={isDragActive ? "secondary" : "default"}
+                className={cn(
+                  "mt-4 min-w-[150px] font-sans transition-all",
+                  isDragActive ? "bg-secondary hover:bg-secondary/90 text-secondary-foreground" : ""
+                )}
+              >
+                Select Document
               </Button>
             </>
           )}
         </div>
       </Card>
+      
+      {/* Footer / Helper Text */}
+      <div className="mt-8 flex items-center gap-2 text-sm text-muted-foreground/60">
+        <Sparkles className="w-4 h-4" />
+        <span>AI-Powered Analysis</span>
+      </div>
+
     </div>
   );
 }

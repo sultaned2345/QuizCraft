@@ -1,63 +1,133 @@
+// src/components/dashboard/WelcomeHero.tsx
 'use client';
 
+import { useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { Sparkles, Zap, Battery, ShieldCheck } from 'lucide-react';
+import { Zap, Settings2, Eye, EyeOff, Quote, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 
 interface WelcomeHeroProps {
   user: User | null;
-  streak?: number; // Added streak prop
+  streak?: number;
 }
 
 export function WelcomeHero({ user, streak = 0 }: WelcomeHeroProps) {
+  const [showStreak, setShowStreak] = useState(true);
+  const [showQuote, setShowQuote] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
+
   const date = new Date();
   const hour = date.getHours();
   
-  let greeting = 'Systems Online';
-  if (hour < 12) greeting = 'Good Morning';
-  else if (hour < 18) greeting = 'Good Afternoon';
-  else greeting = 'Good Evening';
+  let greeting = 'Hello';
+  if (hour < 12) greeting = 'Good morning';
+  else if (hour < 18) greeting = 'Good afternoon';
+  else greeting = 'Good evening';
 
-  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Operative';
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Friend';
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-card/50 via-card/30 to-transparent p-8 backdrop-blur-xl group">
-      {/* Background Decorative Glow */}
-      <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/20 blur-[100px] group-hover:bg-primary/30 transition-colors duration-500" />
+    <div 
+      className={`
+        relative overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm transition-all duration-500
+        ${compactMode ? 'p-6' : 'p-8 md:p-10'}
+      `}
+    >
+      {/* Warm Background Wash (using your Primary - Baked Clay) */}
+      <div className="absolute top-0 right-0 -mt-24 -mr-24 h-96 w-96 rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
       
-      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500 text-xs font-mono tracking-wider">
-              <ShieldCheck className="w-3 h-3" />
-              <span>SECURE CONN</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-mono tracking-wider">
-              <Battery className="w-3 h-3" />
-              <span>OPTIMAL</span>
-            </div>
-          </div>
-          
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-2">
-            {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-400">{firstName}</span>.
+      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-6">
+        <div className="flex-1 space-y-4">
+          {/* Greeting - Using your Serif font (Merriweather) for the cozy feel */}
+          <h1 className={`font-serif font-bold tracking-tight text-foreground transition-all duration-300 ${compactMode ? 'text-2xl' : 'text-3xl md:text-4xl'}`}>
+            {greeting}, <span className="text-primary italic">{firstName}</span>.
           </h1>
-          <p className="text-muted-foreground text-lg max-w-xl">
-            Your cognitive index is stable. Ready to resume data absorption?
-          </p>
+          
+          {/* Daily Quote */}
+          {showQuote && !compactMode && (
+            <div className="flex gap-4 max-w-xl animate-in fade-in duration-700">
+               <div className="mt-1">
+                 {/* Sage Green (Secondary) for the icon */}
+                 <Quote className="w-6 h-6 text-secondary fill-secondary/20" />
+               </div>
+               <div>
+                  <p className="text-muted-foreground text-lg italic leading-relaxed font-serif">
+                    "The beautiful thing about learning is that no one can take it away from you."
+                  </p>
+                  <p className="text-xs text-muted-foreground/60 mt-2 uppercase tracking-wider font-sans font-semibold">
+                    — B.B. King
+                  </p>
+               </div>
+            </div>
+          )}
+          
+          {!showQuote && !compactMode && (
+             <p className="text-muted-foreground text-lg font-serif italic">
+               Ready to continue your studies?
+             </p>
+          )}
         </div>
 
-        {/* Real Streak Display */}
-        <div className="hidden md:block">
-           <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors">
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center transition-all duration-300 ${streak > 0 ? 'bg-primary/20 text-primary shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-muted/20 text-muted-foreground'}`}>
-                 <Zap className={`w-5 h-5 ${streak > 0 ? 'fill-primary' : ''}`} />
+        {/* Right Side: Settings & Streak */}
+        <div className="flex flex-col items-end gap-3">
+          {/* Settings Toggle */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-full">
+                <Settings2 className="w-4 h-4" />
+                <span className="sr-only">Settings</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-serif">Dashboard View</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={showStreak} onCheckedChange={setShowStreak}>
+                <Zap className="w-4 h-4 mr-2 text-primary" /> Show Streak
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={showQuote} onCheckedChange={setShowQuote}>
+                <BookOpen className="w-4 h-4 mr-2 text-secondary" /> Daily Quote
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={compactMode} onCheckedChange={setCompactMode}>
+                {compactMode ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />} 
+                Compact Mode
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Warm Streak Display */}
+          {showStreak && (
+            <div className={`
+              flex items-center gap-3 rounded-xl border border-border bg-background/50 backdrop-blur-sm
+              ${compactMode ? 'p-2 pr-4' : 'p-3 pr-5'}
+            `}>
+              <div className={`
+                flex items-center justify-center rounded-lg transition-colors
+                ${streak > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}
+                ${compactMode ? 'h-8 w-8' : 'h-10 w-10'}
+              `}>
+                <Zap className={`fill-current ${compactMode ? 'w-4 h-4' : 'w-5 h-5'}`} />
               </div>
-              <div>
-                 <div className="text-xs text-muted-foreground font-mono uppercase">Current Streak</div>
-                 <div className="text-xl font-bold font-mono">
-                    {streak} {streak === 1 ? 'Day' : 'Days'}
-                 </div>
+              
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 font-sans">
+                  Daily Streak
+                </span>
+                <span className={`font-bold tabular-nums leading-none font-serif text-foreground ${compactMode ? 'text-lg' : 'text-xl'}`}>
+                  {streak} <span className="text-sm font-sans font-normal text-muted-foreground">days</span>
+                </span>
               </div>
-           </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -8,7 +8,7 @@ import { getHeatmapData } from "@/lib/dashboard-data";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
 import { DashboardStatsGrid } from "@/components/dashboard/DashboardStatsGrid";
-import { StudyTimer } from "@/components/dashboard/StudyTimer";
+// StudyTimer removed as requested
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -18,7 +18,6 @@ export const dynamic = "force-dynamic";
 async function getDashboardData(userId: string) {
   try {
     // 1. Safe Database Access for 'study_sessions'
-    // If table missing, fallback immediately
     const studyTimePromise = (prisma as any).study_sessions
       ? (prisma as any).study_sessions.aggregate({
           where: { user_id: userId },
@@ -49,10 +48,8 @@ async function getDashboardData(userId: string) {
       (q) => q.total > 0 && q.score / q.total >= 0.8
     ).length;
 
-    // 5. Calculate Streak (CRITICAL FIX: Ensure Array)
-    // If getHeatmapData returned undefined/null, default to []
+    // 5. Calculate Streak
     const validHeatmap = Array.isArray(heatmap) ? heatmap : [];
-    
     const sortedDates = validHeatmap
       .map((h) => h.date)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
@@ -96,33 +93,31 @@ export default async function DashboardPage() {
   const stats = await getDashboardData(user.id);
 
   return (
-    <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500">
-      {/* FIX: Removed 'user' prop as DashboardHeader fetches user via useAuth context */}
+    <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
       <DashboardHeader />
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <div className="col-span-4 flex flex-col gap-6">
-          <WelcomeHero user={user} />
-          <Suspense fallback={<Skeleton className="h-32 w-full rounded-xl" />}>
-            <DashboardStatsGrid stats={stats} />
-          </Suspense>
-        </div>
-
-        <div className="col-span-3">
-           <StudyTimer />
-        </div>
+      <div className="flex flex-col gap-6">
+        {/* Full width Hero with Streak Prop passed correctly */}
+        <WelcomeHero user={user} streak={stats.streak} />
+        
+        {/* Full width Stats Grid */}
+        <Suspense fallback={<Skeleton className="h-32 w-full rounded-xl" />}>
+          <DashboardStatsGrid stats={stats} />
+        </Suspense>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <div className="col-span-4 space-y-6">
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
+        {/* Expanded Recent Activity to take up more space since Timer is gone */}
+        <div className="col-span-full lg:col-span-2 space-y-6">
           <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
           <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
             <RecentActivity />
           </Suspense>
         </div>
 
-        <div className="col-span-3 space-y-6">
-           {/* Widgets */}
+        {/* Placeholder for future widgets or secondary stats */}
+        <div className="hidden lg:block lg:col-span-1 space-y-6">
+           {/* Future content can go here */}
         </div>
       </div>
     </div>
