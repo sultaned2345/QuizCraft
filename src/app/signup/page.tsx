@@ -23,10 +23,19 @@ function SignupForm() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   
-  const { signUp } = useAuth();
+  // Destructure signOut to clear old sessions
+  const { signUp, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  // FIX: Force logout when this page mounts to prevent session leakage
+  useEffect(() => {
+    const clearSession = async () => {
+      await signOut();
+    };
+    clearSession();
+  }, [signOut]);
 
   useEffect(() => {
     const emailParam = searchParams.get('email');
@@ -52,11 +61,16 @@ function SignupForm() {
       if (error) {
         setError(error.message || 'Failed to create an account. Please try again.');
       } else {
+        // FIX: Handle Email Verification logic vs Auto-login
         if (data.session) {
+          // If we have a session, safe to redirect
           router.push('/documents');
         } else {
-          setMessage('Account created successfully! Redirecting...');
-          setTimeout(() => router.push('/documents'), 2000);
+          // If no session (email confirm required), DO NOT redirect to protected route
+          // The old bug sent you to /documents here, which loaded the OLD user if not signed out.
+          setMessage('Account created! Please check your email to confirm your account before logging in.');
+          // Optional: redirect to login after delay
+          // setTimeout(() => router.push('/login'), 5000);
         }
       }
     } catch (err) {
