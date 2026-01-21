@@ -31,7 +31,8 @@ async function getDashboardData(userId: string) {
         orderBy: { created_at: "desc" },
         take: 10,
       }).catch(() => []),
-      prisma.decks.findMany({
+      // FIX: Changed 'prisma.decks' to 'prisma.flashcard_decks' to match schema.prisma
+      prisma.flashcard_decks.findMany({
         where: { user_id: userId },
         take: 3, 
         orderBy: { created_at: "desc" }
