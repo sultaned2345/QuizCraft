@@ -1,54 +1,48 @@
 // src/app/(app)/dashboard/page.tsx
 import { Suspense } from "react";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth"; 
-import { getHeatmapData } from "@/lib/dashboard-data";
+import { getHeatmapData, getRecentActivity } from "@/lib/dashboard-data";
 
 // Components
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
-import { DashboardStatsGrid } from "@/components/dashboard/DashboardStatsGrid";
-// StudyTimer removed as requested
-import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { QuizPerformanceChart } from "@/components/dashboard/QuizPerformanceChart";
+import { QuickUploadWidget } from "@/components/dashboard/QuickUploadWidget";
+import { SmartStudyQueue } from "@/components/dashboard/SmartStudyQueue";
+import { MissionLog } from "@/components/dashboard/MissionLog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 // --- Server-Side Data Fetching ---
 async function getDashboardData(userId: string) {
   try {
-    // 1. Safe Database Access for 'study_sessions'
-    const studyTimePromise = (prisma as any).study_sessions
-      ? (prisma as any).study_sessions.aggregate({
-          where: { user_id: userId },
-          _sum: { duration_seconds: true },
-        })
-      : Promise.resolve({ _sum: { duration_seconds: 0 } });
-
-    // 2. Fetch Data in Parallel
-    const [heatmap, studyAggregate, quizAttempts] = await Promise.all([
-      getHeatmapData(userId).catch(e => {
-         console.error("Heatmap fetch failed", e); 
-         return []; 
-      }),
-      studyTimePromise.catch(() => ({ _sum: { duration_seconds: 0 } })),
+    // 1. Fetch Core Data in Parallel
+    const [heatmap, recentActivity, quizAttempts, decks] = await Promise.all([
+      getHeatmapData(userId).catch(() => []),
+      getRecentActivity(userId).catch(() => []),
       prisma.quiz_attempts.findMany({
         where: { user_id: userId },
-        select: { score: true, total: true },
+        include: { quiz: { select: { title: true, id: true } } },
+        orderBy: { created_at: "desc" },
+        take: 10,
       }).catch(() => []),
+      prisma.decks.findMany({
+        where: { user_id: userId },
+        take: 3, 
+        orderBy: { created_at: "desc" }
+      }).catch(() => [])
     ]);
 
-    // 3. Calculate Study Hours
-    const totalSeconds = studyAggregate?._sum?.duration_seconds || 0;
+    // 2. Process Stats
+    const totalSeconds = 0; // Placeholder if study_sessions not available
     const studyHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
-    // 4. Calculate Mastered Quizzes (>80%)
-    const validAttempts = Array.isArray(quizAttempts) ? quizAttempts : [];
-    const quizzesMastered = validAttempts.filter(
-      (q) => q.total > 0 && q.score / q.total >= 0.8
-    ).length;
-
-    // 5. Calculate Streak
+    // 3. Calculate Streak
     const validHeatmap = Array.isArray(heatmap) ? heatmap : [];
     const sortedDates = validHeatmap
       .map((h) => h.date)
@@ -77,14 +71,27 @@ async function getDashboardData(userId: string) {
       }
     }
 
+    // 4. Prepare "Smart Queue" Data
+    const recentLowScores = quizAttempts.filter(q => (q.score / q.total) < 0.7).slice(0, 3);
+    const dueFlashcards = decks.map(d => ({ deck: d, id: d.id })); // Simplified "Due" logic
+
     return {
       streak,
-      studyHours,
-      quizzesMastered,
+      quizAttempts,
+      recentActivity,
+      smartQueue: {
+        recentLowScores,
+        dueFlashcards
+      }
     };
   } catch (error) {
-    console.error("CRITICAL: Failed to calculate dashboard data:", error);
-    return { streak: 0, studyHours: 0, quizzesMastered: 0 };
+    console.error("Dashboard Data Error:", error);
+    return { 
+      streak: 0, 
+      quizAttempts: [], 
+      recentActivity: [], 
+      smartQueue: { recentLowScores: [], dueFlashcards: [] } 
+    };
   }
 }
 
@@ -93,33 +100,70 @@ export default async function DashboardPage() {
   const stats = await getDashboardData(user.id);
 
   return (
-    <div className="space-y-8 p-8 pt-6 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+    <div className="min-h-screen bg-background pb-12">
       <DashboardHeader />
 
-      <div className="flex flex-col gap-6">
-        {/* Full width Hero with Streak Prop passed correctly */}
-        <WelcomeHero user={user} streak={stats.streak} />
+      <main className="container max-w-7xl mx-auto p-6 space-y-8">
         
-        {/* Full width Stats Grid */}
-        <Suspense fallback={<Skeleton className="h-32 w-full rounded-xl" />}>
-          <DashboardStatsGrid stats={stats} />
-        </Suspense>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
-        {/* Expanded Recent Activity to take up more space since Timer is gone */}
-        <div className="col-span-full lg:col-span-2 space-y-6">
-          <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
-          <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
-            <RecentActivity />
-          </Suspense>
+        {/* 1. Hero Section */}
+        <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+          <WelcomeHero user={user} streak={stats.streak} />
         </div>
 
-        {/* Placeholder for future widgets or secondary stats */}
-        <div className="hidden lg:block lg:col-span-1 space-y-6">
-           {/* Future content can go here */}
+        {/* 2. Main Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT COLUMN (Main Content) - Spans 8 cols */}
+          <div className="lg:col-span-8 space-y-8">
+            
+            {/* Quick Actions */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-serif font-bold tracking-tight">Quick Actions</h2>
+              </div>
+              <QuickUploadWidget />
+            </section>
+
+            {/* Performance Chart */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-serif font-bold tracking-tight">Performance Overview</h2>
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" asChild>
+                  <Link href="/quizzes" className="flex items-center gap-1">
+                    View All Quizzes <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </Button>
+              </div>
+              <Suspense fallback={<Skeleton className="h-[350px] w-full rounded-2xl" />}>
+                <QuizPerformanceChart attempts={stats.quizAttempts} />
+              </Suspense>
+            </section>
+          </div>
+
+          {/* RIGHT COLUMN (Sidebar) - Spans 4 cols */}
+          <div className="lg:col-span-4 space-y-8">
+            
+            {/* Smart Study Queue */}
+            <section className="space-y-4">
+              <h2 className="text-xl font-serif font-bold tracking-tight">Recommended Focus</h2>
+              <Suspense fallback={<Skeleton className="h-48 w-full rounded-2xl" />}>
+                <SmartStudyQueue data={stats.smartQueue} />
+              </Suspense>
+            </section>
+
+            {/* Mission Log / Timeline */}
+            <section className="space-y-4">
+              <h2 className="text-xl font-serif font-bold tracking-tight">Recent Activity</h2>
+              <div className="rounded-2xl border border-border bg-card/50 p-1">
+                <div className="max-h-[500px] overflow-y-auto pr-2 scrollbar-hide">
+                  <MissionLog items={stats.recentActivity} />
+                </div>
+              </div>
+            </section>
+
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
