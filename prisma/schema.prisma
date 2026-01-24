@@ -118,26 +118,9 @@ model documents {
   @@schema("public")
 }
 
-model recordings {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id     String    @db.Uuid
-  title       String
-  transcript  String    @db.Text
-  summary     String?   @db.Text
-  suggestions Json?     @db.JsonB // AI suggestions/action items
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
-
-  // Relationships
-  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@map("recordings")
-  @@schema("public")
-}
+// [FIX] Removed duplicate recordings model here. Keeping the newer definition below.
 
 // --- OUTPUT TOOLS (Quizzes, Notes, Flashcards) ---
-
-// ... existing models ...
 
 model Podcast {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -162,6 +145,7 @@ model Podcast {
   @@schema("public")
 }
 
+// [FIX] Consolidating recordings model here
 model recordings {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id      String    @db.Uuid
@@ -200,8 +184,8 @@ model Quiz {
 
   // Relationships
   questions questions[]
-  profile   profiles?       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
-  document  documents?      @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  profile   profiles?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "quizzes_user_id_fkey")
+  document  documents?  @relation(fields: [document_id], references: [id], onDelete: Cascade)
   attempts  quiz_attempts[]
 
   @@map("quizzes")
@@ -419,41 +403,41 @@ model generation_jobs {
 // ==========================================
 // These models map to the auth tables so we can reference them in foreign keys.
 model users {
-  instance_id                 String?   @db.Uuid
-  id                          String    @id @db.Uuid
-  aud                         String?   @db.VarChar(255)
-  role                        String?   @db.VarChar(255)
-  email                       String?   @db.VarChar(255)
-  encrypted_password          String?   @db.VarChar(255)
-  email_confirmed_at          DateTime? @db.Timestamptz(6)
-  invited_at                  DateTime? @db.Timestamptz(6)
-  confirmation_token          String?   @unique @db.VarChar(255)
-  confirmation_sent_at        DateTime? @db.Timestamptz(6)
-  recovery_token              String?   @unique @db.VarChar(255)
-  recovery_sent_at            DateTime? @db.Timestamptz(6)
-  email_change_token_new      String?   @unique @db.VarChar(255)
-  email_change                String?   @db.VarChar(255)
-  email_change_sent_at        DateTime? @db.Timestamptz(6)
-  last_sign_in_at             DateTime? @db.Timestamptz(6)
+  instance_id                 String?           @db.Uuid
+  id                          String            @id @db.Uuid
+  aud                         String?           @db.VarChar(255)
+  role                        String?           @db.VarChar(255)
+  email                       String?           @db.VarChar(255)
+  encrypted_password          String?           @db.VarChar(255)
+  email_confirmed_at          DateTime?         @db.Timestamptz(6)
+  invited_at                  DateTime?         @db.Timestamptz(6)
+  confirmation_token          String?           @unique @db.VarChar(255)
+  confirmation_sent_at        DateTime?         @db.Timestamptz(6)
+  recovery_token              String?           @unique @db.VarChar(255)
+  recovery_sent_at            DateTime?         @db.Timestamptz(6)
+  email_change_token_new      String?           @unique @db.VarChar(255)
+  email_change                String?           @db.VarChar(255)
+  email_change_sent_at        DateTime?         @db.Timestamptz(6)
+  last_sign_in_at             DateTime?         @db.Timestamptz(6)
   raw_app_meta_data           Json?
   raw_user_meta_data          Json?
   is_super_admin              Boolean?
-  created_at                  DateTime? @db.Timestamptz(6)
-  updated_at                  DateTime? @db.Timestamptz(6)
-  phone                       String?   @unique @db.VarChar(15)
-  phone_confirmed_at          DateTime? @db.Timestamptz(6)
-  phone_change                String?   @default("") @db.VarChar(15)
-  phone_change_token          String?   @default("") @db.VarChar(255)
-  phone_change_sent_at        DateTime? @db.Timestamptz(6)
-  confirmed_at                DateTime? @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
-  email_change_token_current  String?   @unique @default("") @db.VarChar(255)
-  email_change_confirm_status Int?      @default(0) @db.SmallInt
-  banned_until                DateTime? @db.Timestamptz(6)
-  reauthentication_token      String?   @unique @default("") @db.VarChar(255)
-  reauthentication_sent_at    DateTime? @db.Timestamptz(6)
-  is_sso_user                 Boolean   @default(false)
-  deleted_at                  DateTime? @db.Timestamptz(6)
-  is_anonymous                Boolean   @default(false)
+  created_at                  DateTime?         @db.Timestamptz(6)
+  updated_at                  DateTime?         @db.Timestamptz(6)
+  phone                       String?           @unique @db.VarChar(15)
+  phone_confirmed_at          DateTime?         @db.Timestamptz(6)
+  phone_change                String?           @default("") @db.VarChar(15)
+  phone_change_token          String?           @default("") @db.VarChar(255)
+  phone_change_sent_at        DateTime?         @db.Timestamptz(6)
+  confirmed_at                DateTime?         @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
+  email_change_token_current  String?           @unique @default("") @db.VarChar(255)
+  email_change_confirm_status Int?              @default(0) @db.SmallInt
+  banned_until                DateTime?         @db.Timestamptz(6)
+  reauthentication_token      String?           @unique @default("") @db.VarChar(255)
+  reauthentication_sent_at    DateTime?         @db.Timestamptz(6)
+  is_sso_user                 Boolean           @default(false)
+  deleted_at                  DateTime?         @db.Timestamptz(6)
+  is_anonymous                Boolean           @default(false)
 
   // Relationships
   identities      identities[]

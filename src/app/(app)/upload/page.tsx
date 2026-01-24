@@ -1,179 +1,183 @@
-// src/app/(app)/upload/page.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useDropzone } from 'react-dropzone';
-import { UploadCloud, FileText, Loader2, BookOpen, Sparkles } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { 
+  UploadCloud, 
+  Youtube, 
+  FileText, 
+  Type, 
+  ArrowRight, 
+  Loader2, 
+  Sparkles,
+  BookOpen,
+  Brain,
+  MessageSquare
+} from 'lucide-react';
+import QuickUploadWidget from '@/components/dashboard/QuickUploadWidget'; 
 
-export default function UploadPage() {
-  const [isUploading, setIsUploading] = useState(false);
+export default function NewContentPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
-
-    // Frontend limit (10MB)
-    if (file.size > 10 * 1024 * 1024) { 
-      toast({ title: "File too large", description: "Limit is 10MB.", variant: "destructive" });
-      return;
-    }
-
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      // 1. Upload the File using the Documents API (unified path)
-      const uploadRes = await fetch('/api/documents/upload', { 
-        method: 'POST', 
-        body: formData 
-      });
-
-      // Safety check for HTML error pages before parsing JSON
-      const contentType = uploadRes.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await uploadRes.text();
-        console.error("Server returned non-JSON response:", text);
-        throw new Error("Server error: Received HTML instead of JSON. Check backend logs.");
-      }
-
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
-      
-      // Accessing ID from the standard response structure in documents/upload/route.ts
-      const documentId = uploadData.data.document.id;
-      const fileName = file.name.split('.').slice(0, -1).join('.');
-
-      // 2. Create a "Project"
-      const projectRes = await fetch('/api/projects/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: fileName || "New Study Project",
-          description: "Auto-generated from Upload",
-          initialDocumentId: documentId
-        })
-      });
-
-      let projectId;
-      if (projectRes.ok) {
-        const projectData = await projectRes.json();
-        projectId = projectData.id;
-      } else {
-        console.warn("Could not create project object, defaulting to document view");
-      }
-
-      toast({ title: "Success", description: "Preparing your study space..." });
-
-      // 3. Redirect to project with turbo parameters to trigger the processing UI
-      if (projectId) {
-        router.push(`/projects/${projectId}?turbo=true&docId=${documentId}`);
-      } else {
-        router.push(`/study/${documentId}`);
-      }
-
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      setIsUploading(false);
-    }
-  }, [router, toast]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'application/pdf': ['.pdf'], 'text/plain': ['.txt'] },
-    maxFiles: 1,
-    disabled: isUploading
-  });
+  // --- HANDLER: YouTube ---
+  const handleYoutubeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!youtubeUrl.trim()) return;
+    
+    setLoading(true);
+    // Redirect to the Turbo page with the URL encoded
+    // This triggers the auto-start logic in /youtube/page.tsx
+    router.push(`/youtube?url=${encodeURIComponent(youtubeUrl)}`);
+  };
 
   return (
-    <div className="container max-w-4xl mx-auto py-16 min-h-[85vh] flex flex-col items-center justify-center animate-in fade-in duration-700">
+    <div className="container max-w-4xl py-10 space-y-8 animate-in fade-in duration-500">
       
-      <div className="text-center space-y-4 mb-10">
-        <div className="flex justify-center mb-4">
-          <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-            <BookOpen className="w-6 h-6" />
-          </div>
-        </div>
-        <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-foreground">
-          Upload Material
-        </h1>
-        <p className="text-lg text-muted-foreground max-w-xl mx-auto font-serif leading-relaxed">
-          Drop your PDF or notes here. We'll organize them into a project with quizzes, summaries, and flashcards.
+      {/* HEADER */}
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight">Add New Content</h1>
+        <p className="text-muted-foreground text-lg">
+          Import study materials to automatically generate quizzes, flashcards, and notes.
         </p>
       </div>
 
-      <Card
-        {...getRootProps()}
-        className={cn(
-          "relative w-full max-w-2xl h-[350px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm",
-          isDragActive 
-            ? "border-secondary bg-secondary/5 scale-[1.01] shadow-xl" 
-            : "border-border hover:border-primary/50 hover:bg-muted/30",
-          isUploading ? "pointer-events-none" : ""
-        )}
-      >
-        <input {...getInputProps()} />
-        <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col items-center space-y-6 p-8 text-center">
-          {isUploading ? (
-            <div className="flex flex-col items-center gap-6">
-               <div className="relative w-20 h-20 flex items-center justify-center">
-                  <Loader2 className="w-12 h-12 text-primary animate-spin" />
-               </div>
-               <div className="space-y-2">
-                 <h3 className="text-xl font-serif font-semibold text-foreground">
-                   Analyzing content...
-                 </h3>
-                 <p className="text-muted-foreground font-sans text-sm">
-                   Creating your personalized study guide.
-                 </p>
-               </div>
+      <Tabs defaultValue="youtube" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 h-16 p-1 bg-muted/50 rounded-xl">
+           <TabsTrigger value="youtube" className="rounded-lg h-14 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-red-600 transition-all">
+            <Youtube className="w-5 h-5 mr-2" />
+            <div className="flex flex-col items-start text-left">
+                <span className="font-semibold text-sm">YouTube Turbo</span>
+                <span className="text-xs text-muted-foreground font-normal">Video to Quiz</span>
             </div>
-          ) : (
-            <>
-              <div className={cn(
-                "p-6 rounded-full transition-all duration-300", 
-                isDragActive ? "bg-secondary/20 text-secondary" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-              )}>
-                <UploadCloud className="w-10 h-10" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-2xl font-serif font-semibold text-foreground">
-                  {isDragActive ? "Drop file now" : "Click or drag file"}
-                </h3>
-                <p className="text-sm text-muted-foreground font-sans max-w-xs mx-auto">
-                  Supports PDF or TXT (Max 10MB)
-                </p>
-              </div>
+          </TabsTrigger>
+          <TabsTrigger value="file" className="rounded-lg h-14 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
+            <UploadCloud className="w-5 h-5 mr-2" /> 
+            <div className="flex flex-col items-start text-left">
+                <span className="font-semibold text-sm">Upload File</span>
+                <span className="text-xs text-muted-foreground font-normal">PDF, DOCX, TXT</span>
+            </div>
+          </TabsTrigger>
+          <TabsTrigger value="text" className="rounded-lg h-14 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
+            <Type className="w-5 h-5 mr-2" />
+            <div className="flex flex-col items-start text-left">
+                <span className="font-semibold text-sm">Paste Text</span>
+                <span className="text-xs text-muted-foreground font-normal">Notes & Articles</span>
+            </div>
+          </TabsTrigger>
+        </TabsList>
 
-              <Button 
-                variant={isDragActive ? "secondary" : "default"}
-                className={cn(
-                  "mt-4 min-w-[150px] font-sans transition-all",
-                  isDragActive ? "bg-secondary hover:bg-secondary/90 text-secondary-foreground" : ""
-                )}
-              >
-                Select Document
-              </Button>
-            </>
-          )}
-        </div>
-      </Card>
-      
-      <div className="mt-8 flex items-center gap-2 text-sm text-muted-foreground/60">
-        <Sparkles className="w-4 h-4" />
-        <span>AI-Powered Analysis</span>
-      </div>
+        {/* 1. YOUTUBE TURBO TAB */}
+        <TabsContent value="youtube" className="mt-6 space-y-4">
+          <Card className="shadow-lg border-indigo-500/20 overflow-hidden relative border-t-4 border-t-red-600">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Sparkles className="w-5 h-5 text-indigo-500" />
+                Turbo Study Mode
+              </CardTitle>
+              <CardDescription className="text-base">
+                Paste a YouTube URL below. We'll watch it for you and generate a 
+                <strong> transcript, study notes, quiz, and chat bot</strong> instantly.
+              </CardDescription>
+            </CardHeader>
+            
+            <CardContent>
+              <form onSubmit={handleYoutubeSubmit} className="flex flex-col gap-6 py-2">
+                <div className="space-y-3">
+                  <Label htmlFor="youtube-url" className="text-base">YouTube Video Link</Label>
+                  <div className="relative">
+                    <Input 
+                      id="youtube-url" 
+                      placeholder="https://www.youtube.com/watch?v=..." 
+                      className="h-14 text-lg pl-12 shadow-sm"
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                    />
+                    <Youtube className="absolute left-4 top-4 h-6 w-6 text-muted-foreground" />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                   <Button 
+                     size="lg" 
+                     className="bg-red-600 hover:bg-red-700 text-white w-full sm:w-auto h-12 px-8 text-base shadow-md hover:shadow-xl transition-all"
+                     disabled={loading || !youtubeUrl}
+                   >
+                     {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Sparkles className="mr-2 h-5 w-5 fill-yellow-400 text-yellow-100" />}
+                     Start Turbo Mode
+                   </Button>
+                </div>
+              </form>
+            </CardContent>
+
+            {/* Feature List Footer */}
+            <div className="bg-muted/30 p-6 border-t grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground bg-background/50 p-3 rounded-lg border">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full"><FileText className="w-4 h-4 text-blue-600 dark:text-blue-400"/></div>
+                    <span>Full Transcript</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground bg-background/50 p-3 rounded-lg border">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full"><Brain className="w-4 h-4 text-green-600 dark:text-green-400"/></div>
+                    <span>AI Quiz Generation</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground bg-background/50 p-3 rounded-lg border">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-full"><MessageSquare className="w-4 h-4 text-purple-600 dark:text-purple-400"/></div>
+                    <span>Interactive Chat</span>
+                </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* 2. FILE UPLOAD TAB */}
+        <TabsContent value="file" className="mt-6">
+          <Card className="border-dashed border-2 shadow-sm bg-muted/5">
+            <CardHeader>
+              <CardTitle>Upload Documents</CardTitle>
+              <CardDescription>
+                Upload your course materials. We support PDF, DOCX, and TXT files up to 10MB.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <QuickUploadWidget />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 3. PASTE TEXT TAB */}
+        <TabsContent value="text" className="mt-6">
+           <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle>Paste Raw Text</CardTitle>
+                <CardDescription>
+                    Have notes on your clipboard? Create a new Note to analyze them.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex flex-col items-center justify-center py-12 space-y-6 text-center border-2 border-dashed rounded-xl bg-muted/5 hover:bg-muted/10 transition-colors">
+                    <div className="p-4 bg-primary/10 rounded-full">
+                        <BookOpen className="w-8 h-8 text-primary" />
+                    </div>
+                    <div className="max-w-sm space-y-2">
+                        <h3 className="font-semibold text-lg">Create a New Note</h3>
+                        <p className="text-muted-foreground text-sm">
+                            Go to the notes editor to paste your content, format it, and generate quizzes directly from there.
+                        </p>
+                    </div>
+                    <Button onClick={() => router.push('/notes/new')} size="lg" className="mt-4">
+                        Open Notes Editor <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                </div>
+            </CardContent>
+           </Card>
+        </TabsContent>
+
+      </Tabs>
     </div>
   );
 }

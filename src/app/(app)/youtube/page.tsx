@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ function getYoutubeId(url: string) {
 
 export default function YouTubeTurboPage() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   
   // -- UI State --
   const [url, setUrl] = useState('');
@@ -47,9 +49,19 @@ export default function YouTubeTurboPage() {
   const [chatHistory, setChatHistory] = useState<Array<{role: string, content: string}>>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
-  // 1. START ANALYSIS
-  const handleStart = async () => {
-    const id = getYoutubeId(url);
+  // 1. AUTO-START EFFECT
+  useEffect(() => {
+    const paramUrl = searchParams.get('url');
+    if (paramUrl && !activeVideoId) {
+      setUrl(paramUrl);
+      // Small delay to ensure state is set before triggering UI changes
+      setTimeout(() => startAnalysis(paramUrl), 100);
+    }
+  }, [searchParams]);
+
+  // 2. CORE ANALYSIS LOGIC
+  const startAnalysis = async (videoUrl: string) => {
+    const id = getYoutubeId(videoUrl);
     if (!id) {
         toast({ variant: "destructive", title: "Invalid URL", description: "Please enter a valid YouTube link." });
         return;
@@ -69,14 +81,14 @@ export default function YouTubeTurboPage() {
     try {
       const res = await fetch('/api/youtube/turbo', {
         method: 'POST',
-        body: JSON.stringify({ videoUrl: url }),
+        body: JSON.stringify({ videoUrl }),
       });
       const json = await res.json();
       
       if (!json.success) throw new Error(json.error || json.message);
       
-      // Populate Data
-      setTranscript(json.data.transcript || json.data.fullText); // Handle potentially different field names
+      // Populate Data (Handle potential backend naming variations)
+      setTranscript(json.data.transcript || json.data.fullText);
       setNotes(json.data.notes);
       setQuiz(json.data.quiz);
       setFlashcards(json.data.flashcards);
@@ -84,12 +96,15 @@ export default function YouTubeTurboPage() {
       toast({ title: "Analysis Complete", description: "All study materials are ready!" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
+      // Optional: reset video if it failed completely, or keep it so user can watch anyway
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 2. CHAT HANDLER
+  const handleStartClick = () => startAnalysis(url);
+
+  // 3. CHAT HANDLER
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !transcript) return;
     
@@ -143,7 +158,7 @@ export default function YouTubeTurboPage() {
             onChange={(e) => setUrl(e.target.value)}
             className="border-0 focus-visible:ring-0 px-6 h-12 text-lg bg-transparent"
           />
-          <Button size="lg" onClick={handleStart} className="rounded-full h-12 px-8 bg-indigo-600 hover:bg-indigo-700 transition-all">
+          <Button size="lg" onClick={handleStartClick} className="rounded-full h-12 px-8 bg-indigo-600 hover:bg-indigo-700 transition-all">
             <Play className="w-5 h-5 mr-2 fill-current" /> Start
           </Button>
         </div>
