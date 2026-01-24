@@ -1,210 +1,169 @@
-// src/app/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  BookOpen, 
-  Clock, 
-  Target, 
-  Brain, 
-  Users, 
-  Award, 
-  Sparkles, 
-  CheckCircle2, 
-  Star, 
-  Zap, 
-  ArrowRight, 
-  Leaf, 
-  BarChart3, 
-  ChevronDown, 
-  Heart, 
-  Shield, 
-  Pause, 
-  Timer, 
-  Flame, 
-  TrendingUp, 
-  Lightbulb, 
-  GraduationCap, 
-  Coffee, 
-  Headphones, 
+import { Button } from "@/components/ui/button";
+import { AnimatedCounter } from "@/components/landing/animated-counter";
+import { FeatureTab } from "@/components/landing/feature-tab";
+import {
+  BookOpen,
+  Clock,
+  Target,
+  Brain,
+  Users,
+  Award,
+  Sparkles,
+  CheckCircle2,
+  Star,
+  Zap,
+  ArrowRight,
+  Leaf,
+  BarChart3,
+  ChevronDown,
+  Heart,
+  Shield,
+  Pause,
+  Timer,
+  Flame,
+  TrendingUp,
+  Lightbulb,
+  GraduationCap,
+  Coffee,
+  Headphones,
   Trophy,
-  FileText,
-  PenTool
 } from "lucide-react";
 
-// --- CUSTOM COMPONENTS ---
-import { Button } from "@/components/ui/button";
-import { LandingHeader } from "@/components/LandingHeader";
-import { Footer } from "@/components/Footer";
-import { AuroraBackground } from "@/components/landing/AuroraBackground";
-import { BentoGrid } from "@/components/landing/BentoGrid";
-import { FoxMascot } from "@/components/FoxMascot";
-import { AnimatedCounter } from "@/components/landing/animated-counter";
-import { FeatureTab } from "@/components/landing/feature-tab"; // Ensure this file exists as per your upload
-import CookieConsent from "@/components/CookieConsent";
-
-// --- TYPES & DATA ---
-
-const FAQS = [
-  {
-    q: "Is QuizCraft free to use?",
-    a: "Yes! QuizCraft offers a generous free tier with core features like basic quiz generation and flashcards. Premium plans unlock AI essay grading, unlimited file uploads, and advanced analytics.",
-  },
-  {
-    q: "How does the AI generation work?",
-    a: "We use Gemini 1.5 Pro to analyze your uploaded documents (PDFs, PPTs) or text. It identifies key concepts, definitions, and relationships to generate exam-style questions and spaced-repetition flashcards.",
-  },
-  {
-    q: "Can I upload handwritten notes?",
-    a: "Currently, we support digital text (PDF, Word, PowerPoint). OCR for handwritten notes is in our roadmap for the next major update!",
-  },
-  {
-    q: "Is there a student discount?",
-    a: "Absolutely! Students with a valid .edu email address automatically receive 50% off all premium subscriptions.",
-  },
-];
-
 export default function LandingPage() {
-  // --- STATE FOR INTERACTIVE FEATURES ---
   const [activeFeature, setActiveFeature] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Auto-rotate the feature tabs
   useEffect(() => {
     if (!isPlaying) return;
     const timer = setInterval(() => {
       setActiveFeature((prev) => (prev + 1) % 4);
-    }, 5000);
+    }, 4000);
     return () => clearInterval(timer);
   }, [isPlaying]);
 
-  // --- FEATURE TABS CONTENT ---
   const features = [
-    {
-      icon: Brain,
-      label: "AI Quizzes",
-      title: "Instant Exam Generation",
-      description: "Upload any PDF and get a test-ready quiz in seconds. Multiple choice, true/false, and short answer.",
-      preview: (
-        <div className="flex flex-col h-full bg-card rounded-xl overflow-hidden border border-border/50 relative">
-          <div className="bg-muted/50 p-4 border-b flex justify-between items-center">
-            <span className="text-xs font-mono text-muted-foreground">generating_quiz.exe</span>
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-              <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-              <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
-            </div>
-          </div>
-          <div className="p-6 space-y-4">
-             <div className="flex gap-3 items-start animate-fade-in">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                   <Sparkles className="w-4 h-4 text-primary" />
-                </div>
-                <div className="space-y-2 w-full">
-                   <div className="h-4 bg-muted rounded w-3/4" />
-                   <div className="h-4 bg-muted rounded w-1/2" />
-                </div>
-             </div>
-             <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 ml-11">
-                <p className="text-sm font-medium text-primary mb-2">Question 1: What is the powerhouse of the cell?</p>
-                <div className="space-y-2">
-                   {['Nucleus', 'Mitochondria', 'Ribosome'].map((opt, i) => (
-                      <div key={i} className={`p-2 rounded border text-xs ${i === 1 ? 'bg-green-500/10 border-green-500/50 text-green-700 dark:text-green-400' : 'bg-background border-border'}`}>
-                         {opt}
-                         {i === 1 && <CheckCircle2 className="w-3 h-3 inline ml-2" />}
-                      </div>
-                   ))}
-                </div>
-             </div>
-          </div>
-        </div>
-      ),
-    },
     {
       icon: Clock,
       label: "Focus Timer",
-      title: "Deep Work Sessions",
+      title: "Deep work sessions",
       description: "Pomodoro-style timers that adapt to your natural rhythm. Take breaks when you need them.",
       preview: (
-        <div className="flex flex-col items-center justify-center h-full py-8 bg-gradient-to-br from-card to-muted/20">
+        <div className="flex flex-col items-center justify-center h-full py-8">
           <span className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Current Session</span>
-          <div className="font-variant-numeric text-7xl font-bold text-foreground mb-2 tabular-nums tracking-tight">24:38</div>
-          <div className="text-sm text-primary mb-6 font-medium bg-primary/10 px-3 py-1 rounded-full">Biology Chapter 12</div>
-          <div className="flex gap-4">
-            <button className="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-all hover:scale-105">
-              <Pause className="h-6 w-6" />
+          <div className="font-serif text-7xl text-foreground mb-2">24:38</div>
+          <div className="text-sm text-secondary mb-6">Biology Chapter 12</div>
+          <div className="flex gap-3">
+            <button className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors">
+              <Pause className="h-5 w-5 text-primary" />
             </button>
-            <button className="h-14 w-14 rounded-full bg-card border border-border shadow-sm flex items-center justify-center hover:bg-muted transition-colors">
-              <Timer className="h-6 w-6 text-muted-foreground" />
+            <button className="h-12 w-12 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
+              <Timer className="h-5 w-5 text-muted-foreground" />
             </button>
+          </div>
+          <div className="mt-6 flex gap-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className={`h-2 w-12 rounded-full ${i <= 3 ? "bg-primary" : "bg-muted"}`} />
+            ))}
           </div>
         </div>
       ),
     },
     {
-      icon: FileText,
+      icon: Brain,
       label: "Flashcards",
-      title: "Smarter Memorization",
+      title: "Smarter memorization",
       description: "AI-powered spaced repetition that knows what you need to review and when.",
       preview: (
-        <div className="relative h-full flex items-center justify-center py-8 perspective-1000">
-          <div className="absolute w-64 h-44 rounded-2xl bg-muted border border-border/50 -rotate-6 -translate-x-4 translate-y-2 shadow-sm" />
-          <div className="absolute w-64 h-44 rounded-2xl bg-muted/80 border border-border/50 rotate-3 translate-x-2 -translate-y-1 shadow-sm" />
-          <motion.div 
-            initial={{ rotateY: 0 }}
-            animate={{ rotateY: [0, 180, 180, 0] }}
-            transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
-            className="relative w-72 h-48 rounded-2xl bg-card border border-primary/20 shadow-xl p-6 flex flex-col justify-between backface-hidden transform-style-3d"
-          >
-            <div className="text-xs text-muted-foreground flex justify-between">
-               <span>Front</span>
-               <Brain className="w-4 h-4 text-primary" />
+        <div className="relative h-full flex items-center justify-center py-8">
+          <div className="absolute w-64 h-40 rounded-2xl bg-muted -rotate-6 -translate-x-4 translate-y-2" />
+          <div className="absolute w-64 h-40 rounded-2xl bg-muted/70 rotate-3 translate-x-2 -translate-y-1" />
+          <div className="relative w-72 h-44 rounded-2xl bg-card border border-border/60 shadow-lg p-6 flex flex-col justify-between">
+            <div className="text-xs text-muted-foreground">Tap to flip</div>
+            <div className="font-serif text-xl text-foreground text-center">What is the mitochondria?</div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-secondary">Biology</span>
+              <div className="flex gap-1">
+                <div className="h-2 w-2 rounded-full bg-secondary" />
+                <div className="h-2 w-2 rounded-full bg-secondary" />
+                <div className="h-2 w-2 rounded-full bg-muted" />
+              </div>
             </div>
-            <div className="text-xl font-medium text-center text-foreground mt-4">
-               Quantum Entanglement
-            </div>
-            <div className="text-xs text-center text-muted-foreground mt-8">Tap to flip</div>
-          </motion.div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icon: Target,
+      label: "Goals",
+      title: "Track your progress",
+      description: "Set intentions and watch your consistency grow without pressure or guilt.",
+      preview: (
+        <div className="p-6 h-full">
+          <div className="flex items-center justify-between mb-6">
+            <span className="font-serif text-lg text-foreground">This Week</span>
+            <span className="text-sm text-secondary">85% complete</span>
+          </div>
+          <div className="space-y-4">
+            {[
+              { label: "Study 20 hours", progress: 90, color: "primary" },
+              { label: "Review 100 cards", progress: 75, color: "secondary" },
+              { label: "Complete 5 chapters", progress: 80, color: "primary" },
+            ].map((goal, i) => (
+              <div key={i}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-foreground">{goal.label}</span>
+                  <span className="text-muted-foreground">{goal.progress}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${goal.color === "primary" ? "bg-primary" : "bg-secondary"}`}
+                    style={{ width: `${goal.progress}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ),
     },
     {
       icon: BarChart3,
       label: "Analytics",
-      title: "Track Your Growth",
+      title: "Understand your patterns",
       description: "Gentle insights that help you study smarter, not harder.",
       preview: (
-        <div className="p-6 h-full bg-card/50">
-          <div className="flex items-center justify-between mb-8">
-            <span className="font-semibold text-lg">Performance</span>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Last 7 days</span>
+        <div className="p-6 h-full">
+          <div className="flex items-center justify-between mb-6">
+            <span className="font-serif text-lg text-foreground">Study Insights</span>
+            <span className="text-xs text-muted-foreground">Last 7 days</span>
           </div>
-          <div className="flex items-end justify-between h-32 mb-6 gap-2">
+          <div className="flex items-end justify-between h-32 mb-4">
             {["M", "T", "W", "T", "F", "S", "S"].map((day, i) => {
               const heights = [45, 70, 55, 85, 65, 40, 75];
               return (
-                <div key={i} className="flex flex-col items-center gap-2 flex-1">
-                  <motion.div
-                    initial={{ height: 0 }}
-                    whileInView={{ height: `${heights[i]}%` }}
-                    className={`w-full max-w-[24px] rounded-t-lg transition-colors ${i === 3 ? "bg-primary" : "bg-primary/20"}`}
+                <div key={i} className="flex flex-col items-center gap-2">
+                  <div
+                    className="w-8 rounded-t-lg bg-primary/20 hover:bg-primary/40 transition-colors"
+                    style={{ height: `${heights[i]}%` }}
                   />
-                  <span className="text-[10px] text-muted-foreground font-medium">{day}</span>
+                  <span className="text-xs text-muted-foreground">{day}</span>
                 </div>
               );
             })}
           </div>
-          <div className="flex items-center gap-4 text-sm border-t pt-4">
+          <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
-              <Flame className="h-4 w-4 text-orange-500" />
-              <span className="font-medium">21 day streak</span>
+              <Flame className="h-4 w-4 text-secondary" />
+              <span className="text-foreground">21 day streak</span>
             </div>
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-500" />
-              <span className="font-medium">+15% vs last week</span>
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-foreground">+15% this week</span>
             </div>
           </div>
         </div>
@@ -212,557 +171,648 @@ export default function LandingPage() {
     },
   ];
 
+  const faqs = [
+    {
+      q: "Is QuizCraft free to use?",
+      a: "Yes! QuizCraft offers a generous free tier with core features. Premium plans unlock additional capabilities like AI-powered flashcards and advanced analytics.",
+    },
+    {
+      q: "How does the AI flashcard system work?",
+      a: "Our AI analyzes your learning patterns and uses spaced repetition to show cards right when you're about to forget them, maximizing retention.",
+    },
+    {
+      q: "Is there a student discount?",
+      a: "Yes! Students with a valid .edu email get 50% off all premium plans.",
+    },
+  ];
+
   return (
-    <div className="flex flex-col min-h-screen bg-background overflow-x-hidden font-sans selection:bg-primary/20">
-      
-      {/* 1. STICKY HEADER */}
-      <LandingHeader />
-
-      <main className="flex-1">
-        
-        {/* ================= HERO SECTION (With Aurora & Fox) ================= */}
-        <section className="relative w-full pt-16 pb-24 md:pt-32 md:pb-48 overflow-visible">
-          {/* Background Gradient */}
-          <AuroraBackground /> 
-
-          {/* Floating Decorative Elements (From StudySpace) */}
-          <div className="absolute top-32 right-[10%] hidden lg:block animate-float-delayed z-0 opacity-60">
-             <div className="p-4 rounded-2xl bg-card/40 backdrop-blur-md border border-white/10 shadow-xl rotate-6">
-                <Brain className="w-8 h-8 text-pink-400" />
-             </div>
-          </div>
-          <div className="absolute bottom-40 left-[5%] hidden lg:block animate-float z-0 opacity-60">
-             <div className="p-4 rounded-2xl bg-card/40 backdrop-blur-md border border-white/10 shadow-xl -rotate-12">
-                <Trophy className="w-8 h-8 text-yellow-400" />
-             </div>
-          </div>
-
-          <div className="relative z-10 container mx-auto px-4 md:px-6">
-            <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
-              
-              {/* Left Column: Copy & CTA */}
-              <div className="flex-1 text-center lg:text-left space-y-8 animate-fade-in-up max-w-2xl">
-                
-                {/* Badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/30 border border-secondary/20 text-secondary-foreground text-sm font-medium backdrop-blur-md">
-                  <Leaf className="w-4 h-4" />
-                  <span>The calm, focused way to study</span>
-                </div>
-
-                {/* Headline */}
-                <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] text-balance">
-                  Your mind deserves a <br/>
-                  <span className="relative inline-block text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-500">
-                    peaceful place
-                    <svg className="absolute w-full h-3 -bottom-1 left-0 text-primary/20" viewBox="0 0 100 10" preserveAspectRatio="none">
-                       <path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="8" fill="none" />
-                    </svg>
-                  </span> 
-                  to grow.
-                </h1>
-
-                {/* Subheadline */}
-                <p className="text-xl text-muted-foreground leading-relaxed">
-                  QuizCraft adapts to how you learn. Turn chaotic notes into clear quizzes, flashcards, and summaries in seconds.
-                </p>
-
-                {/* Buttons */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start pt-4">
-                  <Button size="lg" className="h-14 px-8 text-lg rounded-2xl shadow-xl shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-1" asChild>
-                    <Link href="/signup">
-                      Start for Free
-                      <ArrowRight className="ml-2 w-5 h-5" />
-                    </Link>
-                  </Button>
-                  <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-2xl bg-background/50 backdrop-blur-sm border-2 hover:bg-background/80" asChild>
-                    <Link href="#features">See How It Works</Link>
-                  </Button>
-                </div>
-
-                {/* Social Proof Stats */}
-                <div className="pt-8 flex items-center justify-center lg:justify-start gap-8 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-3">
-                     <div className="flex -space-x-3">
-                        {[1,2,3,4].map(i => (
-                           <div key={i} className="w-8 h-8 rounded-full border-2 border-background bg-muted flex items-center justify-center overflow-hidden">
-                              <img src={`/placeholder-user.jpg`} className="w-full h-full object-cover opacity-80" alt="" />
-                           </div>
-                        ))}
-                     </div>
-                     <p><span className="font-bold text-foreground">50k+</span> students</p>
-                  </div>
-                  <div className="h-4 w-px bg-border" />
-                  <div className="flex items-center gap-1.5">
-                     <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                     <p><span className="font-bold text-foreground">4.9</span> app store</p>
-                  </div>
-                </div>
+    <main className="min-h-screen bg-background overflow-hidden">
+      {/* Navigation */}
+      <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
+        <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+                <BookOpen className="h-5 w-5" />
               </div>
+              <span className="font-serif text-xl text-foreground tracking-tight">QuizCraft</span>
+            </Link>
+            <div className="hidden md:flex items-center gap-8">
+              <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Features
+              </a>
+              <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Stories
+              </a>
+              <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Pricing
+              </a>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex rounded-xl text-muted-foreground" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                <Link href="/signup">Get Started</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
 
-              {/* Right Column: Fox Mascot & Floating Cards */}
-              <div className="flex-1 relative w-full max-w-lg aspect-square lg:h-auto flex items-center justify-center">
-                
-                {/* Glow Effect */}
-                <div className="absolute inset-0 bg-primary/20 blur-[120px] rounded-full animate-pulse-slow" />
-                
-                {/* The Mascot Component */}
-                <div className="relative z-10 w-full h-full transform hover:scale-105 transition-transform duration-700">
-                    <FoxMascot />
-                </div>
+      {/* Hero Section */}
+      <section className="relative container mx-auto px-4 pt-16 pb-24 sm:px-6 lg:px-8 sm:pt-24 sm:pb-32">
+        {/* Floating cards */}
+        <div
+          className="absolute top-20 left-[5%] hidden lg:block animate-float"
+          style={{ "--rotate": "-8deg" } as React.CSSProperties}
+        >
+          <div className="w-52 p-4 rounded-2xl bg-card border border-border/40 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Flame className="h-4 w-4 text-secondary" />
+              <span className="text-xs text-muted-foreground">Study streak</span>
+            </div>
+            <p className="font-serif text-3xl text-foreground">21 days</p>
+            <div className="flex gap-1 mt-3">
+              {[...Array(7)].map((_, i) => (
+                <div key={i} className={`h-2 flex-1 rounded-full ${i < 5 ? "bg-secondary" : "bg-muted"}`} />
+              ))}
+            </div>
+          </div>
+        </div>
 
-                {/* Floating "Success" Cards (StudySpace Style) */}
-                <motion.div 
-                  initial={{ y: 0 }}
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-10 right-0 lg:-right-4 bg-card/80 backdrop-blur-md border border-white/20 p-4 rounded-2xl shadow-xl hidden sm:block z-20"
-                >
-                   <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-green-500/10 rounded-xl">
-                        <CheckCircle2 className="w-6 h-6 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Exam Status</p>
-                        <p className="font-bold text-foreground">Passed! 🎉</p>
-                      </div>
-                   </div>
-                </motion.div>
+        <div
+          className="absolute top-32 right-[8%] hidden lg:block animate-float-delayed"
+          style={{ "--rotate": "6deg" } as React.CSSProperties}
+        >
+          <div className="w-48 p-4 rounded-2xl bg-card border border-border/40 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Flashcards mastered</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-serif text-3xl text-foreground">847</span>
+              <span className="text-xs text-secondary">+12 today</span>
+            </div>
+          </div>
+        </div>
 
-                <motion.div 
-                  initial={{ y: 0 }}
-                  animate={{ y: [0, 15, 0] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                  className="absolute bottom-10 left-0 lg:-left-8 bg-card/80 backdrop-blur-md border border-white/20 p-4 rounded-2xl shadow-xl hidden sm:block z-20"
-                >
-                   <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-orange-500/10 rounded-xl">
-                        <Flame className="w-6 h-6 text-orange-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Streak</p>
-                        <p className="font-bold text-foreground">21 Days 🔥</p>
-                      </div>
-                   </div>
-                </motion.div>
+        <div className="absolute bottom-40 left-[10%] hidden xl:block animate-float-delayed">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-card border border-border/40 shadow-lg">
+            <div className="h-8 w-8 rounded-full bg-secondary/20 flex items-center justify-center">
+              <Trophy className="h-4 w-4 text-secondary" />
+            </div>
+            <div>
+              <p className="text-xs text-foreground font-medium">Achievement unlocked!</p>
+              <p className="text-xs text-muted-foreground">7-day streak completed</p>
+            </div>
+          </div>
+        </div>
 
+        <div className="absolute bottom-24 left-[15%] hidden lg:block animate-float">
+          <div className="p-3 rounded-xl bg-secondary/20 border border-secondary/30">
+            <Coffee className="h-5 w-5 text-secondary-foreground" />
+          </div>
+        </div>
+
+        <div className="absolute bottom-32 right-[12%] hidden lg:block animate-float-delayed">
+          <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+            <Headphones className="h-5 w-5 text-primary" />
+          </div>
+        </div>
+
+        <div className="absolute top-48 left-[18%] hidden xl:block animate-float-delayed">
+          <div className="p-2.5 rounded-lg bg-muted/60 border border-border/30">
+            <Lightbulb className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </div>
+
+        <div className="absolute top-56 right-[18%] hidden xl:block animate-float">
+          <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/10">
+            <GraduationCap className="h-4 w-4 text-primary/70" />
+          </div>
+        </div>
+
+        {/* Main hero content */}
+        <div className="mx-auto max-w-3xl text-center relative z-10">
+          <div className="inline-flex items-center gap-2 rounded-full bg-muted/60 px-4 py-2 text-sm text-muted-foreground mb-8 border border-border/30">
+            <Leaf className="h-4 w-4 text-secondary" />
+            <span>Calm, focused learning for students</span>
+            <div className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+          </div>
+
+          <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl text-foreground text-balance mb-8 tracking-tight leading-[1.1]">
+            Your mind deserves a
+            <span className="relative inline-block mx-3">
+              <span className="relative z-10">peaceful</span>
+              <svg
+                className="absolute -bottom-1 left-0 w-full h-3 text-secondary/40"
+                viewBox="0 0 200 12"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M0,8 Q50,0 100,8 T200,8"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            place to grow
+          </h1>
+
+          <p className="text-muted-foreground text-lg sm:text-xl leading-relaxed max-w-xl mx-auto mb-10">
+            QuizCraft is the warm, distraction-free companion that adapts to how you learn. No chaos. Just clarity.
+          </p>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
+            <Button
+              size="lg"
+              className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-14 px-8 text-base font-medium shadow-[0_4px_14px_rgba(0,0,0,0.1)] group"
+              asChild
+            >
+              <Link href="/signup">
+                Start for free
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-center gap-8 mt-14 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-7 w-7 rounded-full bg-muted border-2 border-background" />
+                ))}
+              </div>
+              <span>
+                <AnimatedCounter target={50} suffix="k+" /> students
+              </span>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Star className="h-4 w-4 fill-primary text-primary" />
+              <span>
+                <AnimatedCounter target={4} suffix=".9" /> on App Store
+              </span>
+            </div>
+            <div className="hidden md:flex items-center gap-1.5">
+              <Award className="h-4 w-4 text-secondary" />
+              <span>Best of 2025</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 rounded-full bg-secondary/15 px-4 py-2 text-sm text-secondary-foreground mb-6">
+            <Sparkles className="h-4 w-4" />
+            <span>Powerful features</span>
+          </div>
+          <h2 className="font-serif text-4xl sm:text-5xl text-foreground text-balance tracking-tight mb-4">
+            Tools that feel like home
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+            Every feature designed with your wellbeing in mind
+          </p>
+        </div>
+
+        <div className="mx-auto max-w-5xl">
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {features.map((feature, i) => (
+              <FeatureTab
+                key={i}
+                active={activeFeature === i}
+                onClick={() => {
+                  setActiveFeature(i);
+                  setIsPlaying(false);
+                }}
+                icon={feature.icon}
+                label={feature.label}
+              />
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div className="order-2 md:order-1">
+              <h3 className="font-serif text-3xl text-foreground tracking-tight mb-4">
+                {features[activeFeature].title}
+              </h3>
+              <p className="text-muted-foreground text-lg leading-relaxed mb-6">
+                {features[activeFeature].description}
+              </p>
+              <ul className="space-y-3 mb-8">
+                {["Customizable settings", "Syncs across devices"].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-foreground">
+                    <CheckCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="order-1 md:order-2">
+              <div className="rounded-3xl bg-card border border-border/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)] overflow-hidden min-h-[320px]">
+                {features[activeFeature].preview}
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= STATS SECTION ================= */}
-        <section className="py-16 bg-muted/30 border-y border-border/50">
-           <div className="container mx-auto px-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-                 {[
-                   { icon: Users, val: 50000, suffix: "+", label: "Active Students" },
-                   { icon: Brain, val: 12, suffix: "M", label: "Questions Answered" },
-                   { icon: Star, val: 4.9, suffix: "", label: "Average Rating" },
-                   { icon: GraduationCap, val: 98, suffix: "%", label: "Pass Rate" },
-                 ].map((stat, i) => (
-                   <div key={i} className="flex flex-col items-center group">
-                      <div className="mb-4 p-3 rounded-2xl bg-background border border-border shadow-sm group-hover:scale-110 transition-transform">
-                         <stat.icon className="w-6 h-6 text-primary" />
-                      </div>
-                      <div className="text-3xl md:text-4xl font-bold mb-1 tabular-nums">
-                         <AnimatedCounter target={stat.val} suffix={stat.suffix} />
-                      </div>
-                      <p className="text-sm text-muted-foreground font-medium uppercase tracking-wide">{stat.label}</p>
-                   </div>
-                 ))}
-              </div>
-           </div>
-        </section>
+      {/* Stats Section */}
+      <section className="py-16 sm:py-24 bg-muted/30">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-5xl">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+              {[
+                { value: 50000, suffix: "+", label: "Active students", icon: Users },
+                { value: 12, suffix: "M+", label: "Study hours logged", icon: Clock },
+                { value: 4.9, suffix: "/5", label: "Average rating", icon: Star },
+                { value: 98, suffix: "%", label: "Improved grades", icon: TrendingUp },
+              ].map((stat, i) => (
+                <div key={i} className="relative">
+                  <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-card border border-border/40 shadow-sm mb-4 mx-auto">
+                    <stat.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="font-serif text-4xl sm:text-5xl text-foreground mb-2">
+                    <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
-        {/* ================= INTERACTIVE FEATURES TAB (The "800 Lines" Complex Logic) ================= */}
-        <section id="features" className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm text-primary font-medium mb-6">
+      {/* Testimonials */}
+      <section id="testimonials" className="py-16 sm:py-24 bg-muted/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-5xl">
+            <div className="text-center mb-12">
+              <h2 className="font-serif text-4xl text-foreground tracking-tight mb-4">
+                Real results from real students
+              </h2>
+              <p className="text-muted-foreground text-lg">See how QuizCraft transformed their academic journey</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  name: "Alex Thompson",
+                  school: "Yale University",
+                  before: "C+ Average",
+                  after: "A- Average",
+                  quote: "I went from struggling to thriving",
+                  metric: "+1.2 GPA",
+                  image: "A",
+                },
+                {
+                  name: "Priya Sharma",
+                  school: "Stanford",
+                  before: "2 hrs/day",
+                  after: "4.5 hrs/day",
+                  quote: "Finally found my study flow",
+                  metric: "2.5x focus time",
+                  image: "P",
+                },
+                {
+                  name: "Marcus Lee",
+                  school: "MIT",
+                  before: "50% retention",
+                  after: "89% retention",
+                  quote: "The flashcards changed everything",
+                  metric: "+78% retention",
+                  image: "M",
+                },
+              ].map((story, i) => (
+                <div
+                  key={i}
+                  className="rounded-3xl bg-card border border-border/40 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.04)] card-hover-lift hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-serif text-lg text-primary">
+                      {story.image}
+                    </div>
+                    <div>
+                      <p className="font-serif text-foreground">{story.name}</p>
+                      <p className="text-xs text-muted-foreground">{story.school}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex-1 text-center p-3 rounded-xl bg-muted/50">
+                      <p className="text-xs text-muted-foreground mb-1">Before</p>
+                      <p className="text-sm text-foreground">{story.before}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-secondary flex-shrink-0" />
+                    <div className="flex-1 text-center p-3 rounded-xl bg-secondary/15">
+                      <p className="text-xs text-muted-foreground mb-1">After</p>
+                      <p className="text-sm text-foreground font-medium">{story.after}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-muted-foreground text-sm mb-4">"{story.quote}"</p>
+
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-xs text-primary font-medium">
+                    <TrendingUp className="h-3 w-3" />
+                    {story.metric}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section id="pricing" className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm text-primary mb-6">
               <Zap className="h-4 w-4" />
-              <span>Powerful Features</span>
+              <span>Simple pricing</span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-balance">
-              Tools that feel like <span className="text-primary">magic</span>
+            <h2 className="font-serif text-4xl sm:text-5xl text-foreground text-balance tracking-tight mb-4">
+              Start free, upgrade when ready
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Every feature is designed to reduce anxiety and maximize retention.
+              No hidden fees. No surprises. Just honest pricing.
             </p>
           </div>
 
-          <div className="mx-auto max-w-6xl">
-            {/* Tabs Navigation */}
-            <div className="flex flex-wrap justify-center gap-4 mb-12">
-              {features.map((feature, i) => (
-                <FeatureTab
-                  key={i}
-                  active={activeFeature === i}
-                  onClick={() => {
-                    setActiveFeature(i);
-                    setIsPlaying(false); // Pause auto-rotation on interaction
-                  }}
-                  icon={feature.icon}
-                  label={feature.label}
-                />
-              ))}
-            </div>
-
-            {/* Feature Content Display */}
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div className="order-2 md:order-1 animate-fade-in space-y-8">
-                <div>
-                   <h3 className="text-3xl font-bold mb-4 flex items-center gap-3">
-                     {features[activeFeature].title}
-                   </h3>
-                   <p className="text-lg text-muted-foreground leading-relaxed">
-                     {features[activeFeature].description}
-                   </p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                name: "Free",
+                price: "$0",
+                period: "forever",
+                desc: "Perfect for getting started",
+                features: ["Basic focus timer", "Up to 100 flashcards", "7-day analytics", "1 device"],
+                cta: "Get started",
+                popular: false,
+              },
+              {
+                name: "Pro",
+                price: "$9",
+                period: "/month",
+                desc: "For serious students",
+                features: [
+                  "Unlimited flashcards",
+                  "AI-powered learning",
+                  "Advanced analytics",
+                  "Unlimited devices",
+                  "Priority support",
+                ],
+                cta: "Start free trial",
+                popular: true,
+              },
+              {
+                name: "Team",
+                price: "$29",
+                period: "/month",
+                desc: "For study groups",
+                features: [
+                  "Everything in Pro",
+                  "5 team members",
+                  "Shared flashcard decks",
+                  "Group analytics",
+                  "Admin dashboard",
+                ],
+                cta: "Contact sales",
+                popular: false,
+              },
+            ].map((plan, i) => (
+              <div
+                key={i}
+                className={`relative rounded-3xl p-6 ${plan.popular ? "bg-primary text-primary-foreground ring-2 ring-primary shadow-xl" : "bg-card border border-border/40"} card-hover-lift`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-xs font-medium">
+                    Most popular
+                  </div>
+                )}
+                <div className="mb-6">
+                  <h3
+                    className={`font-serif text-xl mb-2 ${plan.popular ? "text-primary-foreground" : "text-foreground"}`}
+                  >
+                    {plan.name}
+                  </h3>
+                  <div className="flex items-baseline gap-1">
+                    <span
+                      className={`font-serif text-4xl ${plan.popular ? "text-primary-foreground" : "text-foreground"}`}
+                    >
+                      {plan.price}
+                    </span>
+                    <span className={plan.popular ? "text-primary-foreground/70" : "text-muted-foreground"}>
+                      {plan.period}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-sm mt-2 ${plan.popular ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                  >
+                    {plan.desc}
+                  </p>
                 </div>
-                
-                <ul className="space-y-4">
-                  {["Syncs across devices", "Export to PDF", "AI-powered insights"].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3">
-                      <div className="p-1 rounded-full bg-green-500/10">
-                         <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      </div>
-                      <span className="font-medium">{item}</span>
+                <ul className="space-y-3 mb-6">
+                  {plan.features.map((feature, j) => (
+                    <li key={j} className="flex items-center gap-3 text-sm">
+                      <CheckCircle2
+                        className={`h-4 w-4 flex-shrink-0 ${plan.popular ? "text-primary-foreground" : "text-secondary"}`}
+                      />
+                      <span className={plan.popular ? "text-primary-foreground" : "text-foreground"}>{feature}</span>
                     </li>
                   ))}
                 </ul>
-
-                <Button size="lg" className="rounded-full px-8" asChild>
-                   <Link href="/signup">Try {features[activeFeature].label}</Link>
+                <Button
+                  className={`w-full rounded-2xl h-12 ${plan.popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
+                  asChild
+                >
+                  <Link href="/signup">{plan.cta}</Link>
                 </Button>
               </div>
-
-              {/* Feature Preview Window */}
-              <div className="order-1 md:order-2 h-[400px]">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeFeature}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="h-full w-full rounded-3xl bg-muted/20 border border-border/50 shadow-2xl overflow-hidden"
-                  >
-                    {features[activeFeature].preview}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </div>
+            ))}
           </div>
-        </section>
-
-        {/* ================= BENTO GRID (The Extra "Things We Did") ================= */}
-        {/* We include this below the tabs for the "Maximalist" feel */}
-        <div className="py-12 bg-muted/20">
-           <div className="container mx-auto px-4">
-               <h3 className="text-2xl font-bold text-center mb-8">More ways to learn</h3>
-               <BentoGrid />
-           </div>
         </div>
+      </section>
 
-
-        {/* ================= TESTIMONIALS ================= */}
-        <section id="testimonials" className="py-24 bg-background">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-5xl">
-              <div className="text-center mb-16">
-                <h2 className="text-4xl font-bold tracking-tight mb-4">
-                  Real results from real students
-                </h2>
-                <p className="text-muted-foreground text-lg">See how QuizCraft transformed their academic journey.</p>
-              </div>
-
-              <div className="grid md:grid-cols-3 gap-6">
-                {[
-                  {
-                    name: "Alex Thompson",
-                    school: "Yale University",
-                    before: "C+ Average",
-                    after: "A- Average",
-                    quote: "I went from struggling to thriving. The AI summaries are a lifesaver.",
-                    metric: "+1.2 GPA",
-                    image: "A",
-                  },
-                  {
-                    name: "Priya Sharma",
-                    school: "Stanford",
-                    before: "2 hrs/day",
-                    after: "4.5 hrs/day",
-                    quote: "Finally found my study flow. The focus timer actually works.",
-                    metric: "2.5x focus",
-                    image: "P",
-                  },
-                  {
-                    name: "Marcus Lee",
-                    school: "MIT",
-                    before: "50% retention",
-                    after: "89% retention",
-                    quote: "The flashcards changed everything for my engineering exams.",
-                    metric: "+78% memory",
-                    image: "M",
-                  },
-                ].map((story, i) => (
-                  <div
-                    key={i}
-                    className="group rounded-3xl bg-card border border-border/50 p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-                  >
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center text-lg font-bold text-primary">
-                        {story.image}
-                      </div>
-                      <div>
-                        <p className="font-bold text-foreground">{story.name}</p>
-                        <p className="text-xs text-muted-foreground">{story.school}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-6 text-sm">
-                      <div className="flex-1 text-center p-3 rounded-xl bg-muted/50">
-                        <p className="text-[10px] uppercase text-muted-foreground mb-1 font-bold">Before</p>
-                        <p className="text-foreground">{story.before}</p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground/50" />
-                      <div className="flex-1 text-center p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                        <p className="text-[10px] uppercase text-green-600 mb-1 font-bold">After</p>
-                        <p className="text-foreground font-medium">{story.after}</p>
-                      </div>
-                    </div>
-
-                    <p className="text-muted-foreground mb-6 leading-relaxed italic">"{story.quote}"</p>
-
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/5 text-xs text-primary font-bold border border-primary/10">
-                      <TrendingUp className="h-3 w-3" />
-                      {story.metric}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ================= PRICING ================= */}
-        <section id="pricing" className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm text-primary mb-6">
-                <Zap className="h-4 w-4" />
-                <span>Simple Pricing</span>
-              </div>
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-                Start free, upgrade when ready
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-                No hidden fees. No surprises. Just honest pricing for students.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                {
-                  name: "Free",
-                  price: "$0",
-                  period: "forever",
-                  desc: "Perfect for getting started",
-                  features: ["3 Quizzes / day", "Up to 100 flashcards", "7-day analytics", "1 device"],
-                  cta: "Get Started",
-                  popular: false,
-                },
-                {
-                  name: "Pro",
-                  price: "$9",
-                  period: "/month",
-                  desc: "For serious students",
-                  features: [
-                    "Unlimited flashcards",
-                    "AI Essay Grader",
-                    "Advanced analytics",
-                    "Unlimited devices",
-                    "Priority support",
-                  ],
-                  cta: "Start Free Trial",
-                  popular: true,
-                },
-                {
-                  name: "Team",
-                  price: "$29",
-                  period: "/month",
-                  desc: "For study groups",
-                  features: [
-                    "Everything in Pro",
-                    "5 team members",
-                    "Shared flashcard decks",
-                    "Group analytics",
-                    "Admin dashboard",
-                  ],
-                  cta: "Contact Sales",
-                  popular: false,
-                },
-              ].map((plan, i) => (
-                <div
-                  key={i}
-                  className={`relative rounded-[2rem] p-8 flex flex-col transition-all duration-300 hover:-translate-y-2 ${
-                    plan.popular 
-                      ? "bg-primary text-primary-foreground shadow-2xl shadow-primary/20 ring-4 ring-primary/20" 
-                      : "bg-card border border-border/60 shadow-lg"
-                  }`}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-background text-foreground text-xs font-bold uppercase tracking-wider shadow-sm border">
-                      Most Popular
-                    </div>
-                  )}
-                  
-                  <div className="mb-8">
-                    <h3 className={`font-bold text-xl mb-2 ${plan.popular ? "text-primary-foreground" : "text-foreground"}`}>
-                      {plan.name}
-                    </h3>
-                    <div className="flex items-baseline gap-1">
-                      <span className={`text-4xl font-extrabold ${plan.popular ? "text-primary-foreground" : "text-foreground"}`}>
-                        {plan.price}
-                      </span>
-                      <span className={`text-sm ${plan.popular ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                        {plan.period}
-                      </span>
-                    </div>
-                    <p className={`text-sm mt-3 ${plan.popular ? "text-primary-foreground/90" : "text-muted-foreground"}`}>
-                      {plan.desc}
-                    </p>
-                  </div>
-
-                  <ul className="space-y-4 mb-8 flex-1">
-                    {plan.features.map((feature, j) => (
-                      <li key={j} className="flex items-center gap-3 text-sm">
-                        <div className={`p-0.5 rounded-full ${plan.popular ? "bg-white/20" : "bg-primary/10"}`}>
-                           <CheckCircle2 className={`h-4 w-4 ${plan.popular ? "text-white" : "text-primary"}`} />
-                        </div>
-                        <span className={plan.popular ? "text-primary-foreground" : "text-foreground"}>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Button
-                    size="lg"
-                    className={`w-full rounded-xl h-12 font-bold ${
-                      plan.popular 
-                        ? "bg-background text-foreground hover:bg-background/90" 
-                        : "bg-primary text-primary-foreground hover:bg-primary/90"
-                    }`}
-                    asChild
-                  >
-                    <Link href="/signup">{plan.cta}</Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ================= FAQ ================= */}
-        <section className="py-24 bg-muted/20">
-          <div className="container mx-auto px-4 max-w-3xl">
+      {/* FAQ */}
+      <section className="py-16 sm:py-24 bg-muted/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tight mb-4">Frequently asked questions</h2>
+              <h2 className="font-serif text-4xl text-foreground tracking-tight mb-4">Frequently asked questions</h2>
               <p className="text-muted-foreground">Everything you need to know about QuizCraft</p>
             </div>
 
             <div className="space-y-4">
-              {FAQS.map((faq, i) => (
-                <div key={i} className="rounded-2xl bg-card border border-border/50 overflow-hidden shadow-sm">
+              {faqs.map((faq, i) => (
+                <div key={i} className="rounded-2xl bg-card border border-border/40 overflow-hidden">
                   <button
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                    className="w-full flex items-center justify-between p-6 text-left hover:bg-muted/30 transition-colors"
+                    className="w-full flex items-center justify-between p-5 text-left hover:bg-muted/30 transition-colors"
                   >
-                    <span className="font-semibold text-lg">{faq.q}</span>
+                    <span className="font-medium text-foreground">{faq.q}</span>
                     <ChevronDown
-                      className={`h-5 w-5 text-muted-foreground transition-transform duration-300 ${openFaq === i ? "rotate-180" : ""}`}
+                      className={`h-5 w-5 text-muted-foreground transition-transform ${openFaq === i ? "rotate-180" : ""}`}
                     />
                   </button>
-                  <AnimatePresence>
-                    {openFaq === i && (
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="px-6 pb-6 text-muted-foreground leading-relaxed"
-                      >
-                        {faq.a}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {openFaq === i && <div className="px-5 pb-5 text-muted-foreground">{faq.a}</div>}
                 </div>
               ))}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= FINAL CTA ================= */}
-        <section className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-5xl">
-            <div className="relative rounded-[2.5rem] bg-gradient-to-br from-primary/10 via-card to-blue-500/5 border border-border/60 p-12 sm:p-20 text-center overflow-hidden shadow-2xl">
-              {/* Background Blobs */}
-              <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px] animate-pulse-soft" />
-              <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] animate-pulse-soft" style={{ animationDelay: "1.5s" }} />
+      {/* Final CTA */}
+      <section className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 sm:py-24">
+        <div className="mx-auto max-w-4xl">
+          <div className="relative rounded-[2rem] bg-gradient-to-br from-primary/5 via-card to-secondary/5 border border-border/40 p-8 sm:p-12 text-center overflow-hidden">
+            <div className="absolute top-0 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-pulse-soft" />
+            <div
+              className="absolute bottom-0 right-1/4 w-64 h-64 bg-secondary/10 rounded-full blur-3xl animate-pulse-soft"
+              style={{ animationDelay: "1.5s" }}
+            />
 
-              <div className="relative z-10">
-                <div className="inline-flex items-center gap-2 rounded-full bg-background/80 backdrop-blur border border-border px-4 py-2 text-sm font-medium mb-8">
-                  <Heart className="h-4 w-4 text-red-500 fill-red-500" />
-                  <span>Join 50,000+ happy students</span>
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 rounded-full bg-secondary/20 px-4 py-2 text-sm text-secondary-foreground mb-6">
+                <Heart className="h-4 w-4" />
+                <span>Join 50,000+ happy students</span>
+              </div>
+
+              <h2 className="font-serif text-4xl sm:text-5xl text-foreground text-balance tracking-tight mb-6">
+                Ready to transform how you study?
+              </h2>
+              <p className="text-muted-foreground text-lg max-w-xl mx-auto mb-8">
+                Start your free account today. No credit card required.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  size="lg"
+                  className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-14 px-8 text-base font-medium shadow-lg group animate-scale-pulse"
+                  asChild
+                >
+                  <Link href="/signup">
+                    Start for free
+                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="rounded-2xl h-14 px-8 text-base border-border/60 hover:bg-muted/50 bg-transparent"
+                >
+                  Schedule a demo
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-center gap-6 mt-8 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  <span>GDPR compliant</span>
                 </div>
-
-                <h2 className="text-4xl sm:text-6xl font-bold tracking-tight mb-8 text-balance">
-                  Ready to transform <br/> how you study?
-                </h2>
-                <p className="text-muted-foreground text-xl max-w-2xl mx-auto mb-10">
-                  Start your free account today. No credit card required. Cancel anytime.
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button
-                    size="lg"
-                    className="rounded-full h-16 px-10 text-xl shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300"
-                    asChild
-                  >
-                    <Link href="/signup">
-                      Start for Free
-                      <ArrowRight className="ml-2 h-6 w-6" />
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="rounded-full h-16 px-10 text-xl border-2 hover:bg-muted/50 bg-transparent"
-                    asChild
-                  >
-                    <Link href="#demo">View Demo</Link>
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-8 mt-12 text-sm text-muted-foreground font-medium">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    <span>GDPR Compliant</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    <span>Setup in 2 minutes</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                     <span>Systems Operational</span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  <span>Setup in 2 minutes</span>
                 </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-      </main>
-
-      <Footer />
-      <CookieConsent />
-    </div>
+      {/* Footer */}
+      <footer className="border-t border-border/40 bg-muted/10">
+        <div className="container mx-auto px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-8">
+            <div className="col-span-2">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <span className="font-serif text-xl text-foreground">QuizCraft</span>
+              </div>
+              <p className="text-muted-foreground text-sm mb-4 max-w-xs">
+                The calm, focused study companion that helps you learn better.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  className="flex-1 px-4 py-2 rounded-xl bg-muted/50 border border-border/40 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+                  Subscribe
+                </Button>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-serif text-foreground mb-4">Product</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {["Features", "Pricing", "Integrations", "Updates"].map((item) => (
+                  <li key={item}>
+                    <a href="#" className="hover:text-foreground transition-colors">
+                      {item}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-serif text-foreground mb-4">Resources</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {["Blog", "Study Tips", "Help Center", "Community"].map((item) => (
+                  <li key={item}>
+                    <a href="#" className="hover:text-foreground transition-colors">
+                      {item}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-serif text-foreground mb-4">Company</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>
+                  <Link href="/legal/privacy" className="hover:text-foreground transition-colors">
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/legal/terms" className="hover:text-foreground transition-colors">
+                    Terms
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/about" className="hover:text-foreground transition-colors">
+                     About
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/careers" className="hover:text-foreground transition-colors">
+                     Careers
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div className="pt-8 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} QuizCraft. Made with care for students everywhere.</p>
+            <div className="flex items-center gap-4">
+              {["twitter", "github", "instagram"].map((social) => (
+                <a key={social} href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+                  <div className="h-5 w-5 rounded bg-muted-foreground/20" />
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
+    </main>
   );
 }
