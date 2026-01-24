@@ -1,3 +1,4 @@
+// src/app/api/notes/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, validateRequestBody } from '@/lib/auth';
 import { validateNoteCreation } from '@/lib/usage-limits';
@@ -128,8 +129,9 @@ export async function POST(request: NextRequest) {
             ...newNote,
             tags: newNote.tags || [],
             linked_note_ids: newNote.linked_note_ids || [],
-            created_at: newNote.created_at.toISOString(),
-            updated_at: newNote.updated_at.toISOString(),
+            // FIX: Added null checks for dates
+            created_at: newNote.created_at ? newNote.created_at.toISOString() : new Date().toISOString(),
+            updated_at: newNote.updated_at ? newNote.updated_at.toISOString() : new Date().toISOString(),
         }, 
         message: 'Note created successfully' 
     }, { status: 201 });
