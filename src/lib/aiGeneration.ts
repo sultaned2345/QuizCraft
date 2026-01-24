@@ -4,7 +4,7 @@ import { supabaseAdmin } from "./supabaseAdmin";
 import { prisma } from "@/lib/prisma";
 import { generatePodcastScript, synthesizeSpeech } from "@/lib/podcast-service";
 
-// ✅ FIX: Use GOOGLE_AI_API_KEY as primary, with fallback to GEMINI_API_KEY
+// Use GOOGLE_AI_API_KEY as primary, with fallback to GEMINI_API_KEY
 const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "";
 
 if (!apiKey) {
@@ -14,18 +14,40 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // ------------------------------------------------------------------
+// HELPER: Model Fallback Logic
+// ------------------------------------------------------------------
+async function generateWithFallback(
+  preferredModelName: string, 
+  prompt: string,
+  fallbackModelName: string = "gemini-1.5-flash"
+) {
+  try {
+    // Try primary model (gemini-2.5-flash-lite)
+    const model = genAI.getGenerativeModel({ model: preferredModelName });
+    const result = await model.generateContent(prompt);
+    return await result.response;
+  } catch (error: any) {
+    // If 404 (Model Not Found) or 400 (Bad Request), try fallback
+    if (error.message?.includes("404") || error.message?.includes("not found")) {
+      console.warn(`⚠️ Model ${preferredModelName} not found. Falling back to ${fallbackModelName}.`);
+      const fallback = genAI.getGenerativeModel({ model: fallbackModelName });
+      const result = await fallback.generateContent(prompt);
+      return await result.response;
+    }
+    throw error;
+  }
+}
+
+// ------------------------------------------------------------------
 // HELPER: Clean JSON
 // ------------------------------------------------------------------
 function cleanAndParseJSON(text: string) {
   try {
-    // Remove markdown code blocks if present
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    // Find the first '{' or '[' and the last '}' or ']'
     const firstBrace = cleaned.search(/[{[]/);
     const lastBrace = cleaned.search(/[}\]]/);
     
     if (firstBrace === -1 || lastBrace === -1) {
-        // Fallback: try parsing the whole string if no braces found
         return JSON.parse(cleaned);
     }
     
@@ -47,12 +69,8 @@ export async function generateQuizFromContent(
   difficulty: string = "medium", 
   questionType: string = "MIXED"
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  
   try {
-    // Limit content length to avoid token limits
     const safeContent = content.substring(0, 30000);
-    
     const prompt = `
       You are an expert educational content creator.
       Create a ${difficulty} difficulty quiz with ${numQuestions} questions based on the following text.
@@ -73,8 +91,8 @@ export async function generateQuizFromContent(
       ]
     `;
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+    // ✅ Updated to gemini-2.5-flash-lite
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const questions = cleanAndParseJSON(response.text());
 
     if (!questions || !Array.isArray(questions)) return null;
@@ -94,11 +112,8 @@ export async function generateQuizFromContent(
 // 2. FLASHCARD GENERATION
 // ------------------------------------------------------------------
 export async function generateFlashcardsFromContent(content: string, numCards: number = 10) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
   try {
     const safeContent = content.substring(0, 30000);
-    
     const prompt = `
       Create ${numCards} educational flashcards based on this text. Focus on key terms, definitions, and core concepts.
       "${safeContent}"
@@ -109,8 +124,8 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
       ]
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+    // ✅ Updated to gemini-2.5-flash-lite
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const cards = cleanAndParseJSON(response.text());
 
     if (!cards || !Array.isArray(cards)) return null;
@@ -129,11 +144,8 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
 // 3. NOTES GENERATION
 // ------------------------------------------------------------------
 export async function generateNotesFromContent(content: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); 
-
   try {
     const safeContent = content.substring(0, 40000);
-    
     const prompt = `
       Summarize the following text into comprehensive, structured study notes.
       Use Markdown formatting:
@@ -146,8 +158,8 @@ export async function generateNotesFromContent(content: string) {
       "${safeContent}"
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+    // ✅ Updated to gemini-2.5-flash-lite (Fallback to Pro for complex reasoning)
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-pro");
     return response.text();
   } catch (error) {
     console.error("Note Gen Error:", error);
@@ -159,8 +171,6 @@ export async function generateNotesFromContent(content: string) {
 // 4. INSIGHTS GENERATION (New)
 // ------------------------------------------------------------------
 export async function generateInsightsFromContent(content: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
   try {
     const safeContent = content.substring(0, 30000);
     const prompt = `
@@ -175,13 +185,11 @@ export async function generateInsightsFromContent(content: string) {
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+    // ✅ Updated to gemini-2.5-flash-lite
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const json = cleanAndParseJSON(response.text());
     
-    // Validate structure roughly
     if (!json || !Array.isArray(json.keyConcepts)) return null;
-    
     return json;
   } catch (error) {
     console.error("Insights Gen Error:", error);
@@ -194,7 +202,7 @@ export async function generateInsightsFromContent(content: string) {
 // ------------------------------------------------------------------
 export async function generateFromYoutube(videoId: string) {
     console.log("YouTube generation triggered for:", videoId);
-    return null; // Placeholder
+    return null; 
 }
 
 // ------------------------------------------------------------------
@@ -219,13 +227,11 @@ export async function generatePodcastForDocument(
     }
 
     // B. Synthesize Audio
-    // Limiting lines for MVP speed/timeout safety
     const MAX_LINES = 12; 
     const limitedScript = script.slice(0, MAX_LINES);
     const audioBuffers: Buffer[] = [];
 
     for (const line of limitedScript) {
-      // "Host" = Alloy (Neutral/Bright), "Expert" = Onyx (Deep/Calm)
       const voice = line.speaker === "Host" ? "alloy" : "onyx";
       try {
         const audioBuffer = await synthesizeSpeech(line.text, voice);
