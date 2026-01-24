@@ -19,7 +19,8 @@ export default function UploadPage() {
     const file = acceptedFiles[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+    // Frontend limit (10MB)
+    if (file.size > 10 * 1024 * 1024) { 
       toast({ title: "File too large", description: "Limit is 10MB.", variant: "destructive" });
       return;
     }
@@ -29,12 +30,25 @@ export default function UploadPage() {
     formData.append('file', file);
 
     try {
-      // 1. Upload the File
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      // 1. Upload the File using the Documents API (unified path)
+      const uploadRes = await fetch('/api/documents/upload', { 
+        method: 'POST', 
+        body: formData 
+      });
+
+      // Safety check for HTML error pages before parsing JSON
+      const contentType = uploadRes.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await uploadRes.text();
+        console.error("Server returned non-JSON response:", text);
+        throw new Error("Server error: Received HTML instead of JSON. Check backend logs.");
+      }
+
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
       
-      const documentId = uploadData.id || uploadData.documentId;
+      // Accessing ID from the standard response structure in documents/upload/route.ts
+      const documentId = uploadData.data.document.id;
       const fileName = file.name.split('.').slice(0, -1).join('.');
 
       // 2. Create a "Project"
@@ -58,7 +72,7 @@ export default function UploadPage() {
 
       toast({ title: "Success", description: "Preparing your study space..." });
 
-      // 3. Redirect
+      // 3. Redirect to project with turbo parameters to trigger the processing UI
       if (projectId) {
         router.push(`/projects/${projectId}?turbo=true&docId=${documentId}`);
       } else {
@@ -82,7 +96,6 @@ export default function UploadPage() {
   return (
     <div className="container max-w-4xl mx-auto py-16 min-h-[85vh] flex flex-col items-center justify-center animate-in fade-in duration-700">
       
-      {/* Header Section */}
       <div className="text-center space-y-4 mb-10">
         <div className="flex justify-center mb-4">
           <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
@@ -97,7 +110,6 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Upload Card */}
       <Card
         {...getRootProps()}
         className={cn(
@@ -109,8 +121,6 @@ export default function UploadPage() {
         )}
       >
         <input {...getInputProps()} />
-        
-        {/* Subtle texture overlay */}
         <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
         
         <div className="relative z-10 flex flex-col items-center space-y-6 p-8 text-center">
@@ -160,12 +170,10 @@ export default function UploadPage() {
         </div>
       </Card>
       
-      {/* Footer / Helper Text */}
       <div className="mt-8 flex items-center gap-2 text-sm text-muted-foreground/60">
         <Sparkles className="w-4 h-4" />
         <span>AI-Powered Analysis</span>
       </div>
-
     </div>
   );
 }
