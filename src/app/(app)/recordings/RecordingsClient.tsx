@@ -1,3 +1,4 @@
+// src/app/(app)/recordings/RecordingsClient.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -124,7 +125,8 @@ export function RecordingsClient() {
     }
 
     if (!rec.storage_path) {
-        toast({ title: "Audio unavailable", description: "Original audio not found.", variant: "secondary" });
+        // FIX: Removed invalid 'variant: "secondary"'
+        toast({ title: "Audio unavailable", description: "Original audio not found." });
         return;
     }
 
