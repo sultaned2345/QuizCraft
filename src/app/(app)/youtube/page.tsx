@@ -1,14 +1,13 @@
 // src/app/(app)/youtube/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-// FIX: Use named import (curly braces)
 import { MarkdownViewer } from '@/components/MarkdownViewer';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
@@ -30,7 +29,7 @@ function getYoutubeId(url: string) {
     return match ? match[1] : null;
 }
 
-export default function YouTubeTurboPage() {
+function YouTubeTurboContent() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   
@@ -407,5 +406,18 @@ export default function YouTubeTurboPage() {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
+  );
+}
+
+export default function YouTubeTurboPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center h-screen space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <p className="text-muted-foreground">Loading Turbo Mode...</p>
+      </div>
+    }>
+      <YouTubeTurboContent />
+    </Suspense>
   );
 }
