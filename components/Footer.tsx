@@ -1,6 +1,6 @@
 // src/components/Footer.tsx
 import Link from 'next/link';
-import { Logo } from '@/components/ui/Logo';
+import Logo from '@/components/ui/Logo'; // FIXED: Default import (removed braces)
 import { Separator } from '@/components/ui/separator';
 import { Github, Twitter } from 'lucide-react';
 
@@ -13,8 +13,7 @@ export function Footer() {
           {/* Brand Column */}
           <div className="space-y-4">
             <Link href="/" className="flex items-center gap-2">
-              <Logo className="h-8 w-8" />
-              <span className="font-bold text-xl">QuizCraft</span>
+              <Logo size="md" />
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Transforming study materials into interactive mastery using AI. 
@@ -53,7 +52,7 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Legal Links - CONNECTED HERE */}
+          {/* Legal Links */}
           <div>
             <h3 className="font-semibold mb-4">Legal</h3>
             <ul className="space-y-3 text-sm text-muted-foreground">
@@ -80,9 +79,6 @@ export function Footer() {
 
         <div className="flex flex-col md:flex-row justify-between items-center text-sm text-muted-foreground">
           <p>© {new Date().getFullYear()} QuizCraft LLC (Ras Al-Khaimah, UAE). All rights reserved.</p>
-          <div className="flex gap-6 mt-4 md:mt-0">
-             {/* Optional bottom row links */}
-          </div>
         </div>
       </div>
     </footer>

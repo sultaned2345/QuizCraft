@@ -3,7 +3,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
-import { Logo } from '@/components/ui/Logo'; // Assuming you have a Logo component
+import Logo from '@/components/ui/Logo'; // FIXED: Default import (removed braces)
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,8 +12,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
-            <Logo className="h-8 w-8" />
-            <span className="font-bold text-xl tracking-tight hidden sm:block">QuizCraft</span>
+            <Logo size="sm" />
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/">
