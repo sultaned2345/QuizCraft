@@ -39,18 +39,28 @@ async function generateWithFallback(
 }
 
 // ------------------------------------------------------------------
-// HELPER: Clean JSON
+// HELPER: Clean JSON (Fixed)
 // ------------------------------------------------------------------
 function cleanAndParseJSON(text: string) {
   try {
+    // 1. Remove markdown code blocks
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    // 2. Find the FIRST opening brace/bracket
     const firstBrace = cleaned.search(/[{[]/);
-    const lastBrace = cleaned.search(/[}\]]/);
-    
+
+    // 3. Find the LAST closing brace/bracket
+    // Fix: .search() only finds the first match. We use lastIndexOf to find the end.
+    const lastCurly = cleaned.lastIndexOf('}');
+    const lastSquare = cleaned.lastIndexOf(']');
+    const lastBrace = Math.max(lastCurly, lastSquare);
+
     if (firstBrace === -1 || lastBrace === -1) {
-        return JSON.parse(cleaned);
+      // Fallback: try parsing the whole string if markers aren't found
+      return JSON.parse(cleaned);
     }
-    
+
+    // Extract the complete JSON substring
     const jsonString = cleaned.substring(firstBrace, lastBrace + 1);
     return JSON.parse(jsonString);
   } catch (e) {
@@ -91,7 +101,6 @@ export async function generateQuizFromContent(
       ]
     `;
     
-    // ✅ Updated to gemini-2.5-flash-lite
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const questions = cleanAndParseJSON(response.text());
 
@@ -124,7 +133,6 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
       ]
     `;
 
-    // ✅ Updated to gemini-2.5-flash-lite
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const cards = cleanAndParseJSON(response.text());
 
@@ -158,7 +166,6 @@ export async function generateNotesFromContent(content: string) {
       "${safeContent}"
     `;
 
-    // ✅ Updated to gemini-2.5-flash-lite (Fallback to Pro for complex reasoning)
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-pro");
     return response.text();
   } catch (error) {
@@ -185,7 +192,6 @@ export async function generateInsightsFromContent(content: string) {
       }
     `;
 
-    // ✅ Updated to gemini-2.5-flash-lite
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const json = cleanAndParseJSON(response.text());
     

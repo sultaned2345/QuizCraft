@@ -1,18 +1,19 @@
-// src/app/(app)/notes/[noteId]/page.tsx
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/getServerSession';
-// import { NoteEditor } from '@/components/NoteEditor'; // (Static import already removed)
 import { redirect } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import NoteEditorLoading from './loading';
+import { NoteEditor } from '@/components/NoteEditor';
+import { Metadata } from 'next';
 
-const NoteEditor = dynamic(
-  () => import('@/components/NoteEditor').then((mod) => mod.NoteEditor),
-  {
-    loading: () => <NoteEditorLoading />,
-    ssr: false, 
-  }
-);
+// Generate dynamic metadata for the page
+export async function generateMetadata({ params }: { params: { noteId: string } }): Promise<Metadata> {
+  const note = await prisma.notes.findUnique({
+    where: { id: params.noteId },
+    select: { title: true }
+  });
+  return {
+    title: `${note?.title || 'Untitled Note'} | QuizCraft`,
+  };
+}
 
 async function getNoteData(noteId: string, userId: string) {
   try {
@@ -23,15 +24,13 @@ async function getNoteData(noteId: string, userId: string) {
       },
     });
 
-    if (!note) {
-      return null;
-    }
+    if (!note) return null;
     
-    // Serialize data for the client
+    // Serialize for the client
     return {
       ...note,
       tags: note.tags || [],
-      linked_note_ids: note.linked_note_ids || [], // <-- FIX: Changed from null to []
+      linked_note_ids: note.linked_note_ids || [], 
       created_at: note.created_at?.toISOString() || '',
       updated_at: note.updated_at?.toISOString() || '',
     };
@@ -43,6 +42,7 @@ async function getNoteData(noteId: string, userId: string) {
 
 export default async function EditNotePage({ params }: { params: { noteId: string } }) {
   const session = await getServerSession();
+  
   if (!session?.user) {
     redirect('/login');
   }
@@ -53,12 +53,12 @@ export default async function EditNotePage({ params }: { params: { noteId: strin
     redirect('/notes');
   }
 
-  // FIX: Map the 'note' object to the individual props expected by NoteEditor
   return (
     <NoteEditor 
       noteId={note.id}
       initialTitle={note.title}
       initialContent={note.content}
+      initialTags={note.tags} // ✅ Passing tags allows "Confidence" status to work
     />
   );
 }
