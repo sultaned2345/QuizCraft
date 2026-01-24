@@ -1,3 +1,4 @@
+// src/app/legal/dmca/page.tsx
 import React from 'react';
 
 export default function DmcaPage() {
@@ -21,7 +22,10 @@ export default function DmcaPage() {
         
         <div className="p-4 border rounded-md bg-muted">
           <p className="font-semibold">Contact Email:</p>
-          <p>legal@quizcraft.com</p> {/* Replace with your actual email */}
+          {/* Using main business email for now until a dedicated legal alias is created */}
+          <a href="mailto:sultanbusiness2026@gmail.com" className="text-primary hover:underline">
+            sultanbusiness2026@gmail.com
+          </a>
         </div>
       </div>
     </div>
