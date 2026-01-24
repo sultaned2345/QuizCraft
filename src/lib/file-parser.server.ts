@@ -1,10 +1,12 @@
 // src/lib/file-parser.server.ts
-// ✅ REFACTOR: Using pdfjs-dist directly for better stability
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'; 
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'; 
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
 import { cleanExtractedText } from '@/lib/file-parser'; 
+
+// ✅ FIX: Explicitly import the worker to ensure it is bundled
+import 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 
 export const runtime = 'nodejs';
 
@@ -14,26 +16,34 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   // Convert Buffer to Uint8Array for pdfjs-dist
   const data = new Uint8Array(buffer);
   
-  const loadingTask = getDocument({
-    data,
-    useSystemFonts: true, // Reduces font errors
-    disableFontFace: true, // Disables font loading to prevent "TT: undefined" warnings
-  });
+  try {
+    const loadingTask = getDocument({
+      data,
+      useSystemFonts: true, 
+      disableFontFace: true, 
+      // ✅ FIX: Prevent worker errors from stopping execution
+      stopAtErrors: false,
+    });
 
-  const pdfDocument = await loadingTask.promise;
-  const numPages = pdfDocument.numPages;
-  let fullText = '';
+    const pdfDocument = await loadingTask.promise;
+    const numPages = pdfDocument.numPages;
+    let fullText = '';
 
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdfDocument.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ');
-    fullText += pageText + '\n';
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdfDocument.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      fullText += pageText + '\n';
+    }
+
+    return fullText;
+  } catch (err: any) {
+    console.error("PDFJS Error:", err);
+    // Fallback: If strict PDF parsing fails, try a simpler approach or throw clearer error
+    throw new Error(`Failed to parse PDF: ${err.message}`);
   }
-
-  return fullText;
 }
 
 function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string): string {
@@ -95,7 +105,6 @@ export async function extractTextFromServerFile(
 
   try {
     if (fileType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
-      // Use the new pdfjs-dist helper
       rawText = await extractTextFromPDF(buffer);
 
     } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {

@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. Critical Fix for PDF Parsing 500 Error
+  // 1. Critical Fix: Exclude PDF libraries from Next.js bundling
   experimental: {
     serverComponentsExternalPackages: ['pdf-parse-fork', 'pdfjs-dist'],
   },
   
-  // 2. Existing config (keep yours if different)
   images: {
     remotePatterns: [
       {
@@ -15,12 +14,16 @@ const nextConfig = {
     ],
   },
   
-  // 3. Webpack config (optional, but helps with some binary modules)
   webpack: (config) => {
+    // 2. Critical Fix: Prevent PDF.js from trying to load 'canvas'
+    config.resolve.alias.canvas = false;
+    
+    // 3. Handle other binary module externals
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',
       'bufferutil': 'commonjs bufferutil',
     });
+    
     return config;
   },
 };
