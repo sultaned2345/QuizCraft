@@ -3,6 +3,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "./supabaseAdmin";
 import { prisma } from "@/lib/prisma";
 import { generatePodcastScript, synthesizeSpeech } from "@/lib/podcast-service";
+// IMPORTANT: Ensure you have created src/lib/youtube.ts as discussed!
+import { fetchYoutubeTranscript } from "./youtube"; 
 
 // Use GOOGLE_AI_API_KEY as primary, with fallback to GEMINI_API_KEY
 const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "";
@@ -22,7 +24,7 @@ async function generateWithFallback(
   fallbackModelName: string = "gemini-1.5-flash"
 ) {
   try {
-    // Try primary model (gemini-2.5-flash-lite)
+    // Try primary model
     const model = genAI.getGenerativeModel({ model: preferredModelName });
     const result = await model.generateContent(prompt);
     return await result.response;
@@ -39,7 +41,7 @@ async function generateWithFallback(
 }
 
 // ------------------------------------------------------------------
-// HELPER: Clean JSON (Fixed)
+// HELPER: Clean JSON
 // ------------------------------------------------------------------
 function cleanAndParseJSON(text: string) {
   try {
@@ -50,13 +52,11 @@ function cleanAndParseJSON(text: string) {
     const firstBrace = cleaned.search(/[{[]/);
 
     // 3. Find the LAST closing brace/bracket
-    // Fix: .search() only finds the first match. We use lastIndexOf to find the end.
     const lastCurly = cleaned.lastIndexOf('}');
     const lastSquare = cleaned.lastIndexOf(']');
     const lastBrace = Math.max(lastCurly, lastSquare);
 
     if (firstBrace === -1 || lastBrace === -1) {
-      // Fallback: try parsing the whole string if markers aren't found
       return JSON.parse(cleaned);
     }
 
@@ -175,7 +175,7 @@ export async function generateNotesFromContent(content: string) {
 }
 
 // ------------------------------------------------------------------
-// 4. INSIGHTS GENERATION (New)
+// 4. INSIGHTS GENERATION
 // ------------------------------------------------------------------
 export async function generateInsightsFromContent(content: string) {
   try {
@@ -204,15 +204,65 @@ export async function generateInsightsFromContent(content: string) {
 }
 
 // ------------------------------------------------------------------
-// 5. YOUTUBE GENERATION
+// 5. CHAT RESPONSE (New)
 // ------------------------------------------------------------------
-export async function generateFromYoutube(videoId: string) {
-    console.log("YouTube generation triggered for:", videoId);
-    return null; 
+export async function generateChatResponse(context: string, query: string, history: any[] = []) {
+  try {
+     const safeContext = context.substring(0, 25000); // Token limit safety
+     const prompt = `
+      You are a helpful AI tutor assisting a student with a video.
+      Use the provided video transcript to answer the student's question accurately.
+      
+      Transcript Context:
+      "${safeContext}"
+
+      Student Question: "${query}"
+      
+      Answer concisely and clearly.
+     `;
+     const response = await generateWithFallback("gemini-1.5-flash", prompt);
+     return response.text();
+  } catch (error) {
+    console.error("Chat Gen Error:", error);
+    return "I'm having trouble analyzing the video right now.";
+  }
 }
 
 // ------------------------------------------------------------------
-// 6. PODCAST GENERATION
+// 6. MASTER ORCHESTRATOR (The "Turbo" Function)
+// ------------------------------------------------------------------
+export async function generateFromYoutube(videoUrlOrId: string) {
+    console.log("🚀 Turbo Generation for:", videoUrlOrId);
+    
+    // 1. Fetch Full Transcript (and Title)
+    // This uses the robust fetcher from src/lib/youtube.ts
+    const { videoId, title, transcript } = await fetchYoutubeTranscript(videoUrlOrId);
+
+    if (!transcript) throw new Error("Could not retrieve transcript.");
+
+    // 2. Generate Everything Else in Parallel
+    // We generate Notes, Flashcards, Quiz, and Insights all at once for speed
+    const [notes, flashcards, quiz, insights] = await Promise.all([
+        generateNotesFromContent(transcript),
+        generateFlashcardsFromContent(transcript, 10),
+        generateQuizFromContent(transcript, 5, 'medium', 'MIXED'),
+        generateInsightsFromContent(transcript)
+    ]);
+
+    // 3. Return Bundle
+    return {
+        videoId,
+        title,
+        fullText: transcript, // The raw transcript for the UI
+        notes,
+        flashcards,
+        quiz,
+        insights
+    };
+}
+
+// ------------------------------------------------------------------
+// 7. PODCAST GENERATION (Preserved)
 // ------------------------------------------------------------------
 export async function generatePodcastForDocument(
   content: string,
@@ -284,9 +334,10 @@ export async function generatePodcastForDocument(
 }
 
 // ------------------------------------------------------------------
-// 7. EXPORTS
+// 8. EXPORTS
 // ------------------------------------------------------------------
 export const callAIToGenerateQuiz = generateQuizFromContent;
 export const callAIToGenerateFlashcards = generateFlashcardsFromContent;
 export const callAIToGenerateNote = generateNotesFromContent;
 export const callAIToGenerateInsights = generateInsightsFromContent;
+export const callAIToGenerateChat = generateChatResponse;

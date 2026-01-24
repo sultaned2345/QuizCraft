@@ -1,3 +1,4 @@
+components/NoteConnections.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -94,7 +95,7 @@ export function NoteConnections({
                   {isLoading ? (
                       <div className="p-2 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
                   ) : searchResults?.data?.notes?.length > 0 ? (
-                      searchResults.data.notes
+                      (searchResults?.data?.notes || [])
                         .filter((n: any) => n.id !== currentNoteId && !linkedIds.includes(n.id))
                         .map((note: any) => (
                           <button

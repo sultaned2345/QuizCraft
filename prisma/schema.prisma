@@ -162,6 +162,28 @@ model Podcast {
   @@schema("public")
 }
 
+model recordings {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  title        String
+  transcript   String    @db.Text
+  summary      String?   @db.Text
+  suggestions  Json?     @db.JsonB
+  
+  // [NEW] Persist the actual audio file
+  storage_path String?   @db.Text
+  duration     Int?      @default(0) // Duration in seconds
+
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  profile profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("recordings")
+  @@schema("public")
+}
+
 model Quiz {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId             String?   @map("user_id") @db.Uuid
