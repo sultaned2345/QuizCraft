@@ -1,3 +1,4 @@
+// src/app/(app)/upload/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -19,7 +20,8 @@ import {
   Brain,
   MessageSquare
 } from 'lucide-react';
-import QuickUploadWidget from '@/components/dashboard/QuickUploadWidget'; 
+// FIX: Use named import (curly braces)
+import { QuickUploadWidget } from '@/components/dashboard/QuickUploadWidget'; 
 
 export default function NewContentPage() {
   const router = useRouter();
