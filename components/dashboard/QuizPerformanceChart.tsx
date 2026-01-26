@@ -3,119 +3,99 @@
 
 import { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { format } from 'date-fns';
-import { Trophy, Target, TrendingUp } from 'lucide-react';
+import { TrendingUp, Award } from 'lucide-react';
 
 interface QuizPerformanceChartProps {
   attempts: any[];
 }
 
 export function QuizPerformanceChart({ attempts }: QuizPerformanceChartProps) {
-  const { chartData, averageScore, totalQuizzes } = useMemo(() => {
-    if (attempts.length === 0) return { chartData: [], averageScore: 0, totalQuizzes: 0 };
+  const { chartData, averageScore } = useMemo(() => {
+    if (attempts.length === 0) return { chartData: [], averageScore: 0 };
 
     const data = attempts.map((attempt) => ({
       name: format(new Date(attempt.created_at), 'MMM d'),
-      Score: attempt.total > 0 ? Math.round((attempt.score / attempt.total) * 100) : 0,
+      score: attempt.total > 0 ? Math.round((attempt.score / attempt.total) * 100) : 0,
       title: attempt.quiz?.title || 'Untitled Quiz',
     })).reverse();
 
-    const avg = data.reduce((acc, curr) => acc + curr.Score, 0) / data.length;
-
-    return { chartData: data, averageScore: Math.round(avg), totalQuizzes: attempts.length };
+    const avg = data.reduce((acc, curr) => acc + curr.score, 0) / data.length;
+    return { chartData: data, averageScore: Math.round(avg) };
   }, [attempts]);
 
   if (attempts.length === 0) {
     return (
-      <Card className="h-[350px] flex flex-col justify-center items-center text-center p-6 border-dashed">
-        <div className="bg-muted rounded-full p-4 mb-4">
-          <TrendingUp className="w-8 h-8 text-muted-foreground" />
-        </div>
-        <h3 className="font-serif font-semibold text-xl">No Data Yet</h3>
-        <p className="text-muted-foreground mt-2 max-w-xs mx-auto">
-          Complete your first quiz to see your performance analytics here.
-        </p>
+      <Card className="h-[300px] flex flex-col justify-center items-center text-center p-6 border-dashed bg-muted/20">
+        <TrendingUp className="w-10 h-10 text-muted-foreground/50 mb-4" />
+        <p className="text-muted-foreground text-sm font-medium">Complete a quiz to see analytics</p>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card className="bg-primary/5 border-primary/10">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-background p-2 rounded-xl shadow-sm">
-              <Target className="w-5 h-5 text-primary" />
-            </div>
+    <Card className="relative overflow-hidden">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-6">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Avg. Score</p>
-              <p className="text-2xl font-serif font-bold text-primary">{averageScore}%</p>
+                <p className="text-sm text-muted-foreground font-medium">Average Mastery</p>
+                <div className="flex items-baseline gap-2">
+                    <h3 className="text-3xl font-serif font-bold text-foreground">{averageScore}%</h3>
+                    {averageScore > 80 && <span className="text-xs font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full">Great!</span>}
+                </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-secondary/5 border-secondary/10">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-background p-2 rounded-xl shadow-sm">
-              <Trophy className="w-5 h-5 text-secondary" />
+            <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <Award className="w-5 h-5 text-primary" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Quizzes</p>
-              <p className="text-2xl font-serif font-bold text-secondary">{totalQuizzes}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        </div>
 
-      {/* Main Chart */}
-      <Card className="h-[350px]">
-        <CardContent className="h-full pt-6">
+        <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" strokeOpacity={0.4} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="name" 
-                fontSize={12} 
+                fontSize={11} 
                 tickLine={false} 
                 axisLine={false} 
-                tick={{ fill: 'var(--muted-foreground)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))' }}
                 dy={10}
               />
-              <YAxis
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${value}%`}
-                tick={{ fill: 'var(--muted-foreground)' }}
-              />
+              <YAxis hide domain={[0, 100]} />
               <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--card)', 
-                  borderColor: 'var(--border)', 
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
+                cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '4 4' }}
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    return (
+                      <div className="rounded-lg border bg-popover p-2 shadow-md">
+                        <p className="text-[10px] text-muted-foreground mb-1">{payload[0].payload.name}</p>
+                        <p className="text-sm font-bold text-popover-foreground">{payload[0].value}%</p>
+                        <p className="text-xs text-primary truncate max-w-[150px]">{payload[0].payload.title}</p>
+                      </div>
+                    );
+                  }
+                  return null;
                 }}
-                itemStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
               />
               <Area
                 type="monotone"
-                dataKey="Score"
-                stroke="var(--primary)"
-                fillOpacity={1}
+                dataKey="score"
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
                 fill="url(#colorScore)"
-                strokeWidth={3}
+                animationDuration={1500}
               />
             </AreaChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

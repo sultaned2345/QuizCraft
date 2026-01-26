@@ -3,7 +3,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "./supabaseAdmin";
 import { prisma } from "@/lib/prisma";
 import { generatePodcastScript, synthesizeSpeech } from "@/lib/podcast-service";
-// IMPORTANT: Ensure you have created src/lib/youtube.ts as discussed!
 import { fetchYoutubeTranscript } from "./youtube"; 
 
 // Use GOOGLE_AI_API_KEY as primary, with fallback to GEMINI_API_KEY
@@ -71,7 +70,7 @@ function cleanAndParseJSON(text: string) {
 }
 
 // ------------------------------------------------------------------
-// 1. QUIZ GENERATION
+// 1. QUIZ GENERATION (FROM CONTENT)
 // ------------------------------------------------------------------
 export async function generateQuizFromContent(
   content: string, 
@@ -113,6 +112,53 @@ export async function generateQuizFromContent(
     };
   } catch (error) {
     console.error("Quiz Gen Error:", error);
+    return null;
+  }
+}
+
+// ------------------------------------------------------------------
+// 1.5 TOPIC QUIZ GENERATION (NEW - For Weakness Slayer)
+// ------------------------------------------------------------------
+export async function generateQuizFromTopic(
+  topic: string, 
+  numQuestions: number = 5, 
+  difficulty: string = "medium", 
+  questionType: string = "MIXED"
+) {
+  try {
+    const prompt = `
+      You are a strict teacher creating a test to verify mastery of a specific topic.
+      Topic: "${topic}"
+      
+      Create ${numQuestions} ${difficulty} level questions about this topic.
+      Question Types: ${questionType} (If "MIXED", vary the types).
+      
+      Focus on core concepts, common misconceptions, and critical thinking.
+      
+      Return ONLY a raw JSON array (no markdown) with this structure:
+      [
+        {
+          "question_text": "Question?",
+          "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "FILL_IN_THE_BLANK",
+          "options": ["A", "B", "C", "D"],
+          "correct_answer": "The correct option string",
+          "explanation": "Brief explanation"
+        }
+      ]
+    `;
+    
+    // Using a smart model for creative topic generation
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
+    const questions = cleanAndParseJSON(response.text());
+
+    if (!questions || !Array.isArray(questions)) return null;
+
+    return {
+      title: `Practice: ${topic}`,
+      questions: questions
+    };
+  } catch (error) {
+    console.error("Topic Quiz Gen Error:", error);
     return null;
   }
 }
@@ -204,7 +250,7 @@ export async function generateInsightsFromContent(content: string) {
 }
 
 // ------------------------------------------------------------------
-// 5. CHAT RESPONSE (New)
+// 5. CHAT RESPONSE
 // ------------------------------------------------------------------
 export async function generateChatResponse(context: string, query: string, history: any[] = []) {
   try {
@@ -262,7 +308,7 @@ export async function generateFromYoutube(videoUrlOrId: string) {
 }
 
 // ------------------------------------------------------------------
-// 7. PODCAST GENERATION (Preserved)
+// 7. PODCAST GENERATION
 // ------------------------------------------------------------------
 export async function generatePodcastForDocument(
   content: string,
@@ -337,6 +383,7 @@ export async function generatePodcastForDocument(
 // 8. EXPORTS
 // ------------------------------------------------------------------
 export const callAIToGenerateQuiz = generateQuizFromContent;
+export const callAIToGenerateQuizFromTopic = generateQuizFromTopic; // <--- NEW EXPORT
 export const callAIToGenerateFlashcards = generateFlashcardsFromContent;
 export const callAIToGenerateNote = generateNotesFromContent;
 export const callAIToGenerateInsights = generateInsightsFromContent;

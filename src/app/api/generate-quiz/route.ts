@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz } from '@/lib/aiGeneration'; // <-- IMPORTED
+import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; // <-- Updated Import
 
 export const runtime = 'nodejs';
 
@@ -17,26 +17,26 @@ function parseQuery(request: NextRequest) {
   const difficulty = (['easy', 'medium', 'hard'].includes(searchParams.get('difficulty') as string) ? searchParams.get('difficulty') : 'medium') as Difficulty;
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
+  
+  // NEW: Detect mode
+  const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
 
-  return { numQuestions, difficulty, questionType, immediateFeedback };
+  return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
 async function readInputText(request: NextRequest): Promise<string> {
   const contentType = request.headers.get('content-type') || '';
 
-  // 1. Handle JSON (New: for Voice Notes/Text)
   if (contentType.includes('application/json')) {
       const body = await request.json();
       return body.text?.trim() || '';
   }
 
-  // 2. Handle Multipart (Legacy: for file uploads if needed)
   if (contentType.includes('multipart/form-data')) {
     const form = await request.formData();
     return (form.get('text') as string)?.trim() || '';
   }
 
-  // 3. Handle Plain Text
   if (contentType.includes('text/plain')) {
     return (await request.text()).trim();
   }
@@ -48,30 +48,42 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
-    // 1. Usage Check
+    // 1. Usage Check (PRESERVED)
     const usageCheck = await checkAIGenerationUsageLimit(user.id);
     if (!usageCheck.isValid || !usageCheck.canGenerate) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // 2. Parse Input
-    const { numQuestions, difficulty, questionType, immediateFeedback } = parseQuery(request);
+    // 2. Parse Input (Including Mode)
+    const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     const text = await readInputText(request);
 
-    if (!text || text.length < 100) {
+    // Basic validation
+    // If mode is topic, text might be short (e.g. "Biology"), so we relax the length check
+    if (mode !== 'topic' && (!text || text.length < 100)) {
       return NextResponse.json({ success: false, error: 'Content too short (min 100 chars).' }, { status: 400 });
     }
+    if (mode === 'topic' && (!text || text.length < 3)) {
+      return NextResponse.json({ success: false, error: 'Topic too short.' }, { status: 400 });
+    }
 
-    // 3. Call AI (Using Shared Library)
-    const quizData = await callAIToGenerateQuiz(text, numQuestions, difficulty, questionType);
+    // 3. Call AI (Switch based on Mode)
+    let quizData;
+    
+    if (mode === 'topic') {
+      // Remove the "TOPIC:" prefix if the frontend sent it
+      const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
+      quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
+    } else {
+      quizData = await callAIToGenerateQuiz(text, numQuestions, difficulty, questionType);
+    }
 
-    // FIX: Check if quizData is null
     if (!quizData) {
         return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
     }
 
-    // 4. Save to DB
-    const questionsToCreate = quizData.questions.map((q) => ({
+    // 4. Save to DB (PRESERVED)
+    const questionsToCreate = quizData.questions.map((q: any) => ({
       question_text: q.question_text,
       question_type: q.question_type,
       correct_answer: q.correct_answer,
@@ -87,6 +99,8 @@ export async function POST(request: NextRequest) {
         immediate_feedback: immediateFeedback,
         userId: user.id,
         questions: { create: questionsToCreate },
+        // Optional: Save source type if your schema supports it
+        // source_type: mode 
       },
       select: {
         id: true,
@@ -106,7 +120,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 5. Update Usage
+    // 5. Update Usage (PRESERVED)
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json({

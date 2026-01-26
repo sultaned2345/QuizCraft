@@ -26,10 +26,125 @@ export type TopicPerformance = {
   fullMark: number; // 100
 };
 
+export type ResumeItem = {
+  type: 'document' | 'quiz' | 'deck' | 'note';
+  title: string;
+  id: string;
+  timestamp: Date;
+  data?: any;
+};
+
+// --- Helper Functions ---
+
+/**
+ * Calculates the current streak based on heatmap data.
+ * Shared logic to be used by both API and UI components.
+ */
+export function calculateStreak(heatmap: HeatmapPoint[]): number {
+  if (!heatmap || heatmap.length === 0) return 0;
+
+  // Extract dates where count > 0
+  const activeDates = heatmap
+    .filter(h => h.count > 0)
+    .map(h => h.date)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+  // Unique dates only
+  const uniqueDates = Array.from(new Set(activeDates));
+
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  // If user hasn't studied today OR yesterday, streak is 0
+  if (!uniqueDates.includes(todayStr) && !uniqueDates.includes(yesterdayStr)) {
+    return 0;
+  }
+
+  let streak = 0;
+  // Start counting from today or yesterday
+  let currentDate = new Date(uniqueDates.includes(todayStr) ? todayStr : yesterdayStr);
+  
+  while (true) {
+    const dateStr = currentDate.toISOString().split("T")[0];
+    if (uniqueDates.includes(dateStr)) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 // --- Data Fetching Functions ---
 
 /**
- * 1. Smart Study Queue
+ * 1. Resume Context
+ * Finds the single most recent interaction to help the user jump back in.
+ */
+export async function getResumeItem(userId: string): Promise<ResumeItem | null> {
+  try {
+    const [lastDoc, lastQuiz, lastFlashcard, lastNote] = await Promise.all([
+      // Recent Document
+      prisma.documents.findFirst({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, file_name: true, created_at: true }
+      }).catch(() => null),
+      
+      // Recent Quiz Attempt
+      prisma.quiz_attempts.findFirst({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' },
+        include: { quiz: { select: { title: true } } }
+      }).catch(() => null),
+
+      // Recent Flashcard Study (approximated by updated_at on cards)
+      prisma.flashcards.findFirst({
+        where: { deck: { user_id: userId } },
+        orderBy: { updated_at: 'desc' },
+        include: { deck: { select: { id: true, title: true } } }
+      }).catch(() => null),
+
+      // Recent Note
+      prisma.notes.findFirst({
+        where: { user_id: userId },
+        orderBy: { updated_at: 'desc' },
+        select: { id: true, title: true, updated_at: true }
+      }).catch(() => null)
+    ]);
+
+    const candidates = [
+      lastDoc ? { type: 'document', date: lastDoc.created_at, data: lastDoc, title: lastDoc.file_name, id: lastDoc.id } : null,
+      lastQuiz ? { type: 'quiz', date: lastQuiz.created_at, data: lastQuiz, title: lastQuiz.quiz?.title || 'Quiz', id: lastQuiz.quiz_id } : null,
+      lastFlashcard ? { type: 'deck', date: lastFlashcard.updated_at, data: lastFlashcard, title: lastFlashcard.deck?.title || 'Flashcards', id: lastFlashcard.deck_id } : null,
+      lastNote ? { type: 'note', date: lastNote.updated_at, data: lastNote, title: lastNote.title, id: lastNote.id } : null
+    ].filter(Boolean) as (ResumeItem & { date: Date })[];
+
+    if (candidates.length === 0) return null;
+
+    // Sort by most recent
+    candidates.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const winner = candidates[0];
+    return {
+      type: winner.type as ResumeItem['type'],
+      title: winner.title,
+      id: winner.id,
+      timestamp: winner.date,
+      data: winner.data
+    };
+  } catch (error) {
+    console.error("Error in getResumeItem:", error);
+    return null;
+  }
+}
+
+/**
+ * 2. Smart Study Queue
  * - Fetches Flashcard Decks that have cards due (review_at <= now).
  * - Fetches Quizzes with recent low scores (< 70%).
  */
@@ -55,10 +170,10 @@ export async function getSmartStudyQueue(userId: string) {
         },
       },
       take: 5,
-    }).catch(() => []); // Safety catch
+    }).catch(() => []); 
 
     const flashcardItems: StudyQueueItem[] = (decksWithDueCards || []).map((deck) => ({
-      type: "flashcard_due" as const, // FIX: Use as const to match literal type
+      type: "flashcard_due" as const, 
       id: deck.id,
       title: deck.title,
       dueCount: deck.flashcards?.length || 0,
@@ -78,7 +193,7 @@ export async function getSmartStudyQueue(userId: string) {
       },
       orderBy: { created_at: "desc" },
       take: 10,
-    }).catch(() => []); // Safety catch
+    }).catch(() => []);
 
     // Filter for scores < 70%
     const lowScoreItems: StudyQueueItem[] = (recentLowAttempts || [])
@@ -87,11 +202,11 @@ export async function getSmartStudyQueue(userId: string) {
         return percentage < 70;
       })
       .map((attempt) => ({
-        type: "low_score_quiz" as const, // FIX: Use as const to match literal type
+        type: "low_score_quiz" as const,
         id: attempt.id,
         title: attempt.quiz?.title || "Untitled Quiz",
         score: Math.round((attempt.score / attempt.total) * 100),
-        quizId: attempt.quiz?.id || "", // FIX: Ensure quizId is a string, not undefined
+        quizId: attempt.quiz?.id || "",
       }))
       .slice(0, 3);
 
@@ -106,7 +221,7 @@ export async function getSmartStudyQueue(userId: string) {
 }
 
 /**
- * 2. Heatmap Data
+ * 3. Heatmap Data
  * Aggregates creation/update timestamps from multiple models to visualize daily activity.
  */
 export async function getHeatmapData(userId: string): Promise<HeatmapPoint[]> {
@@ -154,7 +269,7 @@ export async function getHeatmapData(userId: string): Promise<HeatmapPoint[]> {
 }
 
 /**
- * 3. Recent Activity (Mission Log)
+ * 4. Recent Activity (Mission Log)
  * Merges Documents, Quizzes, Notes, and Projects into a single timeline sorted by date.
  */
 export async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
@@ -225,9 +340,8 @@ export async function getRecentActivity(userId: string): Promise<ActivityItem[]>
 }
 
 /**
- * 4. Knowledge Radar
- * Aggregates quiz performance grouped by Quiz Title (serving as "Topic" for now).
- * Returns average score % per topic.
+ * 5. Knowledge Radar
+ * Aggregates quiz performance grouped by Quiz Title.
  */
 export async function getQuizPerformance(userId: string): Promise<TopicPerformance[]> {
   try {
@@ -245,7 +359,6 @@ export async function getQuizPerformance(userId: string): Promise<TopicPerforman
     const topicStats = new Map<string, { totalScore: number; count: number }>();
 
     (attempts || []).forEach((attempt) => {
-      // Safe access for quiz title
       const topic = attempt.quiz?.title || "Unknown";
       const percentage = attempt.total > 0 ? (attempt.score / attempt.total) * 100 : 0;
 
@@ -273,76 +386,10 @@ export async function getQuizPerformance(userId: string): Promise<TopicPerforman
 }
 
 /**
- * 5. Study Streak Calculator
- * Counts consecutive days of activity ending today or yesterday.
+ * 6. Legacy Study Streak
+ * Kept for backward compatibility, but internally uses getHeatmapData + calculateStreak logic pattern.
  */
 export async function getStudyStreak(userId: string): Promise<number> {
-  try {
-    // 1. Fetch all distinct dates of activity (optimized select)
-    const [attempts, notes, documents, flashcards] = await Promise.all([
-      prisma.quiz_attempts.findMany({
-        where: { user_id: userId },
-        select: { created_at: true },
-        orderBy: { created_at: 'desc' }
-      }).catch(() => []),
-      prisma.notes.findMany({
-        where: { user_id: userId },
-        select: { updated_at: true },
-        orderBy: { updated_at: 'desc' }
-      }).catch(() => []),
-      prisma.documents.findMany({
-        where: { user_id: userId },
-        select: { created_at: true },
-        orderBy: { created_at: 'desc' }
-      }).catch(() => []),
-      prisma.flashcards.findMany({
-        where: { deck: { user_id: userId } },
-        select: { updated_at: true },
-        orderBy: { updated_at: 'desc' }
-      }).catch(() => []),
-    ]);
-
-    // 2. Normalize to YYYY-MM-DD strings
-    const activityDates = new Set<string>();
-    const addDate = (d: Date | null) => {
-      if (d) activityDates.add(d.toISOString().split('T')[0]);
-    };
-
-    (attempts || []).forEach(a => addDate(a.created_at));
-    (notes || []).forEach(n => addDate(n.updated_at));
-    (documents || []).forEach(d => addDate(d.created_at));
-    (flashcards || []).forEach(f => addDate(f.updated_at));
-
-    // 3. Count backwards from today
-    let streak = 0;
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const todayStr = today.toISOString().split('T')[0];
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-    // If no activity today OR yesterday, streak is broken (return 0)
-    if (!activityDates.has(todayStr) && !activityDates.has(yesterdayStr)) {
-      return 0;
-    }
-
-    // Start checking from today (or yesterday if today is empty but yesterday wasn't)
-    let currentDate = activityDates.has(todayStr) ? today : yesterday;
-
-    while (true) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      if (activityDates.has(dateStr)) {
-        streak++;
-        currentDate.setDate(currentDate.getDate() - 1); // Go back one day
-      } else {
-        break; // Streak broken
-      }
-    }
-
-    return streak;
-  } catch (error) {
-    console.error("Error in getStudyStreak:", error);
-    return 0;
-  }
+  const heatmap = await getHeatmapData(userId);
+  return calculateStreak(heatmap);
 }
