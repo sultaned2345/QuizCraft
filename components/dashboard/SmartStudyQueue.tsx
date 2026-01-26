@@ -42,11 +42,13 @@ export function SmartStudyQueue({ data }: { data: any }) {
                 {dueFlashcards.map((item: any) => (
                   <div key={item.id} className="group flex items-center justify-between p-3 rounded-xl bg-muted/30 hover:bg-muted/60 transition-colors border border-transparent hover:border-border/50">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-sm truncate max-w-[150px]">{item.deck.title}</span>
+                      {/* FIX: Access flattened properties directly */}
+                      <span className="font-medium text-sm truncate max-w-[150px]">{item.title}</span>
                       <span className="text-[10px] text-muted-foreground">{item.dueCount} cards due</span>
                     </div>
                     <Button size="sm" variant="secondary" className="h-8 text-xs font-bold group-hover:bg-primary group-hover:text-primary-foreground transition-all" asChild>
-                      <Link href={`/flashcards/${item.deck.id}`}>Review</Link>
+                      {/* FIX: Use item.deckId or item.id depending on your type definition */}
+                      <Link href={`/flashcards/${item.deckId || item.id}`}>Review</Link>
                     </Button>
                   </div>
                 ))}
@@ -63,11 +65,14 @@ export function SmartStudyQueue({ data }: { data: any }) {
               </div>
               <div className="space-y-3">
                 {recentLowScores.map((attempt: any) => {
-                  const scorePct = Math.round((attempt.score / attempt.total) * 100);
+                  // FIX: Score is already calculated as percentage in dashboard-data.ts
+                  const scorePct = attempt.score; 
+                  
                   return (
                     <div key={attempt.id} className="flex flex-col gap-2 p-3 rounded-xl bg-background/80 border border-red-100 dark:border-red-900/30 shadow-sm">
                       <div className="flex items-center justify-between">
-                         <span className="font-medium text-sm text-foreground/90">{attempt.quiz.title}</span>
+                         {/* FIX: Use flattened attempt.title */}
+                         <span className="font-medium text-sm text-foreground/90">{attempt.title}</span>
                          <span className="text-xs font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md">
                            {scorePct}%
                          </span>
@@ -76,12 +81,13 @@ export function SmartStudyQueue({ data }: { data: any }) {
                       <div className="flex gap-2 mt-1">
                         {/* Option A: Retake Exact Quiz */}
                         <Button size="sm" variant="ghost" className="h-7 flex-1 text-[10px] text-muted-foreground hover:text-foreground border border-border" asChild>
-                           <Link href={`/quiz/${attempt.quiz.id}`}>Retake</Link>
+                           {/* FIX: Use flattened attempt.quizId */}
+                           <Link href={`/quiz/${attempt.quizId}`}>Retake</Link>
                         </Button>
                         
                         {/* Option B: AI Generate Remedial Quiz */}
                         <Button size="sm" variant="default" className="h-7 flex-[2] text-[10px] bg-red-600 hover:bg-red-700 text-white border-none shadow-none" asChild>
-                           <Link href={`/create?mode=ai&source=weakness&topic=${encodeURIComponent(attempt.quiz.title)}&contextId=${attempt.quiz.id}`}>
+                           <Link href={`/create?mode=ai&source=weakness&topic=${encodeURIComponent(attempt.title)}&contextId=${attempt.quizId}`}>
                              <Zap className="w-3 h-3 mr-1.5 fill-current" />
                              Fix Weakness
                            </Link>

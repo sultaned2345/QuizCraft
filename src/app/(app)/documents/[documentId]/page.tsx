@@ -1,7 +1,8 @@
+// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // FIX: Added router for redirect
+import { useState, useEffect, use } from 'react'; // ✅ Import 'use'
+import { useRouter } from 'next/navigation';
 import { 
   ResizableHandle, 
   ResizablePanel, 
@@ -24,18 +25,22 @@ import {
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
 
-export default function StudyWorkspacePage({ params }: { params: { documentId: string } }) {
+// ✅ Update type definition for Next.js 15
+export default function StudyWorkspacePage({ params }: { params: Promise<{ documentId: string }> }) {
+  // ✅ Unwrap the params Promise using React.use()
+  const { documentId } = use(params);
+  
   const router = useRouter();
   const [isContentOpen, setIsContentOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("document");
   
-  // FIX: Detect invalid ID immediately
-  const invalidId = !params.documentId || params.documentId === 'undefined';
+  // ✅ Check validity on the unwrapped ID
+  const invalidId = !documentId || documentId === 'undefined';
 
   useEffect(() => {
     if (invalidId) {
-      // Optional: Auto-redirect back to dashboard after 3s
-      // setTimeout(() => router.push('/documents'), 3000);
+       // Optional: Auto-redirect
+       // setTimeout(() => router.push('/documents'), 3000);
     }
   }, [invalidId, router]);
 
@@ -82,7 +87,8 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
           </div>
 
           <div className="flex-1 overflow-hidden relative">
-             <ChatInterface documentId={params.documentId} />
+             {/* ✅ Pass unwrapped documentId */}
+             <ChatInterface documentId={documentId} />
           </div>
         </ResizablePanel>
 
@@ -128,7 +134,8 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
                 
                 <TabsContent value="document" className="h-full m-0 p-0">
                   <div className="h-full w-full overflow-hidden">
-                     <PdfViewer documentId={params.documentId} />
+                     {/* ✅ Pass unwrapped documentId */}
+                     <PdfViewer documentId={documentId} />
                   </div>
                 </TabsContent>
                 

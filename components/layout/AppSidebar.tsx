@@ -6,20 +6,14 @@ import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
 import {
   BookOpen,
-  BrainCircuit,
-  FileText,
   LayoutDashboard,
   Settings,
-  Mic,
-  PenTool,
-  FolderKanban,
-  Layers,
   LogOut,
   Sparkles,
   HelpCircle,
   User,
   CreditCard,
-  UploadCloud // ✅ NEW ICON
+  UploadCloud
 } from "lucide-react"
 
 import {
@@ -31,12 +25,10 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarGroupContent,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,69 +40,32 @@ import {
 import Logo from "@/components/ui/Logo"
 import { useAuth } from "@/contexts/AuthContext"
 
-// Menu Configuration
+// Simplified Menu Configuration
 const data = {
   navMain: [
     {
-      title: "Quick Actions", // ✅ NEW SECTION for Turbo
+      title: "Main Menu",
       items: [
         {
           title: "Turbo Upload",
           url: "/upload",
           icon: UploadCloud,
-          badge: "NEW", // Optional Badge
-          variant: "turbo" // Special flag for coloring
-        }
-      ]
-    },
-    {
-      title: "Learning Center",
-      items: [
+          variant: "turbo" 
+        },
         {
           title: "Dashboard",
           url: "/dashboard",
           icon: LayoutDashboard,
         },
         {
-          title: "My Library",
+          title: "Library",
           url: "/documents",
           icon: BookOpen,
         },
         {
-          title: "Flashcards",
-          url: "/flashcards",
-          icon: Layers,
-        },
-        {
-          title: "Recordings",
-          url: "/recordings",
-          icon: Mic,
-        },
-      ],
-    },
-    {
-      title: "Tools & AI",
-      items: [
-        {
-          title: "Quiz Generator",
-          url: "/create",
-          icon: BrainCircuit,
-          badge: "AI",
-        },
-        {
-          title: "Essay Grader",
-          url: "/essay-grader",
-          icon: PenTool,
-        },
-        {
-          title: "Notes & Graph",
-          url: "/notes",
-          icon: FileText,
-        },
-        {
-          title: "Projects",
-          url: "/projects",
-          icon: FolderKanban,
+          title: "Account",
+          url: "/account",
+          icon: User,
         },
       ],
     },
@@ -142,20 +97,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="bg-orange-50/30 dark:bg-background/50">
+      <SidebarContent className="bg-orange-50/30 dark:bg-background/50 pt-4">
         
         {/* NAV GROUPS */}
         {data.navMain.map((group) => (
           <SidebarGroup key={group.title}>
-            {/* Hide label for 'Quick Actions' to keep it clean, or keep it if you prefer */}
-            <SidebarGroupLabel className="text-orange-900/60 dark:text-muted-foreground font-semibold px-4 py-2">
-                {group.title}
-            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item: any) => {
                   const isActive = pathname === item.url || pathname?.startsWith(item.url + '/');
-                  const isTurbo = item.variant === "turbo"; // Check for our special flag
+                  const isTurbo = item.variant === "turbo";
 
                   return (
                     <SidebarMenuItem key={item.title}>
@@ -164,7 +115,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         tooltip={item.title}
                         isActive={isActive}
                         className={`
-                            h-10 rounded-xl transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95
+                            h-10 rounded-xl transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 mb-1
                             ${isActive 
                                 ? 'bg-orange-200/50 text-orange-900 font-bold dark:bg-primary/20 dark:text-primary' 
                                 : 'text-muted-foreground hover:bg-orange-100/50 hover:text-orange-800 dark:hover:bg-accent'
@@ -175,15 +126,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <Link href={item.url}>
                           <item.icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''} ${isTurbo ? 'text-indigo-500' : ''}`} />
                           <span>{item.title}</span>
-                          {item.badge && (
-                              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                                  isTurbo 
-                                  ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400" 
-                                  : "bg-primary/10 text-primary"
-                              }`}>
-                                  {item.badge}
-                              </span>
-                          )}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -193,20 +135,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-
-        {/* Upgrade Card */}
-        <div className="mt-auto p-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-gradient-to-br from-primary/10 to-orange-100/50 dark:from-primary/10 dark:to-background border border-orange-100 dark:border-border rounded-2xl p-4 text-center space-y-3">
-                <div className="w-10 h-10 bg-white dark:bg-card rounded-full flex items-center justify-center mx-auto shadow-sm text-lg">
-                   🦊
-                </div>
-                <h4 className="font-bold text-sm text-orange-900 dark:text-foreground">Go Pro</h4>
-                <p className="text-xs text-muted-foreground">Get unlimited AI quizzes and smart summaries.</p>
-                <Button size="sm" className="w-full rounded-xl text-xs font-bold" variant="default">
-                    Upgrade
-                </Button>
-            </div>
-        </div>
 
       </SidebarContent>
 
@@ -260,12 +188,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
-                    <Link href="/account">
-                        <Sparkles className="mr-2 h-4 w-4 text-orange-500" />
-                        Upgrade Plan
-                    </Link>
-                </DropdownMenuItem>
                 <DropdownMenuItem asChild className="rounded-xl cursor-pointer focus:bg-orange-50 dark:focus:bg-accent">
                     <Link href="/account">
                         <CreditCard className="mr-2 h-4 w-4" />
