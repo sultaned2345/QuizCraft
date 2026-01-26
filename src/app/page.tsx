@@ -2,32 +2,55 @@
 
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation"; // Removed useRouter
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AnimatedCounter } from "@/components/landing/animated-counter";
 import { FeatureTab } from "@/components/landing/feature-tab";
 import {
-  BookOpen, Clock, Target, Brain, Users, Award, Sparkles, CheckCircle2,
-  Star, Zap, ArrowRight, Leaf, BarChart3, ChevronDown, Heart, Shield,
-  Pause, Timer, Flame, TrendingUp, Lightbulb, GraduationCap, Coffee,
-  Headphones, Trophy, FileText, MessageCircle, Layers, Mic
+  BookOpen,
+  Clock,
+  Brain,
+  Users,
+  Award,
+  Sparkles,
+  CheckCircle2,
+  Star,
+  Zap,
+  ArrowRight,
+  Leaf,
+  ChevronDown,
+  Heart,
+  Shield,
+  Pause,
+  Flame,
+  TrendingUp,
+  Lightbulb,
+  GraduationCap,
+  Coffee,
+  Headphones,
+  Trophy,
+  FileText,
+  MessageCircle,
+  Layers,
+  Mic,
 } from "lucide-react";
 
-// --- AUTH SAFETY NET COMPONENT ---
+// --- CRITICAL FIX: Safety Net Component ---
+// This listens for Supabase redirects that incorrectly land on the homepage
 function AuthRedirect() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
 
   useEffect(() => {
     if (code) {
-      // Force a hard redirect to ensure the auth callback runs
+      // Force a hard redirect to the callback route to complete login
       window.location.replace(`/auth/callback?code=${code}`);
     }
   }, [code]);
 
   return null;
 }
-// ----------------------------------
+// ----------------------------------------
 
 export default function LandingPage() {
   const [activeFeature, setActiveFeature] = useState(0);
@@ -37,11 +60,12 @@ export default function LandingPage() {
   useEffect(() => {
     if (!isPlaying) return;
     const timer = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 6);
+      setActiveFeature((prev) => (prev + 1) % 6); // Cycle through 6 features
     }, 5000);
     return () => clearInterval(timer);
   }, [isPlaying]);
 
+  // Updated Features List
   const features = [
     {
       icon: Sparkles,
@@ -258,8 +282,9 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-background overflow-hidden">
-      {/* This Suspense boundary is CRITICAL. 
-        It prevents build errors when using useSearchParams in a page that is statically generated.
+      {/* CRITICAL FIX: 
+        This Suspense boundary wraps the AuthRedirect component.
+        This allows us to use 'useSearchParams' without breaking the static build.
       */}
       <Suspense fallback={null}>
         <AuthRedirect />
