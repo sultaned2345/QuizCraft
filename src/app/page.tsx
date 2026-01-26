@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AnimatedCounter } from "@/components/landing/animated-counter";
 import { FeatureTab } from "@/components/landing/feature-tab";
@@ -31,6 +32,12 @@ import {
   Coffee,
   Headphones,
   Trophy,
+  FileText,
+  MessageCircle,
+  Layers,
+  Play,
+  Mic,
+  PenTool,
 } from "lucide-react";
 
 export default function LandingPage() {
@@ -38,59 +45,119 @@ export default function LandingPage() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  // --- LOGIN REDIRECT FIX ---
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const code = searchParams.get("code");
+
+  useEffect(() => {
+    if (code) {
+      // If we see an auth code on the landing page, forward it to the callback handler
+      // This catches the case where Supabase redirects to /?code=... instead of /auth/callback
+      router.push(`/auth/callback?code=${code}`);
+    }
+  }, [code, router]);
+  // --------------------------
+
   useEffect(() => {
     if (!isPlaying) return;
     const timer = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 4);
-    }, 4000);
+      setActiveFeature((prev) => (prev + 1) % 6); // Cycle through 6 features
+    }, 5000); // Slightly longer duration to read features
     return () => clearInterval(timer);
   }, [isPlaying]);
 
   const features = [
     {
-      icon: Clock,
-      label: "Focus Timer",
-      title: "Deep work sessions",
-      description: "Pomodoro-style timers that adapt to your natural rhythm. Take breaks when you need them.",
+      icon: Sparkles,
+      label: "AI Quizzes",
+      title: "Generate quizzes instantly",
+      description: "Upload any PDF, text, or YouTube video, and our AI will craft perfect multiple-choice questions to test your knowledge.",
       preview: (
-        <div className="flex flex-col items-center justify-center h-full py-8">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Current Session</span>
-          <div className="font-serif text-7xl text-foreground mb-2">24:38</div>
-          <div className="text-sm text-secondary mb-6">Biology Chapter 12</div>
-          <div className="flex gap-3">
-            <button className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors">
-              <Pause className="h-5 w-5 text-primary" />
-            </button>
-            <button className="h-12 w-12 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
-              <Timer className="h-5 w-5 text-muted-foreground" />
-            </button>
+        <div className="flex flex-col h-full p-6 sm:p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-1 rounded-md bg-primary/10 text-xs font-medium text-primary">Generated from PDF</span>
+            </div>
+            <span className="text-xs text-muted-foreground">Question 1/10</span>
           </div>
-          <div className="mt-6 flex gap-2">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className={`h-2 w-12 rounded-full ${i <= 3 ? "bg-primary" : "bg-muted"}`} />
-            ))}
+          <div className="space-y-6">
+            <h4 className="font-serif text-xl sm:text-2xl text-foreground">What is the primary function of the mitochondria?</h4>
+            <div className="space-y-3">
+              <div className="p-4 rounded-xl border border-border/60 bg-card hover:bg-muted/50 transition-colors cursor-pointer flex items-center gap-3">
+                <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
+                <span className="text-sm text-foreground">Protein synthesis</span>
+              </div>
+              <div className="p-4 rounded-xl border-2 border-primary/20 bg-primary/5 cursor-pointer flex items-center gap-3">
+                <div className="h-5 w-5 rounded-full border-[5px] border-primary" />
+                <span className="text-sm font-medium text-foreground">Energy production (ATP)</span>
+              </div>
+              <div className="p-4 rounded-xl border border-border/60 bg-card hover:bg-muted/50 transition-colors cursor-pointer flex items-center gap-3">
+                <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
+                <span className="text-sm text-foreground">Cell division</span>
+              </div>
+            </div>
           </div>
         </div>
       ),
     },
     {
-      icon: Brain,
+      icon: FileText,
+      label: "Smart Notes",
+      title: "Beautiful, organized notes",
+      description: "Create rich text notes or let AI summarize your study materials. Automatic linking connects related concepts across your workspace.",
+      preview: (
+        <div className="relative h-full p-6 overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 bg-background/80 backdrop-blur-sm z-10 border-b border-l border-border/40 rounded-bl-2xl">
+            <div className="flex gap-2">
+               <div className="h-2 w-2 rounded-full bg-red-400" />
+               <div className="h-2 w-2 rounded-full bg-yellow-400" />
+               <div className="h-2 w-2 rounded-full bg-green-400" />
+            </div>
+          </div>
+          <div className="space-y-4 max-w-[90%]">
+            <div className="h-8 w-3/4 bg-foreground/10 rounded-lg animate-pulse" />
+            <div className="space-y-2 pt-4">
+              <div className="h-4 w-full bg-muted rounded animate-pulse" />
+              <div className="h-4 w-5/6 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-4/6 bg-muted rounded animate-pulse" />
+            </div>
+            <div className="p-4 rounded-lg bg-secondary/10 border border-secondary/20 mt-4">
+              <div className="flex items-center gap-2 mb-2 text-secondary-foreground">
+                <Sparkles className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wide">AI Summary</span>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                The content discusses the three laws of thermodynamics. Key points include entropy, energy conservation, and absolute zero...
+              </p>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icon: Layers,
       label: "Flashcards",
-      title: "Smarter memorization",
-      description: "AI-powered spaced repetition that knows what you need to review and when.",
+      title: "Master with spaced repetition",
+      description: "Forget forgetting. Our smart algorithm schedules reviews exactly when you need them to maximize retention efficiency.",
       preview: (
         <div className="relative h-full flex items-center justify-center py-8">
-          <div className="absolute w-64 h-40 rounded-2xl bg-muted -rotate-6 -translate-x-4 translate-y-2" />
-          <div className="absolute w-64 h-40 rounded-2xl bg-muted/70 rotate-3 translate-x-2 -translate-y-1" />
-          <div className="relative w-72 h-44 rounded-2xl bg-card border border-border/60 shadow-lg p-6 flex flex-col justify-between">
-            <div className="text-xs text-muted-foreground">Tap to flip</div>
-            <div className="font-serif text-xl text-foreground text-center">What is the mitochondria?</div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-secondary">Biology</span>
-              <div className="flex gap-1">
-                <div className="h-2 w-2 rounded-full bg-secondary" />
-                <div className="h-2 w-2 rounded-full bg-secondary" />
-                <div className="h-2 w-2 rounded-full bg-muted" />
+          <div className="absolute w-64 h-40 rounded-2xl bg-muted -rotate-6 -translate-x-4 translate-y-2 opacity-50" />
+          <div className="absolute w-64 h-40 rounded-2xl bg-muted/70 rotate-3 translate-x-2 -translate-y-1 opacity-80" />
+          <div className="relative w-72 h-48 rounded-2xl bg-card border border-border/60 shadow-xl p-6 flex flex-col justify-between transform transition-transform hover:scale-[1.02]">
+            <div className="flex justify-between items-start">
+               <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Physics • Card 42</div>
+               <Brain className="h-4 w-4 text-secondary/50" />
+            </div>
+            <div className="font-serif text-2xl text-foreground text-center my-4">What is Newton&apos;s Second Law?</div>
+            <div className="space-y-3">
+              <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
+                <div className="h-full w-2/3 bg-secondary" />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Hard</span>
+                <span>Good</span>
+                <span>Easy</span>
               </div>
             </div>
           </div>
@@ -98,73 +165,101 @@ export default function LandingPage() {
       ),
     },
     {
-      icon: Target,
-      label: "Goals",
-      title: "Track your progress",
-      description: "Set intentions and watch your consistency grow without pressure or guilt.",
+      icon: MessageCircle,
+      label: "AI Tutor",
+      title: "Your personal study guide",
+      description: "Stuck on a concept? Chat with your documents. Ask questions, request examples, and get instant clarifications.",
       preview: (
-        <div className="p-6 h-full">
-          <div className="flex items-center justify-between mb-6">
-            <span className="font-serif text-lg text-foreground">This Week</span>
-            <span className="text-sm text-secondary">85% complete</span>
-          </div>
-          <div className="space-y-4">
-            {[
-              { label: "Study 20 hours", progress: 90, color: "primary" },
-              { label: "Review 100 cards", progress: 75, color: "secondary" },
-              { label: "Complete 5 chapters", progress: 80, color: "primary" },
-            ].map((goal, i) => (
-              <div key={i}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-foreground">{goal.label}</span>
-                  <span className="text-muted-foreground">{goal.progress}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ${goal.color === "primary" ? "bg-primary" : "bg-secondary"}`}
-                    style={{ width: `${goal.progress}%` }}
-                  />
-                </div>
+        <div className="flex flex-col h-full">
+          <div className="flex-1 p-6 space-y-4 overflow-hidden relative">
+            <div className="flex justify-end">
+              <div className="bg-primary text-primary-foreground px-4 py-3 rounded-2xl rounded-tr-sm text-sm max-w-[85%]">
+                Can you explain quantum entanglement simply?
               </div>
-            ))}
+            </div>
+            <div className="flex justify-start">
+              <div className="bg-muted text-foreground px-4 py-3 rounded-2xl rounded-tl-sm text-sm max-w-[85%] border border-border/50">
+                Imagine two coins that are magically linked. If you flip one and it lands on heads, the other one immediately becomes tails, no matter how far apart they are!
+              </div>
+            </div>
+          </div>
+          <div className="p-4 border-t border-border/40 bg-muted/30">
+            <div className="h-10 rounded-full bg-background border border-border/60 flex items-center px-4 text-sm text-muted-foreground">
+              Ask a follow-up question...
+            </div>
           </div>
         </div>
       ),
     },
     {
-      icon: BarChart3,
-      label: "Analytics",
-      title: "Understand your patterns",
-      description: "Gentle insights that help you study smarter, not harder.",
+      icon: Headphones,
+      label: "Podcast",
+      title: "Listen and learn anywhere",
+      description: "Turn your notes and documents into engaging audio podcasts. Perfect for studying while commuting or exercising.",
       preview: (
-        <div className="p-6 h-full">
+        <div className="flex flex-col items-center justify-center h-full p-6">
+          <div className="w-32 h-32 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center mb-6 shadow-lg border border-white/10 relative overflow-hidden">
+             <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,white,transparent)]" />
+             <Mic className="h-10 w-10 text-foreground relative z-10" />
+          </div>
+          <div className="text-center space-y-2 mb-6">
+            <h4 className="font-serif text-lg text-foreground">History of Rome</h4>
+            <p className="text-xs text-muted-foreground">Episode 1 • 14 mins remaining</p>
+          </div>
+          <div className="w-full max-w-xs space-y-4">
+             <div className="flex items-center justify-center gap-6">
+                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground">
+                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 6 6-6 6"/></svg>
+                </Button>
+                <Button size="icon" className="h-14 w-14 rounded-full bg-foreground text-background hover:bg-foreground/90 shadow-xl">
+                   <Pause className="h-6 w-6 fill-current" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground">
+                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 8-6 6 6 6"/></svg>
+                </Button>
+             </div>
+             <div className="flex gap-1 items-end justify-center h-8 px-8">
+               {[40, 70, 55, 90, 65, 40, 75, 50, 85, 60].map((h, i) => (
+                 <div key={i} className="w-1.5 rounded-full bg-primary/40" style={{ height: `${h}%` }} />
+               ))}
+             </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icon: GraduationCap,
+      label: "Essay Grader",
+      title: "Improve your writing instantly",
+      description: "Get detailed feedback, grading, and suggestions for your essays using advanced AI analysis.",
+      preview: (
+        <div className="p-6 h-full flex flex-col">
           <div className="flex items-center justify-between mb-6">
-            <span className="font-serif text-lg text-foreground">Study Insights</span>
-            <span className="text-xs text-muted-foreground">Last 7 days</span>
+            <span className="font-serif text-lg text-foreground">Essay Analysis</span>
+            <div className="h-8 w-8 rounded-full bg-green-500/10 text-green-600 flex items-center justify-center text-sm font-bold border border-green-500/20">A-</div>
           </div>
-          <div className="flex items-end justify-between h-32 mb-4">
-            {["M", "T", "W", "T", "F", "S", "S"].map((day, i) => {
-              const heights = [45, 70, 55, 85, 65, 40, 75];
-              return (
-                <div key={i} className="flex flex-col items-center gap-2">
-                  <div
-                    className="w-8 rounded-t-lg bg-primary/20 hover:bg-primary/40 transition-colors"
-                    style={{ height: `${heights[i]}%` }}
-                  />
-                  <span className="text-xs text-muted-foreground">{day}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Flame className="h-4 w-4 text-secondary" />
-              <span className="text-foreground">21 day streak</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              <span className="text-foreground">+15% this week</span>
-            </div>
+          <div className="space-y-4 flex-1">
+             <div className="flex gap-3">
+               <div className="mt-0.5"><CheckCircle2 className="h-4 w-4 text-green-500" /></div>
+               <div>
+                 <p className="text-sm font-medium text-foreground">Strong Thesis Statement</p>
+                 <p className="text-xs text-muted-foreground">Clear and argumentative.</p>
+               </div>
+             </div>
+             <div className="flex gap-3">
+               <div className="mt-0.5"><CheckCircle2 className="h-4 w-4 text-green-500" /></div>
+               <div>
+                 <p className="text-sm font-medium text-foreground">Good Evidence Usage</p>
+                 <p className="text-xs text-muted-foreground">Citations are properly formatted.</p>
+               </div>
+             </div>
+             <div className="flex gap-3">
+               <div className="mt-0.5"><Lightbulb className="h-4 w-4 text-yellow-500" /></div>
+               <div>
+                 <p className="text-sm font-medium text-foreground">Suggestion</p>
+                 <p className="text-xs text-muted-foreground">Consider expanding on the counter-argument in paragraph 3.</p>
+               </div>
+             </div>
           </div>
         </div>
       ),
@@ -380,8 +475,8 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div className="mx-auto max-w-5xl">
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex flex-wrap justify-center gap-3 mb-10">
             {features.map((feature, i) => (
               <FeatureTab
                 key={i}
@@ -397,8 +492,8 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div className="order-2 md:order-1">
-              <h3 className="font-serif text-3xl text-foreground tracking-tight mb-4">
+            <div className="order-2 md:order-1 pl-4 md:pl-0">
+              <h3 className="font-serif text-3xl sm:text-4xl text-foreground tracking-tight mb-4">
                 {features[activeFeature].title}
               </h3>
               <p className="text-muted-foreground text-lg leading-relaxed mb-6">
@@ -414,7 +509,7 @@ export default function LandingPage() {
               </ul>
             </div>
             <div className="order-1 md:order-2">
-              <div className="rounded-3xl bg-card border border-border/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)] overflow-hidden min-h-[320px]">
+              <div className="rounded-3xl bg-card border border-border/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)] overflow-hidden min-h-[380px] sm:min-h-[400px]">
                 {features[activeFeature].preview}
               </div>
             </div>
