@@ -2,57 +2,32 @@
 
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation"; // Removed useRouter
 import { Button } from "@/components/ui/button";
 import { AnimatedCounter } from "@/components/landing/animated-counter";
 import { FeatureTab } from "@/components/landing/feature-tab";
 import {
-  BookOpen,
-  Clock,
-  Target,
-  Brain,
-  Users,
-  Award,
-  Sparkles,
-  CheckCircle2,
-  Star,
-  Zap,
-  ArrowRight,
-  Leaf,
-  BarChart3,
-  ChevronDown,
-  Heart,
-  Shield,
-  Pause,
-  Timer,
-  Flame,
-  TrendingUp,
-  Lightbulb,
-  GraduationCap,
-  Coffee,
-  Headphones,
-  Trophy,
-  FileText,
-  MessageCircle,
-  Layers,
-  Mic,
+  BookOpen, Clock, Target, Brain, Users, Award, Sparkles, CheckCircle2,
+  Star, Zap, ArrowRight, Leaf, BarChart3, ChevronDown, Heart, Shield,
+  Pause, Timer, Flame, TrendingUp, Lightbulb, GraduationCap, Coffee,
+  Headphones, Trophy, FileText, MessageCircle, Layers, Mic
 } from "lucide-react";
 
-// --- FIX: Extract Auth Logic to Component ---
+// --- AUTH SAFETY NET COMPONENT ---
 function AuthRedirect() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
 
   useEffect(() => {
     if (code) {
-      router.push(`/auth/callback?code=${code}`);
+      // Force a hard redirect to ensure the auth callback runs
+      window.location.replace(`/auth/callback?code=${code}`);
     }
-  }, [code, router]);
+  }, [code]);
 
-  return null; // This component renders nothing, just handles logic
+  return null;
 }
-// --------------------------------------------
+// ----------------------------------
 
 export default function LandingPage() {
   const [activeFeature, setActiveFeature] = useState(0);
@@ -283,11 +258,12 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-background overflow-hidden">
-      {/* --- FIX: Wrap in Suspense --- */}
+      {/* This Suspense boundary is CRITICAL. 
+        It prevents build errors when using useSearchParams in a page that is statically generated.
+      */}
       <Suspense fallback={null}>
         <AuthRedirect />
       </Suspense>
-      {/* ----------------------------- */}
 
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
