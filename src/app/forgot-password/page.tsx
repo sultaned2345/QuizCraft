@@ -52,19 +52,19 @@ export default function ForgotPasswordPage() {
   if (submitted) {
     return (
       <AuthLayout>
-        <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
-           <CardContent className="pt-10 pb-10 flex flex-col items-center text-center space-y-4">
-              <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 mb-2">
-                 <CheckCircle2 className="w-8 h-8" />
+        <Card className="w-full max-w-lg border-border/50 bg-card/50 backdrop-blur-sm shadow-xl mx-auto">
+           <CardContent className="pt-10 pb-10 flex flex-col items-center text-center space-y-6">
+              <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 mb-2">
+                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h2 className="text-2xl font-bold">Check your email</h2>
-              <p className="text-muted-foreground max-w-xs">
+              <h2 className="text-3xl font-bold">Check your email</h2>
+              <p className="text-muted-foreground max-w-sm text-lg">
                 We've sent a password reset link to <span className="font-medium text-foreground">{email}</span>
               </p>
-              <Button variant="outline" className="mt-4" onClick={() => setSubmitted(false)}>
+              <Button variant="outline" className="mt-6 h-11" onClick={() => setSubmitted(false)}>
                 Try another email
               </Button>
-              <Link href="/login" className="text-sm text-primary hover:underline mt-4 block">
+              <Link href="/login" className="text-base text-primary hover:underline mt-4 block font-medium">
                 Back to Sign In
               </Link>
            </CardContent>
@@ -75,32 +75,32 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
-          <CardDescription>
+      <Card className="w-full max-w-lg border-border/50 bg-card/50 backdrop-blur-sm shadow-xl mx-auto">
+        <CardHeader className="space-y-1 text-center pb-8 pt-8">
+          <CardTitle className="text-3xl font-bold">Reset Password</CardTitle>
+          <CardDescription className="text-base">
             Enter your email and we'll send you a recovery link
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleReset} className="space-y-5">
+        <CardContent className="px-8">
+          <form onSubmit={handleReset} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="name@example.com"
-                  className="pl-10 h-11"
+                  className="pl-10 h-12 text-base"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full h-11" disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <Button type="submit" className="w-full h-12 text-lg" disabled={loading}>
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
               Send Reset Link
             </Button>
           </form>
@@ -108,7 +108,7 @@ export default function ForgotPasswordPage() {
         <CardFooter className="justify-center pb-8">
           <Link 
             href="/login" 
-            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors"
+            className="text-base text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors font-medium"
           >
             <ArrowLeft className="w-4 h-4" /> Back to Sign In
           </Link>
