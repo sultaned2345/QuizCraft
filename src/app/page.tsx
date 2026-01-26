@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,35 +35,35 @@ import {
   FileText,
   MessageCircle,
   Layers,
-  Play,
   Mic,
-  PenTool,
 } from "lucide-react";
 
-export default function LandingPage() {
-  const [activeFeature, setActiveFeature] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-
-  // --- LOGIN REDIRECT FIX ---
+// --- FIX: Extract Auth Logic to Component ---
+function AuthRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
 
   useEffect(() => {
     if (code) {
-      // If we see an auth code on the landing page, forward it to the callback handler
-      // This catches the case where Supabase redirects to /?code=... instead of /auth/callback
       router.push(`/auth/callback?code=${code}`);
     }
   }, [code, router]);
-  // --------------------------
+
+  return null; // This component renders nothing, just handles logic
+}
+// --------------------------------------------
+
+export default function LandingPage() {
+  const [activeFeature, setActiveFeature] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isPlaying) return;
     const timer = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 6); // Cycle through 6 features
-    }, 5000); // Slightly longer duration to read features
+      setActiveFeature((prev) => (prev + 1) % 6);
+    }, 5000);
     return () => clearInterval(timer);
   }, [isPlaying]);
 
@@ -283,6 +283,12 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-background overflow-hidden">
+      {/* --- FIX: Wrap in Suspense --- */}
+      <Suspense fallback={null}>
+        <AuthRedirect />
+      </Suspense>
+      {/* ----------------------------- */}
+
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8">
