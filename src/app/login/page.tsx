@@ -1,31 +1,28 @@
-// src/app/login/page.tsx
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, BookOpen, AlertCircle } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { SpotlightCursor } from "@/components/landing/SpotlightCursor";
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
+import { toast } from '@/hooks/use-toast';
+import { Loader2, Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
+import { AuthLayout } from '@/components/AuthLayout';
 
-function LoginForm() {
+export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  const router = useRouter();
-  const { toast } = useToast();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -33,13 +30,27 @@ function LoginForm() {
         password,
       });
 
-      if (error) throw error;
-
-      router.refresh();
-      router.push('/dashboard');
-    } catch (error: any) {
-      setError(error.message || 'Invalid login credentials.');
-    } finally {
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Access Denied",
+          description: error.message,
+        });
+        setLoading(false);
+      } else {
+        setIsRedirecting(true);
+        toast({
+          title: "Welcome back!",
+          description: "Redirecting to your dashboard...",
+        });
+        router.replace('/dashboard');
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "System Error",
+        description: "Please try again later.",
+      });
       setLoading(false);
     }
   };
@@ -65,152 +76,119 @@ function LoginForm() {
   };
 
   return (
-    <div className="grid gap-6 relative z-10">
-      <form onSubmit={handleLogin} className="grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="student@university.edu"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading || googleLoading}
-            required
-            className="h-11 bg-background border-border/60"
-          />
-        </div>
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link 
-              href="/forgot-password" 
-              className="text-xs text-primary hover:underline font-medium"
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading || googleLoading}
-            required
-            className="h-11 bg-background border-border/60"
-          />
-        </div>
-
-        {error && (
-          <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          className="w-full h-11 rounded-xl shadow-sm"
-          disabled={loading || googleLoading}
-        >
-          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Sign In
-        </Button>
-      </form>
-
-      {/* --- DIVIDER --- */}
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-muted" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground font-medium">
-            Or continue with
-          </span>
-        </div>
-      </div>
-
-      {/* --- GOOGLE BUTTON --- */}
-      <Button 
-        variant="outline" 
-        className="w-full h-11 rounded-xl border-border/60 bg-card hover:bg-muted/50"
-        onClick={handleGoogleLogin} 
-        disabled={loading || googleLoading}
-      >
-        {googleLoading ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-            <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
-          </svg>
-        )}
-        Google
-      </Button>
-    </div>
-  );
-}
-
-// --- Main Page Layout ---
-export default function LoginPage() {
-  return (
-    <div className="w-full min-h-screen lg:grid lg:grid-cols-2 font-sans bg-background">
-       <SpotlightCursor />
-
-       {/* LEFT COLUMN: Form */}
-       <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative bg-background">
-        <Link href="/" className="absolute top-8 left-8 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors z-20">
-           <ArrowLeft className="w-4 h-4" /> <span className="text-sm font-medium">Back to Home</span>
-        </Link>
-
-        <div className="mx-auto grid w-full max-w-sm gap-8 relative z-10">
-          <div className="grid gap-2 text-center">
-            <h1 className="text-3xl font-serif font-medium tracking-tight text-foreground">Welcome Back</h1>
-            <p className="text-muted-foreground">
-              Enter your credentials to access your library.
-            </p>
-          </div>
-          
-          <Suspense fallback={<div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div>}>
-            <LoginForm />
-          </Suspense>
-
-          <div className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary underline-offset-4 hover:underline font-semibold">
-              Sign Up
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT COLUMN: Brand (Clean Solid) */}
-      <div className="hidden lg:flex items-center justify-center relative p-10 flex-col gap-6 bg-secondary/20 text-foreground">
-        
-        <div className="flex flex-col items-center justify-center max-w-lg text-center">
-            <Link href="/" className="flex items-center gap-3 mb-10">
-                <div className="bg-primary text-primary-foreground p-3 rounded-xl shadow-sm">
-                    <BookOpen className="w-8 h-8" />
-                </div>
-                <span className="text-4xl font-serif font-medium tracking-tight">QuizCraft</span>
-            </Link>
-            
-            <div className="p-8">
-                <p className="text-xl font-serif italic text-foreground/80 leading-relaxed">
-                    &ldquo;The AI grading feature saved me hours of manual review. It's like having a TA in your pocket.&rdquo;
-                </p>
-                <div className="flex items-center justify-center gap-4 mt-8">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold font-serif">
-                       M
-                    </div>
-                    <div className="text-left">
-                        <p className="font-semibold text-foreground text-lg">Marcus T.</p>
-                        <p className="text-sm text-muted-foreground">Medical Student</p>
-                    </div>
-                </div>
+    <AuthLayout>
+      <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-3xl font-bold tracking-tight">Welcome back</CardTitle>
+          <CardDescription>
+            Enter your credentials to access your workspace
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  className="pl-10 h-11"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading || googleLoading || isRedirecting}
+                />
+              </div>
             </div>
-        </div>
-      </div>
-    </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link 
+                  href="/forgot-password" 
+                  className="text-xs text-primary hover:text-primary/80 font-medium"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  className="pl-10 h-11"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading || googleLoading || isRedirecting}
+                />
+              </div>
+            </div>
+
+            <Button 
+              type="submit" 
+              className="w-full h-11 font-medium text-md transition-all" 
+              disabled={loading || googleLoading || isRedirecting}
+            >
+              {(loading || isRedirecting) ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  {isRedirecting ? 'Redirecting...' : 'Signing in...'}
+                </>
+              ) : (
+                <>
+                  Sign In <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
+            </Button>
+          </form>
+
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-muted" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full h-11"
+            onClick={handleGoogleLogin} 
+            disabled={loading || googleLoading || isRedirecting}
+          >
+            {googleLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+              </svg>
+            )}
+            Google
+          </Button>
+
+          <p className="text-xs text-center text-muted-foreground px-4 pt-2">
+              By clicking continue, you agree to our{' '}
+              <Link href="/legal/terms" className="underline hover:text-foreground">Terms of Service</Link> and{' '}
+              <Link href="/legal/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
+          </p>
+
+        </CardContent>
+        <CardFooter className="flex flex-col gap-4 text-center pb-8">
+          <div className="text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link href="/signup" className="text-primary hover:underline font-semibold transition-colors">
+              Create one for free
+            </Link>
+          </div>
+        </CardFooter>
+      </Card>
+    </AuthLayout>
   );
 }

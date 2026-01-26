@@ -1,4 +1,3 @@
-// src/app/api/generate-from-youtube/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
@@ -9,9 +8,9 @@ import {
 import { callAIToGenerateQuiz } from '@/lib/aiGeneration';
 import { ApiResponse, Quiz } from '@/types/database';
 import { Prisma } from '@prisma/client';
-import { YoutubeTranscript } from 'youtube-transcript';
+// CHANGE: Import the robust helper instead of the raw library
+import { fetchYoutubeTranscript } from '@/lib/youtube'; 
 
-// --- FIX: Prevent static generation for this route ---
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -40,41 +39,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Fetch Transcript
+    // 2. Fetch Transcript (using robust helper with fallback)
     let transcriptText = '';
-    try {
-      // Uses the 'youtube-transcript' library
-      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoUrl);
-      
-      if (!transcriptItems || transcriptItems.length === 0) {
-         throw new Error('No transcript found');
-      }
+    let videoTitle = '';
 
-      // Combine all text segments into one string
-      transcriptText = transcriptItems.map(item => item.text).join(' ');
+    try {
+      // CHANGE: Use the helper from src/lib/youtube.ts
+      // This automatically tries the API first, then falls back to page scraping
+      const videoData = await fetchYoutubeTranscript(videoUrl);
+      transcriptText = videoData.transcript;
+      videoTitle = videoData.title;
 
     } catch (toolError: any) {
       console.warn(`YouTube tool error for URL ${videoUrl}:`, toolError.message);
 
-      // Handle specific "disabled" error if the library throws it
-      if (toolError.message.includes('Transcript is disabled') || toolError.message.includes('No transcript')) {
-        return NextResponse.json<ApiResponse>(
-          {
-            success: false,
-            error: 'transcript_disabled',
-            message: 'Quiz generation failed. The video does not have a transcript available.',
-          },
-          { status: 400 }
-        );
-      }
-
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'youtube_tool_failed',
-          message: `Could not fetch video data: ${toolError.message}`,
+          error: 'transcript_failed',
+          message: toolError.message || 'Could not fetch video transcript. Ensure the video has captions enabled.',
         },
-        { status: 502 }
+        { status: 400 }
       );
     }
 
@@ -98,7 +83,6 @@ export async function POST(request: NextRequest) {
       'MIXED' // questionType
     );
 
-    // FIX: Check if quizData is null
     if (!quizData) {
         return NextResponse.json<ApiResponse>(
             { success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz from transcript.' },
@@ -116,10 +100,9 @@ export async function POST(request: NextRequest) {
       explanation: q.explanation || '',
     }));
 
-    // FIX: Removed 'select' to get full object, enabling proper mapping
     const savedQuiz = await prisma.quiz.create({
       data: {
-        title: quizData.title || 'Quiz from YouTube Video',
+        title: quizData.title || videoTitle || 'Quiz from YouTube Video',
         is_public: false,
         immediate_feedback: true,
         userId: user.id,
@@ -132,17 +115,16 @@ export async function POST(request: NextRequest) {
     // 6. Increment usage
     await incrementAIGenerationUsage(user.id, 1);
 
-    // FIX: Manually map Prisma result to Quiz interface
     const responseQuiz: Quiz = {
       id: savedQuiz.id,
-      user_id: savedQuiz.userId!, // Non-null assertion as we just created it with user.id
+      user_id: savedQuiz.userId!,
       title: savedQuiz.title,
       share_link: savedQuiz.share_link,
       created_at: savedQuiz.createdAt ? savedQuiz.createdAt.toISOString() : new Date().toISOString(),
       is_public: savedQuiz.is_public ?? false,
       immediate_feedback: savedQuiz.immediate_feedback ?? true,
       time_limit_minutes: savedQuiz.time_limit_minutes,
-      questions: [], // We didn't include questions in the return, which is optional in the interface
+      questions: [],
     };
 
     return NextResponse.json<ApiResponse<Quiz>>({

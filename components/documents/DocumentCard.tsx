@@ -1,4 +1,3 @@
-// components/documents/DocumentCard.tsx
 'use client';
 
 import Link from 'next/link';
@@ -25,11 +24,14 @@ import { cn } from '@/lib/utils';
 
 interface DocumentCardProps {
   doc: any;
-  viewMode?: 'grid' | 'list'; // FIX: Made optional
-  onDelete?: (id: string) => void; // FIX: Added onDelete prop
+  viewMode?: 'grid' | 'list';
+  onDelete?: (id: string) => void;
 }
 
 export function DocumentCard({ doc, viewMode = 'grid', onDelete }: DocumentCardProps) {
+  // FIX: Guard against missing ID to prevent "/documents/undefined" links
+  if (!doc || !doc.id) return null;
+
   const isProcessing = doc.processing_status === 'processing' || doc.processing_status === 'pending';
   const isFailed = doc.processing_status === 'failed';
 
@@ -51,22 +53,16 @@ export function DocumentCard({ doc, viewMode = 'grid', onDelete }: DocumentCardP
           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
              <span className="flex items-center gap-1">
                <Clock className="w-3 h-3" />
-               {formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}
+               {doc.created_at && formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}
              </span>
              {isProcessing && <Badge variant="secondary" className="text-[10px] h-4">Processing</Badge>}
           </div>
-        </div>
-
-        {/* Asset Indicators (Mini) */}
-        <div className="hidden sm:flex items-center gap-2 mr-4">
-           {/* We can check if related objects exist if passed in props, for now simplified */}
         </div>
 
         <Link href={`/documents/${doc.id}`}>
           <Button variant="outline" size="sm">Open</Button>
         </Link>
         
-        {/* List View Menu - Added Delete */}
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
@@ -130,7 +126,7 @@ export function DocumentCard({ doc, viewMode = 'grid', onDelete }: DocumentCardP
 
         <Link href={`/documents/${doc.id}`} className="flex-1 block group-hover:text-primary transition-colors outline-none">
           <h3 className="font-bold text-lg mb-2 line-clamp-2 leading-tight">
-            {doc.file_name}
+            {doc.file_name || "Untitled Document"}
           </h3>
           <p className="text-sm text-muted-foreground line-clamp-2 h-10">
             {doc.ai_summary || "AI-generated study set including notes, quiz, and flashcards."}
@@ -142,10 +138,9 @@ export function DocumentCard({ doc, viewMode = 'grid', onDelete }: DocumentCardP
       <div className="px-5 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" />
-          {formatDistanceToNow(new Date(doc.created_at))} ago
+          {doc.created_at ? formatDistanceToNow(new Date(doc.created_at)) : 'Just now'} ago
         </span>
         
-        {/* Visual indicators of what's inside */}
         <div className="flex gap-2">
            <div className="flex items-center gap-1" title="Notes">
              <BookOpen className="w-3.5 h-3.5" />

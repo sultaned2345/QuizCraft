@@ -1,7 +1,7 @@
-// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation'; // FIX: Added router for redirect
 import { 
   ResizableHandle, 
   ResizablePanel, 
@@ -17,16 +17,40 @@ import {
   PanelRightClose, 
   PanelRightOpen,
   Sparkles,
-  Bot
+  Bot,
+  AlertTriangle
 } from "lucide-react";
 
-// Components
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
 
 export default function StudyWorkspacePage({ params }: { params: { documentId: string } }) {
+  const router = useRouter();
   const [isContentOpen, setIsContentOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("document");
+  
+  // FIX: Detect invalid ID immediately
+  const invalidId = !params.documentId || params.documentId === 'undefined';
+
+  useEffect(() => {
+    if (invalidId) {
+      // Optional: Auto-redirect back to dashboard after 3s
+      // setTimeout(() => router.push('/documents'), 3000);
+    }
+  }, [invalidId, router]);
+
+  if (invalidId) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center space-y-4">
+        <div className="p-4 bg-red-500/10 rounded-full text-red-500">
+          <AlertTriangle className="w-12 h-12" />
+        </div>
+        <h2 className="text-xl font-bold">Document Not Found</h2>
+        <p className="text-muted-foreground">The document ID is invalid or missing.</p>
+        <Button onClick={() => router.push('/documents')}>Return to Library</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)] -m-4 md:-m-8 overflow-hidden flex flex-col bg-background">
@@ -46,7 +70,6 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
                 <Bot className="w-4 h-4" />
                 <span>AI TUTOR</span>
              </div>
-             {/* Toggle Content Button (Mobile/Desktop) */}
              <Button 
                variant="ghost" 
                size="sm" 
@@ -58,23 +81,17 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
              </Button>
           </div>
 
-          {/* Chat Body */}
           <div className="flex-1 overflow-hidden relative">
-             {/* FIX: Passed correct prop 'documentId' instead of 'contextId'/'contextType' */}
-             <ChatInterface 
-                documentId={params.documentId} 
-             />
+             <ChatInterface documentId={params.documentId} />
           </div>
         </ResizablePanel>
 
-        {/* Resizer Handle */}
         {isContentOpen && <ResizableHandle withHandle className="bg-border/40 hover:bg-primary/50 transition-colors w-1.5" />}
 
         {/* === RIGHT PANEL: CONTENT (Reference) === */}
         {isContentOpen && (
           <ResizablePanel defaultSize={65} minSize={30} className="flex flex-col bg-muted/10">
             
-            {/* Content Header / Tabs */}
             <div className="h-14 flex items-center justify-between px-4 border-b border-border/40 bg-background/80 backdrop-blur-md">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex items-center">
                 <TabsList className="h-9 bg-muted/50 p-1 rounded-lg">
@@ -96,7 +113,6 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Optional: Content Specific Actions (e.g., Download, Share) */}
                 <div className="ml-auto flex items-center gap-2">
                    {activeTab === 'document' && (
                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
@@ -107,19 +123,15 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
               </Tabs>
             </div>
 
-            {/* Content Body */}
             <div className="flex-1 overflow-y-auto relative bg-background/50">
               <Tabs value={activeTab} className="h-full w-full">
                 
-                {/* 1. DOCUMENT VIEW */}
                 <TabsContent value="document" className="h-full m-0 p-0">
                   <div className="h-full w-full overflow-hidden">
-                     {/* Pass className to ensure full height if needed */}
                      <PdfViewer documentId={params.documentId} />
                   </div>
                 </TabsContent>
                 
-                {/* 2. QUIZ VIEW */}
                 <TabsContent value="quiz" className="h-full m-0 p-8 overflow-y-auto">
                   <div className="max-w-4xl mx-auto text-center space-y-6">
                       <div className="p-12 rounded-3xl border border-dashed border-border bg-card/50">
@@ -133,7 +145,6 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
                   </div>
                 </TabsContent>
 
-                {/* 3. FLASHCARDS VIEW */}
                 <TabsContent value="flashcards" className="h-full m-0 p-8 overflow-y-auto">
                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
                       <Layers className="w-12 h-12 opacity-20" />
@@ -141,7 +152,6 @@ export default function StudyWorkspacePage({ params }: { params: { documentId: s
                    </div>
                 </TabsContent>
 
-                {/* 4. AUDIO VIEW */}
                 <TabsContent value="audio" className="h-full m-0 p-8 overflow-y-auto">
                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
                       <Mic className="w-12 h-12 opacity-20" />
