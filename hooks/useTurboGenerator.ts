@@ -41,10 +41,10 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   const generate = useCallback(async (type: TurboJobType, docIdOverride?: string, metadata?: any) => {
     const targetDocId = docIdOverride || initialDocId;
     
-    console.log(`[Client Debug] Requesting '${type}' for DocID:`, targetDocId);
+    console.log(`[TurboGenerator Client] 🟢 Requesting '${type}' for DocID:`, targetDocId);
 
     if (!targetDocId) {
-      console.error("[Client Error] No document ID provided for generation");
+      console.error("[TurboGenerator Client] 🔴 No document ID provided.");
       setStatus('Error: No Document ID');
       return null;
     }
@@ -53,8 +53,9 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       setIsGenerating(true);
       setStatus(`Queuing ${type}...`);
       
-      // 1. Start Job
-      // The server now automatically triggers the processing logic, so we only need to call 'start'.
+      // 1. Start Job 
+      // Note: The server route (api/generation-jobs/start) must be configured 
+      // to automatically trigger the processing logic.
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
@@ -67,26 +68,28 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       const data = await startRes.json();
 
       if (!startRes.ok) {
-        console.error("[Client Error] Server responded with:", data);
+        console.error("[TurboGenerator Client] 🔴 Server Error Response:", data);
         throw new Error(data.error || `Failed to start ${type}`);
       }
 
-      console.log(`[Client Debug] Job started successfully. Job ID:`, data.jobId);
+      console.log(`[TurboGenerator Client] ✅ Job Started Successfully. Job ID:`, data.jobId);
       
-      // We assume success once queued. 
-      // Ideally, the UI should listen to Supabase realtime or poll status, but we'll mark as 'processing' for now.
+      // We mark the result as 'processing' immediately.
+      // Ideally, your UI would poll the job status or listen for a Supabase realtime event.
       setResults(prev => ({ ...prev, [type]: 'processing' }));
       
       setStatus(`${type} queued successfully.`);
       return data;
 
     } catch (error: any) {
-      console.error(`Error generating ${type}:`, error);
+      console.error(`[TurboGenerator Client] 💥 Exception while generating ${type}:`, error);
       setStatus(`Error: ${error.message}`);
+      // Don't rethrow if you want the UI to handle it gracefully, 
+      // but rethrowing allows the caller to handle it too.
       throw error;
     } finally {
-        // If we aren't running a multi-job batch (Turbo Mode), clear loading state here.
-        // If running Turbo Mode, the startTurbo function handles the final state.
+        // Only clear loading state if NOT running the full "Turbo Mode" batch.
+        // If we are in Turbo Mode, the startTurbo function controls the 'isGenerating' state.
         if (status !== 'Starting Turbo Mode...') {
             setIsGenerating(false);
         }
@@ -98,7 +101,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
    */
   const startTurbo = useCallback(async () => {
      if (!initialDocId) {
-         console.error("Cannot start Turbo: No initialDocId set");
+         console.error("[TurboGenerator Client] 🔴 Cannot start Turbo: No initialDocId set");
          return;
      }
      
@@ -106,18 +109,20 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
      setProgress(5);
      setStatus('Starting Turbo Mode...');
 
+     // Define the batch of jobs to run
      const types: TurboJobType[] = ['quiz', 'note', 'flashcard'];
      let completedCount = 0;
      
      try {
-       // Run in parallel for speed since server handles queuing
+       // Run requests in parallel. Since the server handles queuing, this is efficient.
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
          } catch (e) {
-           console.error(`Failed to generate ${t}`, e);
+           console.error(`[TurboGenerator Client] ⚠️ Failed one turbo task: ${t}`, e);
          } finally {
            completedCount++;
+           // Update progress bar
            setProgress(10 + (completedCount / types.length) * 90);
          }
        }));
@@ -126,6 +131,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
        setStatus('All tasks queued');
      
      } catch (err) {
+       console.error("[TurboGenerator Client] 💥 Error during Turbo generation", err);
        setStatus('Error during generation');
      } finally {
        setIsGenerating(false);
@@ -133,8 +139,8 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   }, [generate, initialDocId, options]);
 
   return {
-    generate,       // Exposed for AddDocumentDialog
-    startTurbo,     // Exposed for Dashboard
+    generate,       // Exposed for individual action buttons (e.g. "Generate Quiz")
+    startTurbo,     // Exposed for the main "Turbo" button
     isGenerating,
     progress,
     status,
