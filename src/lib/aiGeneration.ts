@@ -195,23 +195,39 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
 }
 
 // ------------------------------------------------------------------
-// 3. NOTES GENERATION
+// 3. NOTES GENERATION (UPDATED FOR RICH CONTENT)
 // ------------------------------------------------------------------
 export async function generateNotesFromContent(content: string) {
   try {
     const safeContent = content.substring(0, 40000);
+    // Updated Prompt: Explicit instructions for Mermaid Diagrams and Tables
     const prompt = `
-      Summarize the following text into comprehensive, structured study notes.
-      Use Markdown formatting:
-      - Use # Headers for main topics
-      - Use bullet points for details
-      - Use **bold** for key terms
-      - Keep it organized and easy to read.
+      You are an expert academic tutor. Summarize the following text into comprehensive, structured study notes.
       
+      FORMATTING RULES:
+      1. Use standard Markdown: # Headers for main topics, bullet points for details, **bold** for key terms.
+      
+      2. VISUALS (Crucial):
+         - For analyzing complex processes, relationships, or workflows, generate a Mermaid.js diagram.
+         - Wrap it in a code block with the language \`mermaid\`.
+         - Use 'graph TD' for flowcharts or 'mindmap' for concept breakdowns.
+         - Keep diagrams simple and readable.
+         - Example:
+           \`\`\`mermaid
+           graph TD
+           A[Start] --> B{Decision}
+           B -->|Yes| C[Result 1]
+           B -->|No| D[Result 2]
+           \`\`\`
+
+      3. DATA:
+         - For any comparative data, key terms, or structured lists, ALWAYS use Markdown Tables with clear headers.
+
       Text to summarize:
       "${safeContent}"
     `;
 
+    // Using Pro model as primary for better logic in diagrams
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-pro");
     return response.text();
   } catch (error) {
@@ -383,7 +399,7 @@ export async function generatePodcastForDocument(
 // 8. EXPORTS
 // ------------------------------------------------------------------
 export const callAIToGenerateQuiz = generateQuizFromContent;
-export const callAIToGenerateQuizFromTopic = generateQuizFromTopic; // <--- NEW EXPORT
+export const callAIToGenerateQuizFromTopic = generateQuizFromTopic;
 export const callAIToGenerateFlashcards = generateFlashcardsFromContent;
 export const callAIToGenerateNote = generateNotesFromContent;
 export const callAIToGenerateInsights = generateInsightsFromContent;
