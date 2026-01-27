@@ -1,7 +1,6 @@
-// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect, use } from 'react'; 
+import { useState, useEffect } from 'react'; // ❌ Removed 'use' import
 import { useRouter } from 'next/navigation';
 import { 
   ResizableHandle, 
@@ -25,10 +24,19 @@ import {
 
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
-import { PodcastPlayer } from "@/components/PodcastPlayer"; // ✅ Import the Player
+import { PodcastPlayer } from "@/components/PodcastPlayer";
 
-export default function StudyWorkspacePage({ params }: { params: Promise<{ documentId: string }> }) {
-  const { documentId } = use(params);
+// ✅ FIXED: defined params as a plain object (Next.js 14 compatible)
+interface PageProps {
+  params: {
+    documentId: string;
+  };
+}
+
+export default function StudyWorkspacePage({ params }: PageProps) {
+  // ✅ FIXED: Access ID directly (No 'use' hook needed in Next.js 14)
+  const { documentId } = params;
+  
   const router = useRouter();
   
   // UI State
@@ -56,12 +64,12 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
         if (!res.ok) throw new Error("Failed to load document");
         
         const json = await res.json();
-        const data = json.data || json; // Handle wrapped or unwrapped responses
+        const data = json.data || json; 
 
         setDocData({
           title: data.file_name || "Document",
           content: data.extracted_text || "",
-          podcast: data.podcast // Expecting relation from API, or undefined
+          podcast: data.podcast // Expecting relation from API
         });
       } catch (error) {
         console.error("Error fetching doc data:", error);
@@ -90,14 +98,13 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
       
       <ResizablePanelGroup direction="horizontal" className="flex-1 h-full">
         
-        {/* === LEFT PANEL: CHAT INTERFACE (Primary) === */}
+        {/* === LEFT PANEL: CHAT INTERFACE === */}
         <ResizablePanel 
           defaultSize={35} 
           minSize={25} 
           maxSize={50} 
           className="flex flex-col border-r border-border/40 bg-card/30 backdrop-blur-sm"
         >
-          {/* Chat Header */}
           <div className="h-14 flex items-center justify-between px-4 border-b border-border/40 bg-background/50">
              <div className="flex items-center gap-2 font-mono text-sm font-medium text-primary">
                 <Bot className="w-4 h-4" />
@@ -121,7 +128,7 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
 
         {isContentOpen && <ResizableHandle withHandle className="bg-border/40 hover:bg-primary/50 transition-colors w-1.5" />}
 
-        {/* === RIGHT PANEL: CONTENT (Reference) === */}
+        {/* === RIGHT PANEL: CONTENT === */}
         {isContentOpen && (
           <ResizablePanel defaultSize={65} minSize={30} className="flex flex-col bg-muted/10">
             
@@ -159,28 +166,25 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
             <div className="flex-1 overflow-y-auto relative bg-background/50">
               <Tabs value={activeTab} className="h-full w-full">
                 
-                {/* PDF VIEW */}
                 <TabsContent value="document" className="h-full m-0 p-0">
                   <div className="h-full w-full overflow-hidden">
                      <PdfViewer documentId={documentId} />
                   </div>
                 </TabsContent>
                 
-                {/* QUIZ PLACEHOLDER */}
                 <TabsContent value="quiz" className="h-full m-0 p-8 overflow-y-auto">
                   <div className="max-w-4xl mx-auto text-center space-y-6">
                       <div className="p-12 rounded-3xl border border-dashed border-border bg-card/50">
                           <BrainCircuit className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                           <h2 className="text-xl font-medium mb-2">Quiz Generator</h2>
                           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                              Generate a new quiz based on the document's content to test your knowledge.
+                              Generate a new quiz based on the document's content.
                           </p>
                           <Button>Create New Quiz</Button>
                       </div>
                   </div>
                 </TabsContent>
 
-                {/* FLASHCARDS PLACEHOLDER */}
                 <TabsContent value="flashcards" className="h-full m-0 p-8 overflow-y-auto">
                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
                       <Layers className="w-12 h-12 opacity-20" />
@@ -188,7 +192,6 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
                    </div>
                 </TabsContent>
 
-                {/* ✅ AUDIO / PODCAST PLAYER */}
                 <TabsContent value="audio" className="h-full m-0 p-8 overflow-y-auto">
                    {isLoadingData ? (
                       <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
