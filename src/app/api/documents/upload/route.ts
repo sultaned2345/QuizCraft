@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { extractTextFromFile } from '@/lib/file-parser.server';
+import { supabaseAdmin } from '@/lib/supabaseAdmin'; // ✅ Import Supabase Admin
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,16 +12,40 @@ export async function POST(req: NextRequest) {
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
-    // 1. Extract Text
+    // 1. Prepare File & Path
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const text = await extractTextFromFile(file, buffer); // Ensure this returns string
     
-    if (!text) return NextResponse.json({ error: 'Failed to extract text' }, { status: 400 });
+    // ✅ Sanitize filename to prevent issues with special characters
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storagePath = `uploads/${user.id}/${Date.now()}_${safeName}`;
 
-    // 2. Transaction: Save Doc + Create Jobs
+    // 2. Upload to Supabase Storage (The missing step!)
+    const { error: uploadError } = await supabaseAdmin
+      .storage
+      .from('documents') // Ensure this bucket exists in your Supabase project
+      .upload(storagePath, buffer, {
+        contentType: file.type,
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error("Supabase Storage Upload Error:", uploadError);
+      throw new Error("Failed to upload file to storage");
+    }
+
+    // 3. Extract Text (for AI processing)
+    const text = await extractTextFromFile(file, buffer);
+    
+    if (!text) {
+      // Optional: Clean up storage if extraction fails
+      await supabaseAdmin.storage.from('documents').remove([storagePath]);
+      return NextResponse.json({ error: 'Failed to extract text from file' }, { status: 400 });
+    }
+
+    // 4. Transaction: Save Doc Metadata + Create Jobs
     const result = await prisma.$transaction(async (tx) => {
-      // A. Create Document
+      // A. Create Document Record
       const doc = await tx.documents.create({
         data: {
           user_id: user.id,
@@ -28,13 +53,12 @@ export async function POST(req: NextRequest) {
           file_type: file.name.split('.').pop() || 'txt',
           file_size: BigInt(file.size),
           extracted_text: text,
-          storage_path: `uploads/${user.id}/${Date.now()}_${file.name}`,
-          processing_status: 'processing' // Set to processing initially
+          storage_path: storagePath, // Save the path we just uploaded to
+          processing_status: 'processing'
         }
       });
 
       // B. Create Generation Jobs
-      // We schedule 4 jobs: Summary/Note, Flashcards, Quiz, Embeddings (for Chat)
       const jobTypes = ['note', 'flashcard', 'quiz', 'embedding'];
       
       await tx.generation_jobs.createMany({
@@ -46,7 +70,6 @@ export async function POST(req: NextRequest) {
         }))
       });
 
-      // Fetch the created jobs to return to client
       const jobs = await tx.generation_jobs.findMany({
         where: { document_id: doc.id }
       });
@@ -54,7 +77,7 @@ export async function POST(req: NextRequest) {
       return { doc, jobs };
     });
 
-    // 3. Return Data
+    // 5. Return Success
     return NextResponse.json({ 
       success: true, 
       data: {
@@ -68,6 +91,6 @@ export async function POST(req: NextRequest) {
 
   } catch (e: any) {
     console.error("Upload error:", e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: e.message || "Internal Server Error" }, { status: 500 });
   }
 }
