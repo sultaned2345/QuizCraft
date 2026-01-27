@@ -30,7 +30,7 @@ import {
   X,
   Link as LinkIcon 
 } from 'lucide-react';
-import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+import { useTurboGenerator, TurboJobType } from '@/hooks/useTurboGenerator'; // Import Type
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -71,8 +71,6 @@ export function AddDocumentDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hooks
-  // We pass a no-op onSuccess so individual generate calls don't trigger redirects.
-  // We will handle the redirect manually after all promises resolve.
   const { generate, isGenerating, progress, status: genStatus } = useTurboGenerator({
     onSuccess: () => {} 
   });
@@ -211,13 +209,17 @@ export function AddDocumentDialog({
       }
 
       // 3. Start ALL Generations (Parallel)
-      // FIX: Removed 'as any' casts and ensured strings match TurboJobType
+      // FIX: Explicitly typed string literals that match TurboJobType
       setProcessStatus('Igniting engines...');
       
+      const quizJob: TurboJobType = 'quiz';
+      const noteJob: TurboJobType = 'note';
+      const flashcardJob: TurboJobType = 'flashcard';
+
       await Promise.all([
-        generate('quiz', documentId, { fileName: title }),
-        generate('note', documentId, { fileName: title }),     
-        generate('flashcard', documentId, { fileName: title }) 
+        generate(quizJob, documentId, { fileName: title }),
+        generate(noteJob, documentId, { fileName: title }),     
+        generate(flashcardJob, documentId, { fileName: title }) 
       ]);
 
       // 4. Cleanup & Success

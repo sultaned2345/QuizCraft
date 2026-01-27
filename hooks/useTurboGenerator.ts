@@ -39,64 +39,59 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
    * Can be called with a specific type and optional document ID override.
    */
   const generate = useCallback(async (type: TurboJobType, docIdOverride?: string, metadata?: any) => {
-    // 1. Validate 'type' Argument Immediately
-    // This catches the exact bug where type was coming in as undefined
+    // 1. Strict Validation
     if (!type) {
-      const msg = "[TurboGenerator] ❌ Missing 'type' argument in generate() call.";
-      console.error(msg);
-      setStatus("Error: Internal Type Missing");
-      throw new Error(msg);
+        console.error("[TurboGenerator] ❌ Job Type is missing/undefined in generate() call.");
+        throw new Error("Job Type is required.");
     }
-
+    
     const targetDocId = docIdOverride || initialDocId;
-    console.log(`[TurboGenerator] 🟢 Requesting '${type}' for DocID:`, targetDocId);
-
-    // 2. Validate Document ID
+    
     if (!targetDocId) {
-      console.error("[TurboGenerator] ❌ No document ID provided.");
-      setStatus('Error: No Document ID');
+      console.error("[TurboGenerator] ❌ No document ID provided for generation");
       return null;
     }
 
     try {
       setIsGenerating(true);
-      setStatus(`Queuing ${type}...`);
+      setStatus(`Generating ${type}...`);
       
-      // 3. Start Job 
+      // 2. Start Job
+      // We explicitly construct the body to ensure keys match what the server expects
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        // Explicitly construct body to ensure no keys are missed
         body: JSON.stringify({ 
             documentId: targetDocId, 
-            jobType: type, 
+            jobType: type, // Ensure this is explicitly passed
             ...metadata 
         })
       });
 
-      const data = await startRes.json();
-
       if (!startRes.ok) {
-        console.error("[TurboGenerator] 🔴 Server Error Response:", data);
-        throw new Error(data.error || `Failed to start ${type}`);
+          const err = await startRes.json();
+          throw new Error(err.error || `Failed to start ${type}`);
       }
-
-      console.log(`[TurboGenerator] ✅ Job Started. Job ID:`, data.jobId);
       
-      // Update local state to show 'processing' immediately
+      const data = await startRes.json();
+      console.log(`[TurboGenerator] ✅ Job Started: ${data.jobId} (${type})`);
+
+      // 3. Update Status 
+      // The server now triggers processing automatically.
+      // We set the result to 'processing' so the UI knows it's in flight.
       setResults(prev => ({ ...prev, [type]: 'processing' }));
-      setStatus(`${type} queued successfully.`);
-      return data;
+      
+      return { jobId: data.jobId };
 
     } catch (error: any) {
-      console.error(`[TurboGenerator] 💥 Exception generating ${type}:`, error);
+      console.error(`[TurboGenerator] 💥 Error generating ${type}:`, error);
       setStatus(`Error: ${error.message}`);
       throw error;
     } finally {
-        // Only clear global loading state if NOT running the full "Turbo Mode" batch
+        // Only stop spinner if not in Turbo mode (which handles its own state)
         if (status !== 'Starting Turbo Mode...') {
             setIsGenerating(false);
         }
@@ -107,10 +102,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
    * Legacy wrapper for "Turbo" button (runs all default types)
    */
   const startTurbo = useCallback(async () => {
-     if (!initialDocId) {
-         console.error("[TurboGenerator] 🔴 Cannot start Turbo: No initialDocId set");
-         return;
-     }
+     if (!initialDocId) return;
      
      setIsGenerating(true);
      setProgress(5);
@@ -120,12 +112,12 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
      let completedCount = 0;
      
      try {
-       // Run in parallel
+       // Run in parallel for speed
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
          } catch (e) {
-           console.error(`[TurboGenerator] ⚠️ Failed task: ${t}`, e);
+           console.error(`Failed to generate ${t}`, e);
          } finally {
            completedCount++;
            setProgress(10 + (completedCount / types.length) * 90);
@@ -133,10 +125,9 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
        }));
 
        if (options?.onSuccess) options.onSuccess();
-       setStatus('All tasks queued');
+       setStatus('All tasks completed');
      
      } catch (err) {
-       console.error("[TurboGenerator] 💥 Error during Turbo generation", err);
        setStatus('Error during generation');
      } finally {
        setIsGenerating(false);
