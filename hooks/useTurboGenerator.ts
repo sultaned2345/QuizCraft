@@ -41,16 +41,20 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   const generate = useCallback(async (type: TurboJobType, docIdOverride?: string, metadata?: any) => {
     const targetDocId = docIdOverride || initialDocId;
     
+    console.log(`[Client Debug] Requesting '${type}' for DocID:`, targetDocId);
+
     if (!targetDocId) {
-      console.error("No document ID provided for generation");
+      console.error("[Client Error] No document ID provided for generation");
+      setStatus('Error: No Document ID');
       return null;
     }
 
     try {
       setIsGenerating(true);
-      setStatus(`Generating ${type}...`);
+      setStatus(`Queuing ${type}...`);
       
       // 1. Start Job
+      // The server now automatically triggers the processing logic, so we only need to call 'start'.
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
@@ -60,38 +64,43 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
         body: JSON.stringify({ documentId: targetDocId, jobType: type, ...metadata })
       });
 
-      if (!startRes.ok) throw new Error(`Failed to start ${type}`);
-      const { jobId } = await startRes.json();
+      const data = await startRes.json();
 
-      // 2. Process Job (Waits for completion)
-      const processRes = await fetch('/api/generation-jobs/process', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
-        },
-        body: JSON.stringify({ jobId })
-      });
+      if (!startRes.ok) {
+        console.error("[Client Error] Server responded with:", data);
+        throw new Error(data.error || `Failed to start ${type}`);
+      }
 
-      if (!processRes.ok) throw new Error(`Process failed for ${type}`);
+      console.log(`[Client Debug] Job started successfully. Job ID:`, data.jobId);
       
-      const data = await processRes.json();
+      // We assume success once queued. 
+      // Ideally, the UI should listen to Supabase realtime or poll status, but we'll mark as 'processing' for now.
+      setResults(prev => ({ ...prev, [type]: 'processing' }));
       
-      // Update results
-      setResults(prev => ({ ...prev, [type]: data.outputId || true }));
+      setStatus(`${type} queued successfully.`);
       return data;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error generating ${type}:`, error);
+      setStatus(`Error: ${error.message}`);
       throw error;
+    } finally {
+        // If we aren't running a multi-job batch (Turbo Mode), clear loading state here.
+        // If running Turbo Mode, the startTurbo function handles the final state.
+        if (status !== 'Starting Turbo Mode...') {
+            setIsGenerating(false);
+        }
     }
-  }, [initialDocId, session]);
+  }, [initialDocId, session, status]);
 
   /**
    * Legacy wrapper for "Turbo" button (runs all default types)
    */
   const startTurbo = useCallback(async () => {
-     if (!initialDocId) return;
+     if (!initialDocId) {
+         console.error("Cannot start Turbo: No initialDocId set");
+         return;
+     }
      
      setIsGenerating(true);
      setProgress(5);
@@ -101,7 +110,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
      let completedCount = 0;
      
      try {
-       // Run in parallel for speed
+       // Run in parallel for speed since server handles queuing
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
@@ -114,7 +123,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
        }));
 
        if (options?.onSuccess) options.onSuccess();
-       setStatus('All tasks completed');
+       setStatus('All tasks queued');
      
      } catch (err) {
        setStatus('Error during generation');

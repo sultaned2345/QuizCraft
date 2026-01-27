@@ -4,16 +4,25 @@ import { getServerSession } from '@/lib/getServerSession';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
+  console.log("---------------------------------------------------------");
+  console.log("Incoming Request: POST /api/generation-jobs/start"); // 1. ENTRY LOG
+  
   try {
     // 1. Authentication Check
     const session = await getServerSession();
+    
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      console.log("❌ [Auth Fail] No user session found in cookies.");
+      return NextResponse.json({ error: 'Unauthorized - No Session' }, { status: 401 });
     }
+
+    console.log(`✅ [Auth Success] User: ${session.user.id}`);
 
     // 2. Parse Request Body
     const body = await req.json();
     let { documentId, jobType } = body;
+
+    console.log(`📝 [Payload] Type: ${jobType}, DocID: ${documentId}`);
 
     // 3. Validation
     if (!documentId || !jobType) {
@@ -30,16 +39,17 @@ export async function POST(req: Request) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     
     if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
+       console.log("❌ [Validation] Invalid UUID");
        return NextResponse.json(
         { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
       );
     }
 
-    // ✅ UPDATE: Added 'podcast' and 'embedding' to this list
     const validJobTypes = ['quiz', 'flashcard', 'note', 'podcast', 'embedding'];
     
     if (!validJobTypes.includes(jobType)) {
+      console.log(`❌ [Validation] Invalid jobType: ${jobType}`);
       return NextResponse.json(
         { error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` },
         { status: 400 }
@@ -55,6 +65,7 @@ export async function POST(req: Request) {
     });
 
     if (!doc) {
+      console.log(`❌ [DB] Document not found for user.`);
       return NextResponse.json(
         { error: 'Document not found or access denied.' },
         { status: 404 }
@@ -71,18 +82,14 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`[Job Started] User ${session.user.id} requested '${jobType}' for Doc ${documentId} (Job ID: ${job.id})`);
+    console.log(`🚀 [Job Started] Created Job ${job.id}. Triggering process...`);
 
     // 6. Trigger the Processing Endpoint
-    // We must invoke the process route so the AI generation actually starts.
-    // We forward the Cookie header so the process route (which requires auth) accepts the request.
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
     const host = req.headers.get('host');
     const processUrl = `${protocol}://${host}/api/generation-jobs/process`;
     const cookieHeader = req.headers.get('cookie') || '';
 
-    // Fire and forget (don't await the full result to keep UI snappy, 
-    // but catch errors to log them).
     fetch(processUrl, {
       method: 'POST',
       headers: {
@@ -91,18 +98,17 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({ jobId: job.id })
     }).catch(err => {
-      console.error(`[Job Trigger Failed] Could not trigger process for Job ${job.id}:`, err);
+      console.error(`⚠️ [Trigger Fail] Could not trigger process:`, err);
     });
 
-    // 7. Return Success
     return NextResponse.json({ 
       success: true, 
       jobId: job.id,
-      message: 'Job queued and processing started.' 
+      message: 'Job queued successfully.' 
     });
 
   } catch (error: any) {
-    console.error('Start Job Error:', error);
+    console.error('💥 [Critical Error] Start Job Failed:', error);
     return NextResponse.json(
       { error: error.message || 'Internal Server Error' },
       { status: 500 }
