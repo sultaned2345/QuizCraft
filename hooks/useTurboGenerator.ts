@@ -45,6 +45,12 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
         throw new Error("Job Type is required.");
     }
     
+    // Safety Check: Prevent passing Event objects (e.g. onClick={generate})
+    if (typeof type !== 'string') {
+        console.error("[TurboGenerator] ❌ Invalid Job Type. You likely used 'onClick={generate}' instead of 'onClick={() => generate(...)}'. Value received:", type);
+        throw new Error("Invalid function call. Use an arrow function in your onClick handler.");
+    }
+    
     const targetDocId = docIdOverride || initialDocId;
     
     if (!targetDocId) {
@@ -57,7 +63,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       setStatus(`Generating ${type}...`);
       
       // 2. Start Job
-      // We explicitly construct the body to ensure keys match what the server expects
+      // Fix: Spread metadata FIRST so it cannot overwrite jobType or documentId
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
@@ -65,9 +71,9 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
         body: JSON.stringify({ 
+            ...metadata, 
             documentId: targetDocId, 
-            jobType: type, // Ensure this is explicitly passed
-            ...metadata 
+            jobType: type, // Explicitly set last to prevent overwrite
         })
       });
 
@@ -80,8 +86,6 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       console.log(`[TurboGenerator] ✅ Job Started: ${data.jobId} (${type})`);
 
       // 3. Update Status 
-      // The server now triggers processing automatically.
-      // We set the result to 'processing' so the UI knows it's in flight.
       setResults(prev => ({ ...prev, [type]: 'processing' }));
       
       return { jobId: data.jobId };
@@ -91,7 +95,6 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       setStatus(`Error: ${error.message}`);
       throw error;
     } finally {
-        // Only stop spinner if not in Turbo mode (which handles its own state)
         if (status !== 'Starting Turbo Mode...') {
             setIsGenerating(false);
         }
@@ -112,7 +115,6 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
      let completedCount = 0;
      
      try {
-       // Run in parallel for speed
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
@@ -135,8 +137,8 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   }, [generate, initialDocId, options]);
 
   return {
-    generate,       // Exposed for AddDocumentDialog
-    startTurbo,     // Exposed for Dashboard
+    generate,       
+    startTurbo,     
     isGenerating,
     progress,
     status,

@@ -1,6 +1,7 @@
+// src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react'; // ❌ Removed 'use' import
+import { useState, useEffect } from 'react'; 
 import { useRouter } from 'next/navigation';
 import { 
   ResizableHandle, 
@@ -25,8 +26,8 @@ import {
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
 import { PodcastPlayer } from "@/components/PodcastPlayer";
+import { useTurboGenerator } from '@/hooks/useTurboGenerator'; ///page.tsx]
 
-// ✅ FIXED: defined params as a plain object (Next.js 14 compatible)
 interface PageProps {
   params: {
     documentId: string;
@@ -34,7 +35,6 @@ interface PageProps {
 }
 
 export default function StudyWorkspacePage({ params }: PageProps) {
-  // ✅ FIXED: Access ID directly (No 'use' hook needed in Next.js 14)
   const { documentId } = params;
   
   const router = useRouter();
@@ -50,6 +50,9 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     podcast?: any;
   } | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // --- HOOK INTEGRATION ---
+  const { generate, isGenerating } = useTurboGenerator(documentId); //
   
   const invalidId = !documentId || documentId === 'undefined';
 
@@ -60,7 +63,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     const fetchDoc = async () => {
       try {
         setIsLoadingData(true);
-        const res = await fetch(`/api/documents/${documentId}`);
+        const res = await fetch(`/api/documents/${documentId}`); ///page.tsx]
         if (!res.ok) throw new Error("Failed to load document");
         
         const json = await res.json();
@@ -69,7 +72,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         setDocData({
           title: data.file_name || "Document",
           content: data.extracted_text || "",
-          podcast: data.podcast // Expecting relation from API
+          podcast: data.podcast 
         });
       } catch (error) {
         console.error("Error fetching doc data:", error);
@@ -180,7 +183,20 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                               Generate a new quiz based on the document's content.
                           </p>
-                          <Button>Create New Quiz</Button>
+                          {/* FIX: Wired up generation with loading state */}
+                          <Button 
+                            onClick={() => generate('quiz')} 
+                            disabled={isGenerating}
+                          >
+                            {isGenerating ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Generating...
+                              </>
+                            ) : (
+                              "Create New Quiz"
+                            )}
+                          </Button>
                       </div>
                   </div>
                 </TabsContent>
