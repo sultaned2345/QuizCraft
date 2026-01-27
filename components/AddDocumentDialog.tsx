@@ -211,13 +211,13 @@ export function AddDocumentDialog({
       }
 
       // 3. Start ALL Generations (Parallel)
-      // Using singular types ('note', 'flashcard') to match backend expectation
+      // FIX: Removed 'as any' casts and ensured strings match TurboJobType
       setProcessStatus('Igniting engines...');
       
       await Promise.all([
         generate('quiz', documentId, { fileName: title }),
-        generate('note' as any, documentId, { fileName: title }),     
-        generate('flashcard' as any, documentId, { fileName: title }) 
+        generate('note', documentId, { fileName: title }),     
+        generate('flashcard', documentId, { fileName: title }) 
       ]);
 
       // 4. Cleanup & Success
