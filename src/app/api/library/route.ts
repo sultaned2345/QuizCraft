@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q')?.toLowerCase() || '';
     const typeFilter = searchParams.get('type'); 
 
+    // Helper to safely execute queries without failing the whole request
     const safeQuery = async <T>(name: string, promise: Promise<T[]>, mapper: (item: T) => any) => {
       try {
         const results = await promise;
@@ -33,10 +34,38 @@ export async function GET(req: NextRequest) {
               user_id: user.id,
               ...(query && { file_name: { contains: query, mode: 'insensitive' } }),
             },
-            select: { id: true, file_name: true, file_type: true, created_at: true },
+            select: { 
+              id: true, 
+              file_name: true, 
+              file_type: true, 
+              created_at: true,
+              // ✅ FIX 1: 'questions' does not exist on documents. Changed to 'quizzes'.
+              _count: {
+                select: { 
+                  quizzes: true,   // was 'questions'
+                  flashcard_decks: true // checks the 'flashcard_decks' relation
+                }
+              },
+              // ✅ FIX 2: Relation is 'podcasts' (plural). We take 1 to simplify.
+              podcasts: {
+                take: 1,
+                select: { id: true, audioUrl: true }
+              }
+            },
             orderBy: { created_at: 'desc' },
           }),
-          (i) => ({ ...i, type: 'document', title: i.file_name })
+          (i) => ({ 
+            ...i, 
+            type: 'document', 
+            title: i.file_name,
+            // Map the array [podcasts] -> single object {podcast} for frontend convenience
+            podcast: i.podcasts[0] || null,
+            // Normalize counts for the UI (ui expects 'questions' key sometimes)
+            _count: {
+               questions: i._count.quizzes, // showing quiz count as proxy, or just use quizzes
+               flashcards: i._count.flashcard_decks
+            }
+          })
         )
       );
     }
@@ -70,10 +99,25 @@ export async function GET(req: NextRequest) {
               user_id: user.id,
               ...(query && { title: { contains: query, mode: 'insensitive' } }),
             },
-            select: { id: true, title: true, created_at: true, tags: true },
+            select: { 
+              id: true, 
+              title: true, 
+              created_at: true, 
+              tags: true,
+              // ✅ FIX 3: Relation is 'podcasts' (plural) here too
+              podcasts: {
+                take: 1,
+                select: { id: true, audioUrl: true }
+              }
+            },
             orderBy: { created_at: 'desc' },
           }),
-          (i) => ({ ...i, type: 'note' })
+          (i) => ({ 
+            ...i, 
+            type: 'note',
+            // Map the array [podcasts] -> single object {podcast}
+            podcast: i.podcasts[0] || null
+          })
         )
       );
     }
@@ -109,12 +153,10 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error: any) {
-    // FIX: Check if the error is actually a Response object (thrown by requireAuth)
     if (error instanceof Response) {
       return error;
     }
 
-    // Only log actual critical errors
     console.error('[API /library] Critical Error:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Failed to load library content.' },

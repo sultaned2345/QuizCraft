@@ -1,10 +1,9 @@
-// src/components/dashboard/QuickUploadWidget.tsx
 'use client';
 
 import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, FileText, Loader2, Link as LinkIcon, Youtube, Zap, Sparkles } from "lucide-react";
+import { UploadCloud, Loader2, Link as LinkIcon, Youtube, Zap } from "lucide-react";
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -42,12 +41,20 @@ export function QuickUploadWidget() {
 
       const data = await res.json();
       
+      // FIX: Handle the nested API response structure 
+      // API returns: { success: true, data: { document: { id: "..." }, ... } }
+      const documentId = data.data?.document?.id || data.id;
+
+      if (!documentId) {
+         throw new Error("Invalid server response: Missing document ID");
+      }
+      
       toast({
         title: "Turbo Upload Complete!",
         description: "Redirecting to your study space...",
       });
       
-      router.push(`/documents/${data.id}`);
+      router.push(`/documents/${documentId}`);
     } catch (error) {
       console.error(error);
       setIsUploading(false);

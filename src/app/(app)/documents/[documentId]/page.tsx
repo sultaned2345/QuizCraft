@@ -1,7 +1,7 @@
 // src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect, use } from 'react'; // ✅ Import 'use'
+import { useState, useEffect, use } from 'react'; 
 import { useRouter } from 'next/navigation';
 import { 
   ResizableHandle, 
@@ -19,30 +19,59 @@ import {
   PanelRightOpen,
   Sparkles,
   Bot,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from "lucide-react";
 
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
+import { PodcastPlayer } from "@/components/PodcastPlayer"; // ✅ Import the Player
 
-// ✅ Update type definition for Next.js 15
 export default function StudyWorkspacePage({ params }: { params: Promise<{ documentId: string }> }) {
-  // ✅ Unwrap the params Promise using React.use()
   const { documentId } = use(params);
-  
   const router = useRouter();
+  
+  // UI State
   const [isContentOpen, setIsContentOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("document");
+
+  // Data State
+  const [docData, setDocData] = useState<{
+    title: string;
+    content: string;
+    podcast?: any;
+  } | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   
-  // ✅ Check validity on the unwrapped ID
   const invalidId = !documentId || documentId === 'undefined';
 
+  // 1. Fetch Document Details on Mount
   useEffect(() => {
-    if (invalidId) {
-       // Optional: Auto-redirect
-       // setTimeout(() => router.push('/documents'), 3000);
-    }
-  }, [invalidId, router]);
+    if (invalidId) return;
+
+    const fetchDoc = async () => {
+      try {
+        setIsLoadingData(true);
+        const res = await fetch(`/api/documents/${documentId}`);
+        if (!res.ok) throw new Error("Failed to load document");
+        
+        const json = await res.json();
+        const data = json.data || json; // Handle wrapped or unwrapped responses
+
+        setDocData({
+          title: data.file_name || "Document",
+          content: data.extracted_text || "",
+          podcast: data.podcast // Expecting relation from API, or undefined
+        });
+      } catch (error) {
+        console.error("Error fetching doc data:", error);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    fetchDoc();
+  }, [documentId, invalidId]);
 
   if (invalidId) {
     return (
@@ -51,7 +80,6 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
           <AlertTriangle className="w-12 h-12" />
         </div>
         <h2 className="text-xl font-bold">Document Not Found</h2>
-        <p className="text-muted-foreground">The document ID is invalid or missing.</p>
         <Button onClick={() => router.push('/documents')}>Return to Library</Button>
       </div>
     );
@@ -87,7 +115,6 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
           </div>
 
           <div className="flex-1 overflow-hidden relative">
-             {/* ✅ Pass unwrapped documentId */}
              <ChatInterface documentId={documentId} />
           </div>
         </ResizablePanel>
@@ -132,13 +159,14 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
             <div className="flex-1 overflow-y-auto relative bg-background/50">
               <Tabs value={activeTab} className="h-full w-full">
                 
+                {/* PDF VIEW */}
                 <TabsContent value="document" className="h-full m-0 p-0">
                   <div className="h-full w-full overflow-hidden">
-                     {/* ✅ Pass unwrapped documentId */}
                      <PdfViewer documentId={documentId} />
                   </div>
                 </TabsContent>
                 
+                {/* QUIZ PLACEHOLDER */}
                 <TabsContent value="quiz" className="h-full m-0 p-8 overflow-y-auto">
                   <div className="max-w-4xl mx-auto text-center space-y-6">
                       <div className="p-12 rounded-3xl border border-dashed border-border bg-card/50">
@@ -152,6 +180,7 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
                   </div>
                 </TabsContent>
 
+                {/* FLASHCARDS PLACEHOLDER */}
                 <TabsContent value="flashcards" className="h-full m-0 p-8 overflow-y-auto">
                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
                       <Layers className="w-12 h-12 opacity-20" />
@@ -159,12 +188,35 @@ export default function StudyWorkspacePage({ params }: { params: Promise<{ docum
                    </div>
                 </TabsContent>
 
+                {/* ✅ AUDIO / PODCAST PLAYER */}
                 <TabsContent value="audio" className="h-full m-0 p-8 overflow-y-auto">
-                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
-                      <Mic className="w-12 h-12 opacity-20" />
-                      <p>Audio transcript and player will appear here.</p>
-                   </div>
+                   {isLoadingData ? (
+                      <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        <p>Loading audio workspace...</p>
+                      </div>
+                   ) : (
+                      <div className="max-w-2xl mx-auto space-y-8">
+                         <div className="text-center space-y-2">
+                            <h2 className="text-2xl font-bold tracking-tight">Audio Notebook</h2>
+                            <p className="text-muted-foreground">
+                              Listen to an AI-generated discussion about this document.
+                            </p>
+                         </div>
+                         
+                         {docData && (
+                           <PodcastPlayer 
+                              content={docData.content}
+                              title={docData.title}
+                              sourceId={documentId}
+                              sourceType="document"
+                              existingPodcast={docData.podcast}
+                           />
+                         )}
+                      </div>
+                   )}
                 </TabsContent>
+
               </Tabs>
             </div>
 
