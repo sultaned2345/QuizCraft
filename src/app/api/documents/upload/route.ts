@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { extractTextFromFile } from '@/lib/file-parser.server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin'; // ✅ Import Supabase Admin
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,14 +16,14 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // ✅ Sanitize filename to prevent issues with special characters
+    // Sanitize filename
     const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storagePath = `uploads/${user.id}/${Date.now()}_${safeName}`;
 
-    // 2. Upload to Supabase Storage (The missing step!)
+    // 2. Upload to Supabase Storage
     const { error: uploadError } = await supabaseAdmin
       .storage
-      .from('documents') // Ensure this bucket exists in your Supabase project
+      .from('documents')
       .upload(storagePath, buffer, {
         contentType: file.type,
         upsert: false
@@ -34,18 +34,17 @@ export async function POST(req: NextRequest) {
       throw new Error("Failed to upload file to storage");
     }
 
-    // 3. Extract Text (for AI processing)
+    // 3. Extract Text
     const text = await extractTextFromFile(file, buffer);
     
     if (!text) {
-      // Optional: Clean up storage if extraction fails
       await supabaseAdmin.storage.from('documents').remove([storagePath]);
       return NextResponse.json({ error: 'Failed to extract text from file' }, { status: 400 });
     }
 
     // 4. Transaction: Save Doc Metadata + Create Jobs
     const result = await prisma.$transaction(async (tx) => {
-      // A. Create Document Record
+      // A. Create Document
       const doc = await tx.documents.create({
         data: {
           user_id: user.id,
@@ -53,7 +52,7 @@ export async function POST(req: NextRequest) {
           file_type: file.name.split('.').pop() || 'txt',
           file_size: BigInt(file.size),
           extracted_text: text,
-          storage_path: storagePath, // Save the path we just uploaded to
+          storage_path: storagePath,
           processing_status: 'processing'
         }
       });
@@ -75,6 +74,27 @@ export async function POST(req: NextRequest) {
       });
 
       return { doc, jobs };
+    });
+
+    // ------------------------------------------------------------------
+    // ✅ FIX: Trigger the Generation Worker
+    // We call the start endpoint immediately. We don't await it strictly
+    // (or we catch errors) so the UI upload completes fast.
+    // ------------------------------------------------------------------
+    const triggerUrl = new URL('/api/generation-jobs/start', req.url);
+    
+    fetch(triggerUrl.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Important: Forward auth cookie so the job route knows who called it
+        'Cookie': req.headers.get('cookie') || ''
+      },
+      body: JSON.stringify({ documentId: result.doc.id })
+    }).catch(err => {
+      console.error("Failed to trigger background generation:", err);
+      // We don't fail the request here, as the upload was successful.
+      // The user might just need to refresh later.
     });
 
     // 5. Return Success
