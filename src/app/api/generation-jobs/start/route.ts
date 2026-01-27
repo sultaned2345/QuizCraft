@@ -71,13 +71,34 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`[Job Started] User ${session.user.id} requested '${jobType}' for Doc ${documentId}`);
+    console.log(`[Job Started] User ${session.user.id} requested '${jobType}' for Doc ${documentId} (Job ID: ${job.id})`);
 
-    // 6. Return Success
+    // 6. Trigger the Processing Endpoint
+    // We must invoke the process route so the AI generation actually starts.
+    // We forward the Cookie header so the process route (which requires auth) accepts the request.
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('host');
+    const processUrl = `${protocol}://${host}/api/generation-jobs/process`;
+    const cookieHeader = req.headers.get('cookie') || '';
+
+    // Fire and forget (don't await the full result to keep UI snappy, 
+    // but catch errors to log them).
+    fetch(processUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader
+      },
+      body: JSON.stringify({ jobId: job.id })
+    }).catch(err => {
+      console.error(`[Job Trigger Failed] Could not trigger process for Job ${job.id}:`, err);
+    });
+
+    // 7. Return Success
     return NextResponse.json({ 
       success: true, 
       jobId: job.id,
-      message: 'Job queued successfully.' 
+      message: 'Job queued and processing started.' 
     });
 
   } catch (error: any) {
