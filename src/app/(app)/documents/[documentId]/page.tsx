@@ -1,8 +1,9 @@
 // src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react'; 
+import { useState, useEffect, useCallback } from 'react'; 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   ResizableHandle, 
   ResizablePanel, 
@@ -20,13 +21,25 @@ import {
   Sparkles,
   Bot,
   AlertTriangle,
-  Loader2
+  Loader2,
+  PenTool,
+  Play,
+  BookOpen
 } from "lucide-react";
 
+// --- Components ---
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
 import { PodcastPlayer } from "@/components/PodcastPlayer";
-import { useTurboGenerator } from '@/hooks/useTurboGenerator'; ///page.tsx]
+import { NoteEditor } from "@/components/NoteEditor"; 
+import { useTurboGenerator } from '@/hooks/useTurboGenerator';
+
+// --- Types ---
+interface StudySet {
+  note: { id: string; title: string; content: string } | null;
+  quiz: { id: string; title: string; questions: any[] } | null;
+  deck: { id: string; title: string; flashcards: any[] } | null;
+}
 
 interface PageProps {
   params: {
@@ -36,62 +49,74 @@ interface PageProps {
 
 export default function StudyWorkspacePage({ params }: PageProps) {
   const { documentId } = params;
-  
   const router = useRouter();
   
-  // UI State
+  // --- UI State ---
   const [isContentOpen, setIsContentOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("document");
 
-  // Data State
+  // --- Data State ---
   const [docData, setDocData] = useState<{
     title: string;
     content: string;
     podcast?: any;
   } | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-
-  // --- HOOK INTEGRATION ---
-  const { generate, isGenerating } = useTurboGenerator(documentId); //
   
-  const invalidId = !documentId || documentId === 'undefined';
+  const [studySet, setStudySet] = useState<StudySet>({ note: null, quiz: null, deck: null });
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Fetch Document Details on Mount
+  // --- Data Fetching ---
+  const refreshData = useCallback(async () => {
+     if (!documentId) return;
+     
+     try {
+        // Fetch both Document Metadata and Linked Study Assets in parallel
+        const [docRes, setRes] = await Promise.all([
+           fetch(`/api/documents/${documentId}`),
+           fetch(`/api/documents/${documentId}/study-set`)
+        ]);
+
+        if (docRes.ok) {
+           const json = await docRes.json();
+           const data = json.data || json;
+           setDocData({
+             title: data.file_name || "Document",
+             content: data.extracted_text || "",
+             podcast: data.podcast 
+           });
+        }
+
+        if (setRes.ok) {
+           const json = await setRes.json();
+           setStudySet(json.data);
+        }
+     } catch (error) {
+        console.error("Failed to refresh data", error);
+     }
+  }, [documentId]);
+
+  // --- Hook Integration ---
+  // Pass onSuccess to auto-refresh the data when generation completes
+  const { generate, isGenerating } = useTurboGenerator(documentId, {
+    onSuccess: () => refreshData() 
+  });
+  
+  // Initial Load
   useEffect(() => {
-    if (invalidId) return;
+    if (!documentId) return;
+    setIsLoading(true);
+    refreshData().finally(() => setIsLoading(false));
+  }, [documentId, refreshData]);
 
-    const fetchDoc = async () => {
-      try {
-        setIsLoadingData(true);
-        const res = await fetch(`/api/documents/${documentId}`); ///page.tsx]
-        if (!res.ok) throw new Error("Failed to load document");
-        
-        const json = await res.json();
-        const data = json.data || json; 
-
-        setDocData({
-          title: data.file_name || "Document",
-          content: data.extracted_text || "",
-          podcast: data.podcast 
-        });
-      } catch (error) {
-        console.error("Error fetching doc data:", error);
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-
-    fetchDoc();
-  }, [documentId, invalidId]);
-
-  if (invalidId) {
+  // Handle Invalid ID
+  if (!documentId) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
-        <div className="p-4 bg-red-500/10 rounded-full text-red-500">
+        <div className="p-4 bg-destructive/10 rounded-full text-destructive">
           <AlertTriangle className="w-12 h-12" />
         </div>
         <h2 className="text-xl font-bold">Document Not Found</h2>
-        <Button onClick={() => router.push('/documents')}>Return to Library</Button>
+        <Button onClick={() => router.push('/dashboard')}>Return to Dashboard</Button>
       </div>
     );
   }
@@ -135,6 +160,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         {isContentOpen && (
           <ResizablePanel defaultSize={65} minSize={30} className="flex flex-col bg-muted/10">
             
+            {/* Tabs Header */}
             <div className="h-14 flex items-center justify-between px-4 border-b border-border/40 bg-background/80 backdrop-blur-md">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex items-center">
                 <TabsList className="h-9 bg-muted/50 p-1 rounded-lg">
@@ -142,13 +168,17 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                     <FileText className="w-3.5 h-3.5" /> 
                     <span className="hidden sm:inline">PDF</span>
                   </TabsTrigger>
+                  <TabsTrigger value="notes" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <PenTool className="w-3.5 h-3.5" /> 
+                    <span className="hidden sm:inline">Notes</span>
+                  </TabsTrigger>
                   <TabsTrigger value="quiz" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
                     <BrainCircuit className="w-3.5 h-3.5" /> 
                     <span className="hidden sm:inline">Quiz</span>
                   </TabsTrigger>
                   <TabsTrigger value="flashcards" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
                     <Layers className="w-3.5 h-3.5" /> 
-                    <span className="hidden sm:inline">Flashcards</span>
+                    <span className="hidden sm:inline">Cards</span>
                   </TabsTrigger>
                   <TabsTrigger value="audio" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
                     <Mic className="w-3.5 h-3.5" /> 
@@ -166,56 +196,145 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               </Tabs>
             </div>
 
+            {/* Tab Contents */}
             <div className="flex-1 overflow-y-auto relative bg-background/50">
               <Tabs value={activeTab} className="h-full w-full">
                 
+                {/* 1. PDF Viewer */}
                 <TabsContent value="document" className="h-full m-0 p-0">
                   <div className="h-full w-full overflow-hidden">
                      <PdfViewer documentId={documentId} />
                   </div>
                 </TabsContent>
                 
+                {/* 2. Notes Editor */}
+                <TabsContent value="notes" className="h-full m-0 p-0">
+                  {isLoading ? (
+                    <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>
+                  ) : studySet.note ? (
+                    // Show Editor
+                    <NoteEditor 
+                       noteId={studySet.note.id} 
+                       initialContent={studySet.note.content} 
+                       title={studySet.note.title}
+                    />
+                  ) : (
+                    // Show Generate Prompt
+                    <div className="h-full flex flex-col items-center justify-center space-y-4 p-8 text-center">
+                        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                           <PenTool className="w-8 h-8 text-primary" />
+                        </div>
+                        <h3 className="text-xl font-medium">No Notes Yet</h3>
+                        <p className="text-muted-foreground max-w-sm">
+                          Let AI summarize this document and create structured study notes for you.
+                        </p>
+                        <Button onClick={() => generate('note')} disabled={isGenerating}>
+                          {isGenerating ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 w-4 h-4" />}
+                          Generate Notes
+                        </Button>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* 3. Quiz Hub */}
                 <TabsContent value="quiz" className="h-full m-0 p-8 overflow-y-auto">
-                  <div className="max-w-4xl mx-auto text-center space-y-6">
-                      <div className="p-12 rounded-3xl border border-dashed border-border bg-card/50">
-                          <BrainCircuit className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                          <h2 className="text-xl font-medium mb-2">Quiz Generator</h2>
-                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                              Generate a new quiz based on the document's content.
+                   {isLoading ? (
+                      <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>
+                   ) : studySet.quiz ? (
+                      <div className="max-w-md mx-auto mt-10 space-y-6">
+                         <div className="p-8 rounded-3xl border bg-card shadow-lg text-center space-y-4">
+                            <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center">
+                               <BrainCircuit className="w-8 h-8 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div>
+                               <h2 className="text-2xl font-bold">{studySet.quiz.title}</h2>
+                               <p className="text-muted-foreground">
+                                  {studySet.quiz.questions?.length || 'Unknown'} Questions • Multiple Choice & Text
+                               </p>
+                            </div>
+                            <Link href={`/quiz/${studySet.quiz.id}`} className="block w-full">
+                                <Button size="lg" className="w-full rounded-xl text-base h-12">
+                                   <Play className="w-4 h-4 mr-2 fill-current" /> Start Quiz
+                                </Button>
+                            </Link>
+                         </div>
+                         <div className="text-center">
+                            <Button variant="link" className="text-muted-foreground" onClick={() => generate('quiz')} disabled={isGenerating}>
+                               Regenerate Quiz
+                            </Button>
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="h-full flex flex-col items-center justify-center space-y-4 p-8 text-center">
+                          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                              <BrainCircuit className="w-8 h-8 text-primary" />
+                          </div>
+                          <h3 className="text-xl font-medium">Test Your Knowledge</h3>
+                          <p className="text-muted-foreground max-w-sm">
+                              Generate a quiz to reinforce what you've learned from this document.
                           </p>
-                          {/* FIX: Wired up generation with loading state */}
-                          <Button 
-                            onClick={() => generate('quiz')} 
-                            disabled={isGenerating}
-                          >
-                            {isGenerating ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              "Create New Quiz"
-                            )}
+                          <Button onClick={() => generate('quiz')} disabled={isGenerating}>
+                              {isGenerating ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 w-4 h-4" />}
+                              Generate Quiz
                           </Button>
                       </div>
-                  </div>
+                   )}
                 </TabsContent>
 
+                {/* 4. Flashcards Hub */}
                 <TabsContent value="flashcards" className="h-full m-0 p-8 overflow-y-auto">
-                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
-                      <Layers className="w-12 h-12 opacity-20" />
-                      <p>Select a flashcard deck to review</p>
-                   </div>
+                   {isLoading ? (
+                      <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>
+                   ) : studySet.deck ? (
+                      <div className="max-w-md mx-auto mt-10 space-y-6">
+                         <div className="p-8 rounded-3xl border bg-card shadow-lg text-center space-y-4">
+                            <div className="w-16 h-16 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center">
+                               <Layers className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                               <h2 className="text-2xl font-bold">{studySet.deck.title}</h2>
+                               <p className="text-muted-foreground">
+                                  {studySet.deck.flashcards?.length || 'Unknown'} Cards • Active Recall
+                               </p>
+                            </div>
+                            <Link href={`/flashcards/${studySet.deck.id}`} className="block w-full">
+                                <Button size="lg" className="w-full rounded-xl text-base h-12">
+                                   <BookOpen className="w-4 h-4 mr-2" /> Review Deck
+                                </Button>
+                            </Link>
+                         </div>
+                         <div className="text-center">
+                             <Button variant="link" className="text-muted-foreground" onClick={() => generate('flashcards')} disabled={isGenerating}>
+                                Regenerate Cards
+                             </Button>
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="h-full flex flex-col items-center justify-center space-y-4 p-8 text-center">
+                          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                              <Layers className="w-8 h-8 text-primary" />
+                          </div>
+                          <h3 className="text-xl font-medium">Master the Details</h3>
+                          <p className="text-muted-foreground max-w-sm">
+                              Create flashcards to memorize key concepts and definitions.
+                          </p>
+                          <Button onClick={() => generate('flashcards')} disabled={isGenerating}>
+                              {isGenerating ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 w-4 h-4" />}
+                              Generate Flashcards
+                          </Button>
+                      </div>
+                   )}
                 </TabsContent>
 
+                {/* 5. Audio Player */}
                 <TabsContent value="audio" className="h-full m-0 p-8 overflow-y-auto">
-                   {isLoadingData ? (
+                   {isLoading ? (
                       <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
                         <p>Loading audio workspace...</p>
                       </div>
                    ) : (
-                      <div className="max-w-2xl mx-auto space-y-8">
+                      <div className="max-w-2xl mx-auto space-y-8 mt-10">
                          <div className="text-center space-y-2">
                             <h2 className="text-2xl font-bold tracking-tight">Audio Notebook</h2>
                             <p className="text-muted-foreground">
