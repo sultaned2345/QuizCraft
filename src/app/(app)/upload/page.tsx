@@ -12,7 +12,8 @@ import { FileUp, Youtube, FileText, CheckCircle2, Sparkles, Mic } from 'lucide-r
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AudioInput from '@/components/AudioInput';
+// FIX: Named import to match export function AudioInput
+import { AudioInput } from '@/components/AudioInput';
 
 export default function UploadPage() {
   const router = useRouter();
@@ -99,8 +100,6 @@ export default function UploadPage() {
       await generateAllContent(data.documentId);
       
       toast({ title: "Success", description: "Content generated successfully!" });
-      
-      // REDIRECT TO DOCUMENT PAGE
       router.push(`/documents/${data.documentId}`);
       
     } catch (error) {
@@ -128,7 +127,6 @@ export default function UploadPage() {
       
       await generateAllContent(data.documentId);
       
-      // REDIRECT TO DOCUMENT PAGE
       router.push(`/documents/${data.documentId}`);
       
     } catch (error) {
@@ -156,7 +154,6 @@ export default function UploadPage() {
 
       if (data.documentId) {
           await generateAllContent(data.documentId);
-          // REDIRECT TO DOCUMENT PAGE
           router.push(`/documents/${data.documentId}`);
       } else {
         throw new Error("No document ID returned");
@@ -167,6 +164,14 @@ export default function UploadPage() {
       toast({ title: "Error", description: "Failed to process YouTube video", variant: "destructive" });
       setIsProcessing(false);
     }
+  };
+
+  // Handler for when AudioInput finishes uploading/transcribing
+  const handleAudioComplete = async (documentId: string) => {
+    setIsProcessing(true);
+    // Audio is already uploaded/transcribed by the component, now we just generate the study materials
+    await generateAllContent(documentId);
+    router.push(`/documents/${documentId}`);
   };
 
   // --- Loading Overlay Component ---
@@ -321,9 +326,9 @@ export default function UploadPage() {
           </Card>
         </TabsContent>
 
-        {/* Audio Tab */}
+        {/* Audio Tab - Wired to trigger generation and redirect */}
         <TabsContent value="audio" className="mt-0">
-           <AudioInput />
+           <AudioInput onTranscriptionComplete={handleAudioComplete} />
         </TabsContent>
         
       </Tabs>
