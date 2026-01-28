@@ -18,8 +18,10 @@ export async function POST(req: Request) {
     // 2. Parse Request Body
     const body = await req.json();
     let { documentId, jobType } = body;
-    
-    // Log explicitly with JSON to see if keys exist
+
+    // DEBUG: Log Source Page and Payload to trace "undefined" errors
+    const referer = req.headers.get('referer') || 'Unknown Source';
+    console.log(`📝 [API] Source: ${referer}`);
     console.log(`📝 [API] Payload:`, JSON.stringify(body));
 
     // 3. Validation
@@ -28,19 +30,21 @@ export async function POST(req: Request) {
     if (!jobType) missingFields.push('jobType');
 
     if (missingFields.length > 0) {
-      console.log(`❌ [API] Validation Failed: Missing ${missingFields.join(', ')}`);
+      console.error(`❌ [API] Validation Failed: Missing ${missingFields.join(', ')}`);
       return NextResponse.json(
         { error: `Missing required fields: ${missingFields.join(', ')}` }, 
         { status: 400 }
       );
     }
 
+    // Clean and Validate UUID
     if (typeof documentId === 'string') {
         documentId = documentId.trim();
     }
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
+       console.log(`❌ [API] Validation Failed: Invalid UUID format '${documentId}'`);
        return NextResponse.json(
         { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
@@ -84,13 +88,12 @@ export async function POST(req: Request) {
 
     console.log(`🚀 [API] Job Created: ${job.id} (${jobType}). Triggering process...`);
 
-    // 6. Trigger the Processing Endpoint
+    // 6. Trigger the Processing Endpoint (Fire and Forget)
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
     const host = req.headers.get('host');
     const processUrl = `${protocol}://${host}/api/generation-jobs/process`;
     const cookieHeader = req.headers.get('cookie') || '';
 
-    // Fire and forget - don't await
     fetch(processUrl, {
       method: 'POST',
       headers: {

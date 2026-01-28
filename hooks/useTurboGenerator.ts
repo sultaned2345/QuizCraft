@@ -35,16 +35,42 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
 
   /**
    * Core generation function.
+   * Usage: generate('quiz') OR generate({ type: 'quiz', docId: '...' })
    */
-  const generate = useCallback(async (type: TurboJobType, docIdOverride?: string, metadata?: any) => {
-    // 1. Critical Validation
-    // Check if 'type' is an object (React Event) or undefined/null/empty
-    if (!type || typeof type !== 'string') {
-        const errorMsg = `[TurboGenerator] ❌ Invalid Job Type: '${typeof type}'. You likely used 'onClick={generate}' instead of 'onClick={() => generate("quiz")}'`;
-        console.error(errorMsg);
-        // Do not throw here if it's an event, just return to prevent crash, but log error.
-        // If it's undefined, we must stop.
-        return;
+  const generate = useCallback(async (
+    arg1: TurboJobType | { type: TurboJobType, docId?: string, metadata?: any }, 
+    legacyDocId?: string, 
+    legacyMeta?: any
+  ) => {
+    
+    // 1. Normalize Arguments
+    let type: TurboJobType;
+    let docIdOverride = legacyDocId;
+    let metadata = legacyMeta;
+
+    if (typeof arg1 === 'object' && arg1 !== null) {
+        // Handle object usage: generate({ type: 'quiz' })
+        // @ts-ignore
+        type = arg1.type;
+        // @ts-ignore
+        docIdOverride = arg1.docId;
+        // @ts-ignore
+        metadata = arg1.metadata;
+    } else {
+        // Handle string usage: generate('quiz')
+        type = arg1 as TurboJobType;
+    }
+
+    // 2. Strict Validation (Client-Side Guardrail)
+    if (!type) {
+        console.error("[TurboGenerator] ❌ Job Type is missing/undefined in generate() call.");
+        throw new Error("Job Type is required. Usage: generate('quiz')");
+    }
+    
+    if (typeof type !== 'string') {
+        console.error("[TurboGenerator] ❌ Invalid Job Type. Received:", type);
+        console.error("This usually happens if you do: onClick={generate} instead of onClick={() => generate('quiz')}");
+        return; // Exit silently to prevent crash if event object is passed
     }
     
     const targetDocId = docIdOverride || initialDocId;
@@ -58,7 +84,8 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       setIsGenerating(true);
       setStatus(`Generating ${type}...`);
       
-      // 2. Prepare Payload (Sanitize undefined)
+      // 3. Prepare Payload
+      // We spread metadata first so it cannot accidentally overwrite strict fields
       const payload = {
         ...metadata,
         documentId: targetDocId,
@@ -67,7 +94,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
 
       console.log(`[TurboGenerator] 🚀 Sending Request:`, payload);
 
-      // 3. Start Job
+      // 4. Start Job
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
@@ -91,7 +118,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
     } catch (error: any) {
       console.error(`[TurboGenerator] 💥 Error generating ${type}:`, error);
       setStatus(`Error: ${error.message}`);
-      // Don't re-throw if you want the UI to handle it gracefully via 'status'
+      throw error;
     } finally {
         if (status !== 'Starting Turbo Mode...') {
             setIsGenerating(false);
@@ -100,7 +127,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   }, [initialDocId, session, status]);
 
   /**
-   * Wrapper for "Turbo" button
+   * Wrapper for "Turbo" button (Sequentially runs multiple jobs)
    */
   const startTurbo = useCallback(async () => {
      if (!initialDocId) return;
@@ -113,6 +140,8 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
      let completedCount = 0;
      
      try {
+       // Run in parallel for speed, or sequential if DB locks are a concern
+       // Here we use Promise.all for parallel execution
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
