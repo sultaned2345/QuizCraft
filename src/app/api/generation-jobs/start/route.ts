@@ -14,18 +14,23 @@ export async function POST(req: Request) {
       console.log("❌ [API] Auth Failed: No user session.");
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.log(`✅ [API] Auth Success: User ${session.user.id}`);
 
     // 2. Parse Request Body
     const body = await req.json();
     let { documentId, jobType } = body;
-    console.log(`📝 [API] Payload: jobType='${jobType}', documentId='${documentId}'`);
+    
+    // Log explicitly with JSON to see if keys exist
+    console.log(`📝 [API] Payload:`, JSON.stringify(body));
 
     // 3. Validation
-    if (!documentId || !jobType) {
-      console.log("❌ [API] Validation Failed: Missing fields");
+    const missingFields = [];
+    if (!documentId) missingFields.push('documentId');
+    if (!jobType) missingFields.push('jobType');
+
+    if (missingFields.length > 0) {
+      console.log(`❌ [API] Validation Failed: Missing ${missingFields.join(', ')}`);
       return NextResponse.json(
-        { error: 'Missing required fields: documentId, jobType' }, 
+        { error: `Missing required fields: ${missingFields.join(', ')}` }, 
         { status: 400 }
       );
     }
@@ -35,9 +40,7 @@ export async function POST(req: Request) {
     }
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    
     if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
-       console.log(`❌ [API] Validation Failed: Invalid UUID format '${documentId}'`);
        return NextResponse.json(
         { error: 'Invalid documentId format. Must be a valid UUID.' }, 
         { status: 400 }
@@ -45,7 +48,6 @@ export async function POST(req: Request) {
     }
 
     const validJobTypes = ['quiz', 'flashcard', 'note', 'podcast', 'embedding'];
-    
     if (!validJobTypes.includes(jobType)) {
       console.log(`❌ [API] Validation Failed: Invalid jobType '${jobType}'`);
       return NextResponse.json(
@@ -55,7 +57,6 @@ export async function POST(req: Request) {
     }
 
     // 4. Verify Document Ownership
-    console.log(`🔍 [API] Looking for Document ${documentId}...`);
     const doc = await prisma.documents.findUnique({
       where: { 
         id: documentId,
@@ -64,13 +65,12 @@ export async function POST(req: Request) {
     });
 
     if (!doc) {
-      console.log(`❌ [API] Document not found or access denied.`);
+      console.log(`❌ [API] Document not found or access denied: ${documentId}`);
       return NextResponse.json(
         { error: 'Document not found or access denied.' },
         { status: 404 }
       );
     }
-    console.log(`✅ [API] Document Found: ${doc.file_name}`);
 
     // 5. Create the Job Record
     const job = await prisma.generation_jobs.create({
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`🚀 [API] Job Created: ${job.id}. Triggering process...`);
+    console.log(`🚀 [API] Job Created: ${job.id} (${jobType}). Triggering process...`);
 
     // 6. Trigger the Processing Endpoint
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
@@ -90,6 +90,7 @@ export async function POST(req: Request) {
     const processUrl = `${protocol}://${host}/api/generation-jobs/process`;
     const cookieHeader = req.headers.get('cookie') || '';
 
+    // Fire and forget - don't await
     fetch(processUrl, {
       method: 'POST',
       headers: {

@@ -17,7 +17,7 @@ interface UseTurboGeneratorOptions {
   onSuccess?: () => void;
 }
 
-// Overload signatures to support both usage patterns
+// Overload signatures
 export function useTurboGenerator(documentId: string): any;
 export function useTurboGenerator(options: UseTurboGeneratorOptions): any;
 export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGeneratorOptions) {
@@ -26,7 +26,6 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   const initialDocId = typeof initialDocIdOrOptions === 'string' ? initialDocIdOrOptions : undefined;
   const options = typeof initialDocIdOrOptions === 'object' ? initialDocIdOrOptions : undefined;
 
-  // State
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>('Idle');
@@ -36,19 +35,16 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
 
   /**
    * Core generation function.
-   * Can be called with a specific type and optional document ID override.
    */
   const generate = useCallback(async (type: TurboJobType, docIdOverride?: string, metadata?: any) => {
-    // 1. Strict Validation
-    if (!type) {
-        console.error("[TurboGenerator] ❌ Job Type is missing/undefined in generate() call.");
-        throw new Error("Job Type is required.");
-    }
-    
-    // Safety Check: Prevent passing Event objects (e.g. onClick={generate})
-    if (typeof type !== 'string') {
-        console.error("[TurboGenerator] ❌ Invalid Job Type. You likely used 'onClick={generate}' instead of 'onClick={() => generate(...)}'. Value received:", type);
-        throw new Error("Invalid function call. Use an arrow function in your onClick handler.");
+    // 1. Critical Validation
+    // Check if 'type' is an object (React Event) or undefined/null/empty
+    if (!type || typeof type !== 'string') {
+        const errorMsg = `[TurboGenerator] ❌ Invalid Job Type: '${typeof type}'. You likely used 'onClick={generate}' instead of 'onClick={() => generate("quiz")}'`;
+        console.error(errorMsg);
+        // Do not throw here if it's an event, just return to prevent crash, but log error.
+        // If it's undefined, we must stop.
+        return;
     }
     
     const targetDocId = docIdOverride || initialDocId;
@@ -62,19 +58,23 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       setIsGenerating(true);
       setStatus(`Generating ${type}...`);
       
-      // 2. Start Job
-      // Fix: Spread metadata FIRST so it cannot overwrite jobType or documentId
+      // 2. Prepare Payload (Sanitize undefined)
+      const payload = {
+        ...metadata,
+        documentId: targetDocId,
+        jobType: type, 
+      };
+
+      console.log(`[TurboGenerator] 🚀 Sending Request:`, payload);
+
+      // 3. Start Job
       const startRes = await fetch('/api/generation-jobs/start', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        body: JSON.stringify({ 
-            ...metadata, 
-            documentId: targetDocId, 
-            jobType: type, // Explicitly set last to prevent overwrite
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!startRes.ok) {
@@ -85,15 +85,13 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
       const data = await startRes.json();
       console.log(`[TurboGenerator] ✅ Job Started: ${data.jobId} (${type})`);
 
-      // 3. Update Status 
       setResults(prev => ({ ...prev, [type]: 'processing' }));
-      
       return { jobId: data.jobId };
 
     } catch (error: any) {
       console.error(`[TurboGenerator] 💥 Error generating ${type}:`, error);
       setStatus(`Error: ${error.message}`);
-      throw error;
+      // Don't re-throw if you want the UI to handle it gracefully via 'status'
     } finally {
         if (status !== 'Starting Turbo Mode...') {
             setIsGenerating(false);
@@ -102,7 +100,7 @@ export function useTurboGenerator(initialDocIdOrOptions?: string | UseTurboGener
   }, [initialDocId, session, status]);
 
   /**
-   * Legacy wrapper for "Turbo" button (runs all default types)
+   * Wrapper for "Turbo" button
    */
   const startTurbo = useCallback(async () => {
      if (!initialDocId) return;
