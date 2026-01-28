@@ -17,18 +17,20 @@ export async function POST(req: Request) {
 
     // 2. Parse Request Body
     const body = await req.json();
-    let { documentId, jobType } = body;
+    
+    // FIX: Default jobType to 'quiz' if missing to prevent 400 errors on simple calls
+    let { documentId, jobType = 'quiz' } = body;
 
     // DEBUG: Log Source Page and Payload to trace "undefined" errors
     const referer = req.headers.get('referer') || 'Unknown Source';
     console.log(`📝 [API] Source: ${referer}`);
-    console.log(`📝 [API] Payload:`, JSON.stringify(body));
+    console.log(`📝 [API] Payload:`, JSON.stringify({ documentId, jobType }));
 
     // 3. Validation
     const missingFields = [];
     if (!documentId) missingFields.push('documentId');
-    if (!jobType) missingFields.push('jobType');
-
+    // Note: jobType is no longer checked for "existence" here because it has a default
+    
     if (missingFields.length > 0) {
       console.error(`❌ [API] Validation Failed: Missing ${missingFields.join(', ')}`);
       return NextResponse.json(
