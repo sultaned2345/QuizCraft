@@ -216,7 +216,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                     <NoteEditor 
                        noteId={studySet.note.id} 
                        initialContent={studySet.note.content} 
-                       title={studySet.note.title}
+                       initialTitle={studySet.note.title} // FIX: Changed from 'title' to 'initialTitle'
                     />
                   ) : (
                     // Show Generate Prompt
