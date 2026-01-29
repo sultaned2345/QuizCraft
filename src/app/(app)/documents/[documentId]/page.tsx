@@ -1,7 +1,7 @@
 // src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; 
+import { useState, useEffect, useCallback, use } from 'react'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -42,13 +42,14 @@ interface StudySet {
 }
 
 interface PageProps {
-  params: {
+  params: Promise<{
     documentId: string;
-  };
+  }>;
 }
 
 export default function StudyWorkspacePage({ params }: PageProps) {
-  const { documentId } = params;
+  // FIX: Unwrap params Promise using React.use()
+  const { documentId } = use(params);
   const router = useRouter();
   
   // --- UI State ---
@@ -216,7 +217,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                     <NoteEditor 
                        noteId={studySet.note.id} 
                        initialContent={studySet.note.content} 
-                       initialTitle={studySet.note.title} // FIX: Changed from 'title' to 'initialTitle'
+                       initialTitle={studySet.note.title} 
                     />
                   ) : (
                     // Show Generate Prompt

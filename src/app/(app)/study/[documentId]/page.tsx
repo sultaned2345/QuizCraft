@@ -1,7 +1,7 @@
 // src/app/(app)/study/[documentId]/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { TurboLoading } from '@/components/TurboLoading';
 import { ChatInterface } from '@/components/ChatInterface'; 
@@ -11,8 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Play, FileText, BrainCircuit, Mic, Sparkles, MessageSquare, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-export default function StudyHubPage({ params }: { params: { documentId: string } }) {
-  const { documentId } = params;
+interface PageProps {
+  params: Promise<{
+    documentId: string;
+  }>;
+}
+
+export default function StudyHubPage({ params }: PageProps) {
+  // FIX: Unwrap params
+  const { documentId } = use(params);
   
   // 1. The Hook acts as the Orchestrator
   const { startTurbo, statuses, results, isFullyComplete } = useTurboGenerator(documentId);
