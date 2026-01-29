@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react'; 
-import { useRouter, useParams } from 'next/navigation'; // FIX: Use standard hook
+import { useRouter, useParams } from 'next/navigation'; 
 import Link from 'next/link';
 import { 
   ResizableHandle, 
@@ -42,9 +42,11 @@ interface StudySet {
 }
 
 export default function StudyWorkspacePage() {
-  // FIX: Safe param access for Client Components
   const params = useParams();
-  const documentId = params?.documentId as string;
+  const rawId = params?.documentId;
+  // FIX: Ensure ID is a valid string and not the string "undefined"
+  const documentId = (typeof rawId === 'string' && rawId !== 'undefined') ? rawId : null;
+
   const router = useRouter();
   
   // --- UI State ---
@@ -63,6 +65,7 @@ export default function StudyWorkspacePage() {
 
   // --- Data Fetching ---
   const refreshData = useCallback(async () => {
+     // FIX: Strict guard clause - do not fetch if ID is invalid
      if (!documentId) return;
      
      try {
@@ -92,7 +95,8 @@ export default function StudyWorkspacePage() {
   }, [documentId]);
 
   // --- Hook Integration ---
-  const { generate, isGenerating } = useTurboGenerator(documentId, {
+  // Pass empty string if null to prevent hook errors, but logic inside hook should handle it
+  const { generate, isGenerating } = useTurboGenerator(documentId || '', {
     onSuccess: () => refreshData() 
   });
   
@@ -103,15 +107,13 @@ export default function StudyWorkspacePage() {
     refreshData().finally(() => setIsLoading(false));
   }, [documentId, refreshData]);
 
-  // Handle Invalid ID
+  // Handle Invalid/Loading ID
   if (!documentId) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
-        <div className="p-4 bg-destructive/10 rounded-full text-destructive">
-          <AlertTriangle className="w-12 h-12" />
-        </div>
-        <h2 className="text-xl font-bold">Document Not Found</h2>
-        <Button onClick={() => router.push('/dashboard')}>Return to Dashboard</Button>
+        {/* Use a generic loading state initially to avoid flashing error on fast loads */}
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <p className="text-muted-foreground text-sm">Loading workspace...</p>
       </div>
     );
   }

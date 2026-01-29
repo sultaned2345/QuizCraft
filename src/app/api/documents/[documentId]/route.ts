@@ -17,12 +17,7 @@ function getSupabaseClientForUser(request: NextRequest) {
     const token = authHeader?.replace('Bearer ', '');
     
     // Fallback: If no Bearer token, we cannot perform storage ops on behalf of user easily
-    // In a real app, you might use a service role key if the backend is trusted, 
-    // but here we stick to the user's context if provided.
     if (!token) {
-        // Warning: This might fail if the request comes from a cookie-based session 
-        // without an Authorization header. For server-side ops, usually Service Role is safer 
-        // for deletion, but let's keep your logic for now.
         throw new Error("Missing auth token for storage operation");
     }
 
@@ -40,12 +35,13 @@ export async function GET(
     props: { params: Promise<{ documentId: string }> }
 ) {
     try {
-        // 1. Safe Param Access (Next.js 15 compatible)
+        // 1. Safe Param Access
         const params = await props.params;
         const { documentId } = params;
 
-        if (!documentId) {
-             return NextResponse.json({ error: 'Document ID missing' }, { status: 400 });
+        // FIX: Guard clause for invalid ID
+        if (!documentId || documentId === 'undefined') {
+             return NextResponse.json({ error: 'Invalid document ID.' }, { status: 400 });
         }
 
         // 2. Auth Check
@@ -66,7 +62,9 @@ export async function GET(
                 processing_status: true,
                 ai_summary: true,
                 storage_path: true, 
-                extracted_text: true, // Required for Workspace/Chat
+                extracted_text: true, 
+                // Note: Ensure your schema supports 'podcast' if you want to select it
+                // podcast: true 
             }
         });
 
@@ -75,9 +73,6 @@ export async function GET(
         }
 
         // 4. Data Transformation
-        // - Serialize BigInt (file_size)
-        // - Generate Public URL
-        // - Map file_name -> title
         const safeDoc = {
             ...doc,
             title: doc.file_name,
@@ -90,10 +85,8 @@ export async function GET(
         return NextResponse.json({ success: true, data: safeDoc });
 
     } catch (error: any) {
-        // Handle Auth Response throw
         if (error instanceof Response) return error;
-
-        console.error(`[GET /api/documents/${(await props.params).documentId}] Error:`, error);
+        console.error(`[GET /api/documents] Error:`, error);
         return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
     }
 }
@@ -107,7 +100,8 @@ export async function DELETE(
         const params = await props.params;
         const { documentId } = params;
 
-        if (!documentId) {
+        // FIX: Guard clause for invalid ID
+        if (!documentId || documentId === 'undefined') {
             return NextResponse.json<ApiResponse>({ success: false, error: 'Document ID is required.' }, { status: 400 });
         }
 
@@ -138,7 +132,6 @@ export async function DELETE(
 
                 if (storageError) {
                     console.error(`Storage delete error:`, storageError);
-                    // Continue to delete DB record to prevent orphans, but log the error
                 }
             } catch (storageException) {
                  console.warn("Could not initialize storage client (likely cookie auth), skipping storage delete:", storageException);
