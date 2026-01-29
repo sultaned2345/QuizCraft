@@ -35,13 +35,13 @@ export async function GET(
     props: { params: Promise<{ documentId: string }> }
 ) {
     try {
-        // 1. Safe Param Access
+        // 1. Safe Param Access (Next.js 15 compatible)
         const params = await props.params;
         const { documentId } = params;
 
-        // FIX: Guard clause for invalid ID
+        // FIX: Guard against "undefined" string to prevent Prisma crash
         if (!documentId || documentId === 'undefined') {
-             return NextResponse.json({ error: 'Invalid document ID.' }, { status: 400 });
+             return NextResponse.json({ error: 'Invalid Document ID' }, { status: 400 });
         }
 
         // 2. Auth Check
@@ -62,9 +62,7 @@ export async function GET(
                 processing_status: true,
                 ai_summary: true,
                 storage_path: true, 
-                extracted_text: true, 
-                // Note: Ensure your schema supports 'podcast' if you want to select it
-                // podcast: true 
+                extracted_text: true, // Required for Workspace/Chat
             }
         });
 
@@ -85,8 +83,10 @@ export async function GET(
         return NextResponse.json({ success: true, data: safeDoc });
 
     } catch (error: any) {
+        // Handle Auth Response throw
         if (error instanceof Response) return error;
-        console.error(`[GET /api/documents] Error:`, error);
+
+        console.error(`[GET /api/documents/${(await props.params).documentId}] Error:`, error);
         return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
     }
 }

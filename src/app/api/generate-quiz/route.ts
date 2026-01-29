@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; 
+import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration';
 
 export const runtime = 'nodejs';
 
@@ -23,7 +23,7 @@ function parseQuery(request: NextRequest) {
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-// Safely read body, returns object even if body is empty
+// Safely read body, returns object even if body is empty or parsing fails
 async function getBody(request: NextRequest) {
     try {
         const contentType = request.headers.get('content-type') || '';
@@ -36,19 +36,30 @@ async function getBody(request: NextRequest) {
     }
 }
 
+// Helper to read text from various sources
 async function readInputText(request: NextRequest, body: any): Promise<string> {
     const contentType = request.headers.get('content-type') || '';
     
-    if (contentType.includes('application/json')) {
-        return body.text?.trim() || '';
+    // Check JSON body first
+    if (body && body.text) {
+        return body.text.trim();
     }
+
+    // Fallback to standard request parsing logic if body wasn't already parsed or empty
+    if (contentType.includes('application/json')) {
+         // Already parsed in getBody usually, but strictly speaking:
+         return body.text?.trim() || '';
+    }
+
     if (contentType.includes('multipart/form-data')) {
         const form = await request.formData();
         return (form.get('text') as string)?.trim() || '';
     }
+
     if (contentType.includes('text/plain')) {
         return (await request.text()).trim();
     }
+    
     return '';
 }
 
@@ -62,7 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // 2. Parse Input (Including Mode)
+    // 2. Parse Input
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     
     const body = await getBody(request);
@@ -71,21 +82,27 @@ export async function POST(request: NextRequest) {
 
     // --- FIX: Fetch content from Document ID if text is missing & not in topic mode ---
     if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
-        console.log(`[Quiz] Fetching text for doc: ${documentId}`);
-        const doc = await prisma.documents.findUnique({
-            where: { id: documentId, user_id: user.id },
-            select: { extracted_text: true }
-        });
-        if (doc && doc.extracted_text) {
-            text = doc.extracted_text;
+        // Prevent passing "undefined" string to Prisma
+        if (documentId !== 'undefined') {
+            console.log(`[Quiz] Fetching text for doc: ${documentId}`);
+            const doc = await prisma.documents.findUnique({
+                where: { id: documentId, user_id: user.id },
+                select: { extracted_text: true }
+            });
+
+            if (doc && doc.extracted_text) {
+                text = doc.extracted_text;
+            } else {
+                return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
+            }
         } else {
-             return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
+             console.warn('[Quiz] Invalid document ID received: "undefined"');
+             return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
         }
     }
     // ---------------------------------------------------------------------------------
 
     // Basic validation
-    // If mode is topic, text might be short (e.g. "Biology"), so we relax the length check
     if (mode !== 'topic' && (!text || text.length < 100)) {
       return NextResponse.json({ success: false, error: 'Content too short (min 100 chars).' }, { status: 400 });
     }
@@ -97,7 +114,6 @@ export async function POST(request: NextRequest) {
     let quizData;
     
     if (mode === 'topic') {
-      // Remove the "TOPIC:" prefix if the frontend sent it
       const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
       quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
     } else {

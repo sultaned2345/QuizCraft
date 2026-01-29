@@ -44,7 +44,8 @@ interface StudySet {
 export default function StudyWorkspacePage() {
   const params = useParams();
   const rawId = params?.documentId;
-  // FIX: Ensure ID is a valid string and not the string "undefined"
+  
+  // FIX: Explicitly handle "undefined" string to prevent backend crash
   const documentId = (typeof rawId === 'string' && rawId !== 'undefined') ? rawId : null;
 
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function StudyWorkspacePage() {
 
   // --- Data Fetching ---
   const refreshData = useCallback(async () => {
-     // FIX: Strict guard clause - do not fetch if ID is invalid
+     // FIX: Do not fetch if ID is invalid or missing
      if (!documentId) return;
      
      try {
@@ -95,7 +96,6 @@ export default function StudyWorkspacePage() {
   }, [documentId]);
 
   // --- Hook Integration ---
-  // Pass empty string if null to prevent hook errors, but logic inside hook should handle it
   const { generate, isGenerating } = useTurboGenerator(documentId || '', {
     onSuccess: () => refreshData() 
   });
@@ -107,13 +107,12 @@ export default function StudyWorkspacePage() {
     refreshData().finally(() => setIsLoading(false));
   }, [documentId, refreshData]);
 
-  // Handle Invalid/Loading ID
+  // Handle Invalid/Loading State
   if (!documentId) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
-        {/* Use a generic loading state initially to avoid flashing error on fast loads */}
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        <p className="text-muted-foreground text-sm">Loading workspace...</p>
+        <p className="text-muted-foreground">Loading workspace...</p>
       </div>
     );
   }

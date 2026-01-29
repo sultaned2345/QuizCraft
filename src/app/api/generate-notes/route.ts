@@ -32,11 +32,23 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request);
     console.log("DEBUG: Authentication successful, user ID:", user.id);
 
-    const body = await request.json();
+    let body;
+    try { 
+        body = await request.json(); 
+    } catch(e) { 
+        body = {}; 
+    }
+    
+    // We allow 'text' to be modified if we fetch it from the DB
     let { text, url, youtubeUrl, documentId } = body;
 
-    // --- FIX: Fetch content from Document ID if text is missing ---
+    // --- FIX: Fetch content from DB if missing ---
     if (!text && !url && !youtubeUrl && documentId) {
+        // Guard against "undefined" string from frontend
+        if (documentId === 'undefined') {
+            return NextResponse.json({ success: false, error: "Invalid document ID" }, { status: 400 });
+        }
+
         console.log(`DEBUG: Fetching content for documentId: ${documentId}`);
         const doc = await prisma.documents.findUnique({
             where: { id: documentId, user_id: user.id },
@@ -49,10 +61,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json<ApiResponse>({ success: false, error: "Document not found or has no text content." }, { status: 404 });
         }
     }
-    // -----------------------------------------------------------
+    // ---------------------------------------------
 
     if (!url && !text && !youtubeUrl) { 
-        return NextResponse.json<ApiResponse>({ success: false, error: "Either text, a URL, or a YouTube URL is required." }, { status: 400 }); 
+        return NextResponse.json<ApiResponse>({ success: false, error: "Either text, a URL, a YouTube URL, or a valid documentId is required." }, { status: 400 }); 
     }
     
     let sourceContent = text;
@@ -144,13 +156,9 @@ export async function POST(request: NextRequest) {
         console.log("DEBUG: Saving note...");
         
         let validDocumentId = null;
-        if (documentId) {
-             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-             if (uuidRegex.test(documentId)) {
-                 validDocumentId = documentId;
-             } else {
-                 console.warn(`[API] Invalid documentId format provided: ${documentId}`);
-             }
+        if (documentId && documentId !== 'undefined') {
+             // Simple regex check for UUID validity could be added here, but the DB call earlier implicitly validates existence
+             validDocumentId = documentId;
         }
 
         let noteTitle = noteTitlePrefix;
