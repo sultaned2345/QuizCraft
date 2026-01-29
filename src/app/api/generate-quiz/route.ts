@@ -8,12 +8,13 @@ import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGen
 import { YoutubeTranscript } from 'youtube-transcript';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 60; // Allow 60s for AI generation
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
 
-// --- Helper: Clean HTML ---
+// --- Helpers ---
+
 function extractTextFromHtml(html: string): string {
     let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
     cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
@@ -22,7 +23,6 @@ function extractTextFromHtml(html: string): string {
     return cleanHtml;
 }
 
-// --- Helper: Parse Query Params ---
 function parseQuery(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const numQuestions = Math.min(15, Math.max(5, Number(searchParams.get('numQuestions') ?? '10')));
@@ -30,115 +30,100 @@ function parseQuery(request: NextRequest) {
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
   
-  // 'topic' mode expects the input text to be a short topic string (e.g. "Photosynthesis")
-  // 'content' mode expects the input text to be the full source material
+  // 'topic' mode expects short text; 'content' mode expects full document text
   const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
 
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-// --- Helper: Parse Body Safe (Stream Safe) ---
-async function parseRequestBody(request: NextRequest) {
-    const contentType = request.headers.get('content-type') || '';
-    
-    // 1. Handle JSON
-    if (contentType.includes('application/json')) {
-        try {
-            return await request.json();
-        } catch (e) {
-            console.error("[Quiz] Failed to parse JSON body");
-            return {};
-        }
+// Robust input reader (supports JSON body, FormData, or plain Text)
+async function readInputText(request: NextRequest, body: any): Promise<string> {
+    // 1. Check if JSON body already provided the text (Priority from useTurboGenerator)
+    if (body && (body.text || body.topic)) {
+        return (body.text || body.topic).trim();
     }
-    
+
+    const contentType = request.headers.get('content-type') || '';
+
     // 2. Handle FormData (File uploads)
     if (contentType.includes('multipart/form-data')) {
         try {
-            const formData = await request.formData();
-            return {
-                text: formData.get('text') as string,
-                documentId: formData.get('documentId') as string,
-                url: formData.get('url') as string,
-                youtubeUrl: formData.get('youtubeUrl') as string,
-                topic: formData.get('topic') as string,
-            };
+            const form = await request.formData();
+            return (form.get('text') as string)?.trim() || '';
         } catch (e) {
-            console.error("[Quiz] Failed to parse FormData");
-            return {};
+            console.warn("Error parsing form data:", e);
+            return '';
         }
     }
 
-    // 3. Handle Plain Text
+    // 3. Handle Plain Text body
     if (contentType.includes('text/plain')) {
-        try {
-            const text = await request.text();
-            return { text };
-        } catch (e) {
-            return {};
-        }
+        return (await request.text()).trim();
     }
-
-    return {};
+    
+    return '';
 }
+
+// --- Main Handler ---
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Auth Check
     const user = await requireAuth(request);
 
-    // 1. Usage Check
+    // 2. Usage Check
     const usageCheck = await checkAIGenerationUsageLimit(user.id);
     if (!usageCheck.isValid || !usageCheck.canGenerate) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // 2. Parse Inputs
+    // 3. Parse Query Params
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     
-    // Read Body (Stream Safe)
-    const body = await parseRequestBody(request);
-    
-    // Extract potential sources
-    let { text, topic, url, youtubeUrl, documentId } = body;
-    
-    // Normalize text input
-    if (!text && topic) text = topic;
+    // 4. Safe Body Parsing
+    let body: any = {};
+    try {
+        const textBody = await request.text();
+        if (textBody) body = JSON.parse(textBody);
+    } catch { /* ignore JSON errors, body remains empty object */ }
+
+    // 5. Resolve Text and Metadata
+    let text = await readInputText(request, body); 
+    const { url, youtubeUrl, documentId } = body;
 
     console.log(`[API] Generate Quiz: mode=${mode}, docId=${documentId}, url=${!!url}, yt=${!!youtubeUrl}, textLen=${text?.length}`);
 
-    // 3. SOURCE RESOLUTION LOGIC
+    // 6. SOURCE RESOLUTION (Backfill if text is missing)
     
-    // A. Handle URL Source
+    // A. URL Source
     if (!text && url) {
         try {
-            console.log(`[Quiz] Fetching URL: ${url}`);
             const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
             if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-            const html = await response.text();
-            text = extractTextFromHtml(html);
+            text = extractTextFromHtml(await response.text());
         } catch (e: any) {
-            return NextResponse.json({ success: false, error: `Failed to fetch URL: ${e.message}` }, { status: 400 });
+            return NextResponse.json({ success: false, error: `URL error: ${e.message}` }, { status: 400 });
         }
     }
     
-    // B. Handle YouTube Source
+    // B. YouTube Source
     else if (!text && youtubeUrl) {
         try {
-            console.log(`[Quiz] Fetching Transcript: ${youtubeUrl}`);
             const transcript = await YoutubeTranscript.fetchTranscript(youtubeUrl);
-            if (!transcript || transcript.length === 0) throw new Error("No transcript found.");
+            if (!transcript?.length) throw new Error("No transcript found.");
             text = transcript.map(item => item.text).join(' ');
         } catch (e: any) {
-            return NextResponse.json({ success: false, error: `Failed to fetch YouTube transcript: ${e.message}` }, { status: 400 });
+            return NextResponse.json({ success: false, error: `YouTube error: ${e.message}` }, { status: 400 });
         }
     }
     
-    // C. Handle Document ID Backfill (The Fix)
-    else if ((!text || text.length < 50) && documentId) {
+    // C. Database Backfill (Robustness Fix)
+    else if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
         if (documentId === 'undefined' || documentId === 'null') {
              return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
         }
 
-        console.log(`[Quiz] Fetching text for doc: ${documentId}`);
+        console.log(`[Quiz] Fetching text from DB for doc: ${documentId}`);
         const doc = await prisma.documents.findUnique({
             where: { id: documentId, user_id: user.id },
             select: { extracted_text: true }
@@ -146,21 +131,20 @@ export async function POST(request: NextRequest) {
 
         if (doc && doc.extracted_text) {
             text = doc.extracted_text;
-            console.log(`[Quiz] Fetched ${text.length} characters from DB.`);
+            console.log(`[Quiz] Retrieved ${text.length} characters.`);
         } else {
              return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
         }
     }
 
-    // 4. Validation
+    // 7. Validation
     const minLength = mode === 'topic' ? 3 : 100;
     if (!text || text.length < minLength) {
       return NextResponse.json({ success: false, error: `Content too short (min ${minLength} chars).` }, { status: 400 });
     }
 
-    // 5. Generate with AI
+    // 8. Generate with AI
     let quizData;
-    
     if (mode === 'topic') {
       const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
       quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
@@ -172,7 +156,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
     }
 
-    // 6. Save to DB
+    // 9. Save to DB
     const questionsToCreate = quizData.questions.map((q: any) => ({
       question_text: q.question_text,
       question_type: q.question_type,
@@ -208,7 +192,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 7. Update Usage
+    // 10. Update Usage
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json({

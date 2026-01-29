@@ -3,6 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 export type TurboJobType = 'quiz' | 'note' | 'flashcard' | 'podcast' | 'embedding';
 
@@ -18,7 +19,6 @@ interface UseTurboGeneratorOptions {
 }
 
 // --- Overload Signatures ---
-// These allow TypeScript to understand the different ways you can call this hook
 export function useTurboGenerator(documentId: string): any;
 export function useTurboGenerator(documentId: string, options: UseTurboGeneratorOptions): any;
 export function useTurboGenerator(options: UseTurboGeneratorOptions): any;
@@ -29,7 +29,7 @@ export function useTurboGenerator(
   arg2?: UseTurboGeneratorOptions
 ) {
   
-  // 1. Resolve arguments based on what was passed
+  // 1. Resolve arguments
   const initialDocId = typeof arg1 === 'string' ? arg1 : undefined;
   const options = typeof arg1 === 'object' ? arg1 : arg2;
 
@@ -39,7 +39,31 @@ export function useTurboGenerator(
   const [status, setStatus] = useState<string>('Idle');
   const [results, setResults] = useState<TurboResults>({});
   
+  const { toast } = useToast();
   const { session } = useAuth();
+
+  // --- Helper: Fetch Text Content First ---
+  // This solves the "docId=undefined" bug by verifying we can get text BEFORE hitting the generation API
+  const fetchDocumentText = useCallback(async (id: string) => {
+    if (!id || id === 'undefined' || id === 'null') {
+        throw new Error("Invalid Document ID");
+    }
+    
+    // Fetch metadata from your own API which returns { data: { extracted_text: ... } }
+    const res = await fetch(`/api/documents/${id}`);
+    
+    if (!res.ok) {
+        throw new Error(`Failed to fetch document metadata: ${res.statusText}`);
+    }
+    
+    const json = await res.json();
+    const text = json.data?.extracted_text || json.extracted_text;
+    
+    if (!text || text.length < 50) {
+        throw new Error("Document has no text content to analyze (or it is too short).");
+    }
+    return text;
+  }, []);
 
   /**
    * Core generation function.
@@ -47,87 +71,116 @@ export function useTurboGenerator(
    */
   const generate = useCallback(async (
     argInput: TurboJobType | { type: TurboJobType, docId?: string, metadata?: any }, 
-    legacyDocId?: string, 
-    legacyMeta?: any
+    legacyDocId?: string
   ) => {
     
-    // Normalize Arguments (Supports both object style and legacy arguments)
+    // Normalize Arguments
     let type: TurboJobType;
     let docIdOverride = legacyDocId;
-    let metadata = legacyMeta;
+    let metadata = {};
 
     if (typeof argInput === 'object' && argInput !== null) {
-        // @ts-ignore
-        type = argInput.type;
-        // @ts-ignore
-        docIdOverride = argInput.docId;
-        // @ts-ignore
-        metadata = argInput.metadata;
+        type = (argInput as any).type;
+        docIdOverride = (argInput as any).docId;
+        metadata = (argInput as any).metadata || {};
     } else {
         type = argInput as TurboJobType;
     }
 
-    // Validation
-    if (!type) {
-        console.error("Job Type is required");
-        return;
-    }
-    
+    // Resolve Target ID
     const targetDocId = docIdOverride || initialDocId;
-    
+
     if (!targetDocId) {
-      console.error("[TurboGenerator] ❌ No document ID provided");
+      toast({ title: "Error", description: "No document ID provided", variant: "destructive" });
       return null;
     }
 
     try {
       setIsGenerating(true);
-      setStatus(`Generating ${type}...`);
+      setStatus(`Preparing to generate ${type}...`);
+
+      // 1. PRE-FETCH TEXT (The Fix)
+      // We explicitly fetch the text here so the backend doesn't have to look it up blindly
+      const textContent = await fetchDocumentText(targetDocId);
       
-      const payload = {
-        ...metadata,
-        documentId: targetDocId,
-        jobType: type, 
+      setStatus(`Generating ${type} with AI...`);
+
+      // 2. Prepare Payload
+      // We send BOTH the text (for generation) and the documentId (for linking/saving)
+      let endpoint = '';
+      let body: any = { 
+          text: textContent, 
+          documentId: targetDocId,
+          ...metadata 
       };
 
-      const startRes = await fetch('/api/generation-jobs/start', {
+      // 3. Configure Endpoint & Specific Params
+      switch (type) {
+        case 'note':
+          endpoint = '/api/generate-notes';
+          break;
+        case 'quiz':
+          endpoint = '/api/generate-quiz?mode=content&numQuestions=10&difficulty=medium';
+          break;
+        case 'flashcard':
+          endpoint = '/api/generate-flashcards';
+          if (!body.numberOfCards) body.numberOfCards = 15;
+          break;
+        case 'podcast':
+          // Podcasts might be handled differently (e.g. strict long-running jobs)
+          // But for now, we follow the same pattern if you have a sync endpoint
+          endpoint = '/api/podcasts/generate'; 
+          break;
+        default:
+          throw new Error(`Unknown job type: ${type}`);
+      }
+
+      // 4. Send Request
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '' 
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(body)
       });
 
-      if (!startRes.ok) {
-          const err = await startRes.json();
-          throw new Error(err.error || `Failed to start ${type}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+          throw new Error(data.error || `Failed to generate ${type}`);
       }
       
-      const data = await startRes.json();
-      setResults(prev => ({ ...prev, [type]: 'processing' }));
+      // 5. Success State
+      setResults(prev => ({ ...prev, [type]: 'completed' }));
+      toast({ title: "Success", description: `${type} generated successfully!` });
       
-      // Trigger success callback if provided
+      // Trigger callback
       if (options?.onSuccess) {
-         // Small delay to allow DB to propagate changes before refetching
          setTimeout(() => options.onSuccess?.(), 1000);
       }
       
-      return { jobId: data.jobId };
+      return { success: true, data };
 
     } catch (error: any) {
-      console.error(`[TurboGenerator] Error:`, error);
+      console.error(`[TurboGenerator] Error generating ${type}:`, error);
       setStatus(`Error: ${error.message}`);
+      toast({ 
+        title: "Generation Failed", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+      return { success: false, error: error.message };
     } finally {
-      // Only set to false if we aren't in the middle of a multi-step "Turbo" run
+      // Only reset if not running a full suite
       if (status !== 'Starting Turbo Mode...') {
           setIsGenerating(false);
       }
     }
-  }, [initialDocId, session, options, status]);
+  }, [initialDocId, session, options, fetchDocumentText, toast, status]);
 
   /**
-   * Wrapper for "Turbo" button (Runs multiple jobs: Quiz, Note, Flashcard)
+   * Wrapper for "Turbo" button (Runs multiple jobs in sequence/parallel)
    */
   const startTurbo = useCallback(async () => {
      if (!initialDocId) return;
@@ -136,11 +189,13 @@ export function useTurboGenerator(
      setProgress(5);
      setStatus('Starting Turbo Mode...');
 
-     const types: TurboJobType[] = ['quiz', 'note', 'flashcard'];
+     const types: TurboJobType[] = ['note', 'flashcard', 'quiz'];
      let completedCount = 0;
      
      try {
-       // Run generations in parallel
+       // We run them sequentially or in parallel. 
+       // Parallel is faster but might hit rate limits.
+       // Let's do Promise.all for speed.
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
@@ -152,11 +207,11 @@ export function useTurboGenerator(
          }
        }));
 
-       if (options?.onSuccess) options.onSuccess();
        setStatus('All tasks completed');
+       if (options?.onSuccess) options.onSuccess();
      
      } catch (err) {
-       setStatus('Error during generation');
+       setStatus('Error during turbo generation');
      } finally {
        setIsGenerating(false);
      }

@@ -55,12 +55,12 @@ export async function POST(request: NextRequest) {
     }
 
     let { text, url, youtubeUrl, documentId } = body;
-    console.log(`[API] Payload: docId=${documentId}, url=${url}, youtube=${youtubeUrl}, textLength=${text?.length}`);
+    console.log(`[API] Payload: docId=${documentId}, url=${!!url}, youtube=${!!youtubeUrl}, textLength=${text?.length}`);
 
     // 3. ROBUSTNESS FIX: Backfill Text from DB
-    // If we only have a documentId, fetch the text content from the database
+    // If we only have a documentId (and no explicit text/url), fetch the text content from the database.
     if (!text && !url && !youtubeUrl && documentId) {
-        // Trap invalid "undefined" string from frontend
+        // Trap invalid "undefined" string from frontend bugs
         if (documentId === 'undefined' || documentId === 'null') {
              return NextResponse.json<ApiResponse>({ success: false, error: "Invalid document ID provided." }, { status: 400 });
         }
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ApiResponse>({ success: false, error: `Source content too short (minimum ${MIN_CONTENT_LENGTH} chars). The URL might be a web app or have anti-scraping measures.` }, { status: 400 }); 
     }
 
-    // 8. Usage Check (using imported lib)
+    // 8. Usage Check
     const usage = await checkAIGenerationUsageLimit(user.id);
     if (!usage.canGenerate) {
       return NextResponse.json<ApiResponse>({ 
