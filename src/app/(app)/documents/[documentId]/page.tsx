@@ -1,8 +1,8 @@
 // src/app/(app)/documents/[documentId]/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react'; 
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react'; 
+import { useRouter, useParams } from 'next/navigation'; // FIX: Use standard hook
 import Link from 'next/link';
 import { 
   ResizableHandle, 
@@ -41,15 +41,10 @@ interface StudySet {
   deck: { id: string; title: string; flashcards: any[] } | null;
 }
 
-interface PageProps {
-  params: Promise<{
-    documentId: string;
-  }>;
-}
-
-export default function StudyWorkspacePage({ params }: PageProps) {
-  // FIX: Unwrap params Promise using React.use()
-  const { documentId } = use(params);
+export default function StudyWorkspacePage() {
+  // FIX: Safe param access for Client Components
+  const params = useParams();
+  const documentId = params?.documentId as string;
   const router = useRouter();
   
   // --- UI State ---
@@ -97,7 +92,6 @@ export default function StudyWorkspacePage({ params }: PageProps) {
   }, [documentId]);
 
   // --- Hook Integration ---
-  // Pass onSuccess to auto-refresh the data when generation completes
   const { generate, isGenerating } = useTurboGenerator(documentId, {
     onSuccess: () => refreshData() 
   });
@@ -213,14 +207,12 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                   {isLoading ? (
                     <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>
                   ) : studySet.note ? (
-                    // Show Editor
                     <NoteEditor 
                        noteId={studySet.note.id} 
                        initialContent={studySet.note.content} 
                        initialTitle={studySet.note.title} 
                     />
                   ) : (
-                    // Show Generate Prompt
                     <div className="h-full flex flex-col items-center justify-center space-y-4 p-8 text-center">
                         <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
                            <PenTool className="w-8 h-8 text-primary" />

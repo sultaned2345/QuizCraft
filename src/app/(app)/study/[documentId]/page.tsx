@@ -1,7 +1,8 @@
 // src/app/(app)/study/[documentId]/page.tsx
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation'; // FIX: Use standard hook
 import { useTurboGenerator } from '@/hooks/useTurboGenerator';
 import { TurboLoading } from '@/components/TurboLoading';
 import { ChatInterface } from '@/components/ChatInterface'; 
@@ -11,32 +12,28 @@ import { Button } from '@/components/ui/button';
 import { Play, FileText, BrainCircuit, Mic, Sparkles, MessageSquare, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-interface PageProps {
-  params: Promise<{
-    documentId: string;
-  }>;
-}
-
-export default function StudyHubPage({ params }: PageProps) {
-  // FIX: Unwrap params
-  const { documentId } = use(params);
+export default function StudyHubPage() {
+  // FIX: Unwrap params safely
+  const params = useParams();
+  const documentId = params?.documentId as string;
   
   // 1. The Hook acts as the Orchestrator
-  const { startTurbo, statuses, results, isFullyComplete } = useTurboGenerator(documentId);
+  // FIX: removed 'statuses' (it doesn't exist on hook return), use 'results' instead
+  const { startTurbo, status, results, isFullyComplete } = useTurboGenerator(documentId);
   const [init, setInit] = useState(false);
 
   // 2. Auto-start generation on mount
   useEffect(() => {
-    if (!init) {
+    if (!init && documentId) {
       setInit(true);
       startTurbo();
     }
-  }, [init, startTurbo]);
+  }, [init, startTurbo, documentId]);
 
   // 3. LOADING PHASE: Show the Sci-Fi Loader until EVERYTHING is done
   if (!isFullyComplete) {
-    // We pass 'statuses' so the loader can show real-time progress (Quiz: Ready, Podcast: Processing...)
-    return <TurboLoading statuses={statuses} />;
+    // FIX: Pass results as statuses so the loader knows what's done
+    return <TurboLoading status={status} statuses={results} />;
   }
 
   // 4. COMPLETE PHASE: The "God View" Dashboard

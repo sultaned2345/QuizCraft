@@ -100,6 +100,7 @@ export async function generateQuizFromContent(
       ]
     `;
     
+    // Using Flash Lite for speed
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const questions = cleanAndParseJSON(response.text());
 
@@ -117,7 +118,7 @@ export async function generateQuizFromContent(
 }
 
 // ------------------------------------------------------------------
-// 1.5 TOPIC QUIZ GENERATION (NEW - For Weakness Slayer)
+// 1.5 TOPIC QUIZ GENERATION (For Weakness Slayer)
 // ------------------------------------------------------------------
 export async function generateQuizFromTopic(
   topic: string, 
@@ -147,7 +148,6 @@ export async function generateQuizFromTopic(
       ]
     `;
     
-    // Using a smart model for creative topic generation
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const questions = cleanAndParseJSON(response.text());
 
@@ -195,40 +195,60 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
 }
 
 // ------------------------------------------------------------------
-// 3. NOTES GENERATION (UPDATED FOR RICH CONTENT)
+// 3. NOTES GENERATION (Heavy Prompt Engineering + Flash Lite)
 // ------------------------------------------------------------------
 export async function generateNotesFromContent(content: string) {
   try {
-    const safeContent = content.substring(0, 40000);
-    // Updated Prompt: Explicit instructions for Mermaid Diagrams and Tables
+    const safeContent = content.substring(0, 45000);
+    
+    // Refined Prompt: Optimized to force "Pro-like" quality from "Flash-Lite"
     const prompt = `
-      You are an expert academic tutor. Summarize the following text into comprehensive, structured study notes.
+      You are an expert academic author and educational content creator. 
+      Your task is to transform the provided raw content into a **high-quality, textbook-style study guide**.
+
+      ### 🎯 GOAL
+      Create a comprehensive, engaging, and visually structured note.
+      **DO NOT** simply output a list of bullet points.
+      **DO** write in full narrative paragraphs (prose) to explain concepts, using bullet points only for actual lists.
+
+      ### 📝 FORMATTING RULES (Strict)
+      1. **Narrative Prose:** - Write as if you are writing a textbook chapter. 
+         - Explain the "Why" and "How" concepts in full sentences. 
+         - Use transition words to connect ideas (e.g., "Furthermore," "In contrast," "Consequently").
+         - Avoid "outline style" (e.g., avoid "* Concept: definition"). Instead write: "The concept of [Concept] is defined as..."
+
+      2. **Hierarchy & Structure:**
+         - Start with a clear H1 (#) Title.
+         - Use H2 (##) for major sections.
+         - Use H3 (###) for sub-sections.
       
-      FORMATTING RULES:
-      1. Use standard Markdown: # Headers for main topics, bullet points for details, **bold** for key terms.
+      3. **Visuals & Emphasis:**
+         - **Bold** all key terminology upon first mention.
+         - Use **Blockquotes (>)** for "Key Takeaways", "Analogies", or "Important Warnings".
+         - Use **Code Blocks** for any code snippets, formulas, or math equations.
+
+      4. **Structured Data (MANDATORY):**
+         - If the text compares items (e.g., "Hardware vs Software", "Pros vs Cons", "Data Types"), YOU MUST use a **Markdown Table**.
       
-      2. VISUALS (Crucial):
-         - For analyzing complex processes, relationships, or workflows, generate a Mermaid.js diagram.
-         - Wrap it in a code block with the language \`mermaid\`.
-         - Use 'graph TD' for flowcharts or 'mindmap' for concept breakdowns.
-         - Keep diagrams simple and readable.
-         - Example:
+      5. **Diagrams (Mermaid.js):**
+         - If the text describes a process, flowchart, cycle, or hierarchy, you MUST generate a Mermaid diagram.
+         - Syntax: 
            \`\`\`mermaid
            graph TD
            A[Start] --> B{Decision}
-           B -->|Yes| C[Result 1]
-           B -->|No| D[Result 2]
+           B -->|Yes| C[Result]
            \`\`\`
 
-      3. DATA:
-         - For any comparative data, key terms, or structured lists, ALWAYS use Markdown Tables with clear headers.
+      6. **Conclusion:**
+         - End with a "## 🏁 Summary" section containing a short paragraph followed by 3-5 bullet points of the most critical takeaways.
 
-      Text to summarize:
+      ### 🔍 INPUT TEXT TO TRANSFORM
       "${safeContent}"
     `;
 
-    // Using Pro model as primary for better logic in diagrams
-    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-pro");
+    // Using gemini-2.5-flash-lite as requested
+    const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
+    
     return response.text();
   } catch (error) {
     console.error("Note Gen Error:", error);
@@ -270,23 +290,22 @@ export async function generateInsightsFromContent(content: string) {
 // ------------------------------------------------------------------
 export async function generateChatResponse(context: string, query: string, history: any[] = []) {
   try {
-     const safeContext = context.substring(0, 25000); // Token limit safety
+     const safeContext = context.substring(0, 25000); 
      const prompt = `
-      You are a helpful AI tutor assisting a student with a video.
-      Use the provided video transcript to answer the student's question accurately.
+      You are a helpful AI tutor. Use the context below to answer the student's question accurately.
       
-      Transcript Context:
+      Context:
       "${safeContext}"
 
       Student Question: "${query}"
       
       Answer concisely and clearly.
      `;
-     const response = await generateWithFallback("gemini-1.5-flash", prompt);
+     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
      return response.text();
   } catch (error) {
     console.error("Chat Gen Error:", error);
-    return "I'm having trouble analyzing the video right now.";
+    return "I'm having trouble analyzing the content right now.";
   }
 }
 
@@ -296,14 +315,12 @@ export async function generateChatResponse(context: string, query: string, histo
 export async function generateFromYoutube(videoUrlOrId: string) {
     console.log("🚀 Turbo Generation for:", videoUrlOrId);
     
-    // 1. Fetch Full Transcript (and Title)
-    // This uses the robust fetcher from src/lib/youtube.ts
+    // 1. Fetch Full Transcript
     const { videoId, title, transcript } = await fetchYoutubeTranscript(videoUrlOrId);
 
     if (!transcript) throw new Error("Could not retrieve transcript.");
 
     // 2. Generate Everything Else in Parallel
-    // We generate Notes, Flashcards, Quiz, and Insights all at once for speed
     const [notes, flashcards, quiz, insights] = await Promise.all([
         generateNotesFromContent(transcript),
         generateFlashcardsFromContent(transcript, 10),
@@ -315,7 +332,7 @@ export async function generateFromYoutube(videoUrlOrId: string) {
     return {
         videoId,
         title,
-        fullText: transcript, // The raw transcript for the UI
+        fullText: transcript, 
         notes,
         flashcards,
         quiz,
