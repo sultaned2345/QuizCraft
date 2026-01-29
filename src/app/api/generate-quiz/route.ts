@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; // <-- Updated Import
+import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; 
 
 export const runtime = 'nodejs';
 
@@ -18,37 +18,45 @@ function parseQuery(request: NextRequest) {
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
   
-  // NEW: Detect mode
   const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
 
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-async function readInputText(request: NextRequest): Promise<string> {
-  const contentType = request.headers.get('content-type') || '';
+// Safely read body, returns object even if body is empty
+async function getBody(request: NextRequest) {
+    try {
+        const contentType = request.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            return await request.json();
+        }
+        return {}; 
+    } catch (e) {
+        return {};
+    }
+}
 
-  if (contentType.includes('application/json')) {
-      const body = await request.json();
-      return body.text?.trim() || '';
-  }
-
-  if (contentType.includes('multipart/form-data')) {
-    const form = await request.formData();
-    return (form.get('text') as string)?.trim() || '';
-  }
-
-  if (contentType.includes('text/plain')) {
-    return (await request.text()).trim();
-  }
-
-  throw new Error(`Unsupported Content-Type: ${contentType}`);
+async function readInputText(request: NextRequest, body: any): Promise<string> {
+    const contentType = request.headers.get('content-type') || '';
+    
+    if (contentType.includes('application/json')) {
+        return body.text?.trim() || '';
+    }
+    if (contentType.includes('multipart/form-data')) {
+        const form = await request.formData();
+        return (form.get('text') as string)?.trim() || '';
+    }
+    if (contentType.includes('text/plain')) {
+        return (await request.text()).trim();
+    }
+    return '';
 }
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
-    // 1. Usage Check (PRESERVED)
+    // 1. Usage Check
     const usageCheck = await checkAIGenerationUsageLimit(user.id);
     if (!usageCheck.isValid || !usageCheck.canGenerate) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
@@ -56,7 +64,25 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse Input (Including Mode)
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
-    const text = await readInputText(request);
+    
+    const body = await getBody(request);
+    let text = await readInputText(request, body);
+    const documentId = body.documentId;
+
+    // --- FIX: Fetch content from Document ID if text is missing & not in topic mode ---
+    if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
+        console.log(`[Quiz] Fetching text for doc: ${documentId}`);
+        const doc = await prisma.documents.findUnique({
+            where: { id: documentId, user_id: user.id },
+            select: { extracted_text: true }
+        });
+        if (doc && doc.extracted_text) {
+            text = doc.extracted_text;
+        } else {
+             return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
+        }
+    }
+    // ---------------------------------------------------------------------------------
 
     // Basic validation
     // If mode is topic, text might be short (e.g. "Biology"), so we relax the length check
@@ -82,7 +108,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
     }
 
-    // 4. Save to DB (PRESERVED)
+    // 4. Save to DB
     const questionsToCreate = quizData.questions.map((q: any) => ({
       question_text: q.question_text,
       question_type: q.question_type,
@@ -99,8 +125,6 @@ export async function POST(request: NextRequest) {
         immediate_feedback: immediateFeedback,
         userId: user.id,
         questions: { create: questionsToCreate },
-        // Optional: Save source type if your schema supports it
-        // source_type: mode 
       },
       select: {
         id: true,
@@ -120,7 +144,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 5. Update Usage (PRESERVED)
+    // 5. Update Usage
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json({

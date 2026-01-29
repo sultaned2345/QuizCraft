@@ -33,7 +33,23 @@ export async function POST(request: NextRequest) {
     console.log("DEBUG: Authentication successful, user ID:", user.id);
 
     const body = await request.json();
-    const { text, url, youtubeUrl, documentId } = body;
+    let { text, url, youtubeUrl, documentId } = body;
+
+    // --- FIX: Fetch content from Document ID if text is missing ---
+    if (!text && !url && !youtubeUrl && documentId) {
+        console.log(`DEBUG: Fetching content for documentId: ${documentId}`);
+        const doc = await prisma.documents.findUnique({
+            where: { id: documentId, user_id: user.id },
+            select: { extracted_text: true }
+        });
+
+        if (doc && doc.extracted_text) {
+            text = doc.extracted_text;
+        } else {
+            return NextResponse.json<ApiResponse>({ success: false, error: "Document not found or has no text content." }, { status: 404 });
+        }
+    }
+    // -----------------------------------------------------------
 
     if (!url && !text && !youtubeUrl) { 
         return NextResponse.json<ApiResponse>({ success: false, error: "Either text, a URL, or a YouTube URL is required." }, { status: 400 }); 
@@ -77,6 +93,8 @@ export async function POST(request: NextRequest) {
              }
             return NextResponse.json<ApiResponse>({ success: false, error: `YouTube transcript error: ${e.message}` }, { status: 400 }); 
         }
+    } else if (documentId) {
+        noteTitlePrefix = "Notes from Document";
     }
     
     // 3. Content Validation
@@ -114,11 +132,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Generate with AI
-    // FIX: callAIToGenerateNote returns a string (the content) directly, or has a different signature.
-    // Assuming it returns the generated markdown string based on the error.
     const generatedContent = await callAIToGenerateNote(sourceContent.trim());
     
-    // FIX: Check generatedContent directly
     if (!generatedContent || !isContentMeaningful(generatedContent)) {
         throw new Error("AI failed to generate meaningful content for this note.");
     }
@@ -138,8 +153,6 @@ export async function POST(request: NextRequest) {
              }
         }
 
-        // FIX: Use 'generatedContent' for content. For title, extract from content or use default.
-        // A simple heuristic for title: first line if it starts with #, else default.
         let noteTitle = noteTitlePrefix;
         const lines = generatedContent.split('\n');
         if (lines.length > 0 && lines[0].startsWith('# ')) {
@@ -149,7 +162,7 @@ export async function POST(request: NextRequest) {
         savedNote = await prisma.notes.create({ 
             data: { 
                 user_id: user.id, 
-                title: noteTitle.substring(0, 255), // Ensure title fits
+                title: noteTitle.substring(0, 255), 
                 content: generatedContent.trim(),
                 document_id: validDocumentId
             } 
