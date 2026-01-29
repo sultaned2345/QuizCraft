@@ -8,7 +8,7 @@ import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGen
 import { YoutubeTranscript } from 'youtube-transcript';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // Allow 60s for AI generation
+export const maxDuration = 60; 
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
@@ -29,23 +29,20 @@ function parseQuery(request: NextRequest) {
   const difficulty = (['easy', 'medium', 'hard'].includes(searchParams.get('difficulty') as string) ? searchParams.get('difficulty') : 'medium') as Difficulty;
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
-  
-  // 'topic' mode expects short text; 'content' mode expects full document text
   const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
 
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-// Robust input reader (supports JSON body, FormData, or plain Text)
-async function readInputText(request: NextRequest, body: any): Promise<string> {
-    // 1. Check if JSON body already provided the text (Priority from useTurboGenerator)
+// Fixed: Pass the already-read raw text to avoid double-reading the stream
+async function resolveInputText(request: NextRequest, body: any, rawBodyText: string): Promise<string> {
+    // 1. Priority: JSON Body
     if (body && (body.text || body.topic)) {
         return (body.text || body.topic).trim();
     }
 
+    // 2. Check FormData (if applicable)
     const contentType = request.headers.get('content-type') || '';
-
-    // 2. Handle FormData (File uploads)
     if (contentType.includes('multipart/form-data')) {
         try {
             const form = await request.formData();
@@ -56,9 +53,9 @@ async function readInputText(request: NextRequest, body: any): Promise<string> {
         }
     }
 
-    // 3. Handle Plain Text body
-    if (contentType.includes('text/plain')) {
-        return (await request.text()).trim();
+    // 3. Fallback: Use the raw body text we already read
+    if (contentType.includes('text/plain') && rawBodyText) {
+        return rawBodyText.trim();
     }
     
     return '';
@@ -80,20 +77,23 @@ export async function POST(request: NextRequest) {
     // 3. Parse Query Params
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     
-    // 4. Safe Body Parsing
+    // 4. Safe Body Parsing (Read ONCE)
     let body: any = {};
+    let rawBodyText = '';
     try {
-        const textBody = await request.text();
-        if (textBody) body = JSON.parse(textBody);
-    } catch { /* ignore JSON errors, body remains empty object */ }
+        rawBodyText = await request.text();
+        if (rawBodyText && (rawBodyText.startsWith('{') || rawBodyText.startsWith('['))) {
+             body = JSON.parse(rawBodyText);
+        }
+    } catch { /* ignore JSON errors, body remains empty */ }
 
     // 5. Resolve Text and Metadata
-    let text = await readInputText(request, body); 
+    let text = await resolveInputText(request, body, rawBodyText); 
     const { url, youtubeUrl, documentId } = body;
 
     console.log(`[API] Generate Quiz: mode=${mode}, docId=${documentId}, url=${!!url}, yt=${!!youtubeUrl}, textLen=${text?.length}`);
 
-    // 6. SOURCE RESOLUTION (Backfill if text is missing)
+    // 6. SOURCE RESOLUTION 
     
     // A. URL Source
     if (!text && url) {
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         }
     }
     
-    // C. Database Backfill (Robustness Fix)
+    // C. Database Backfill
     else if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
         if (documentId === 'undefined' || documentId === 'null') {
              return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
@@ -131,7 +131,6 @@ export async function POST(request: NextRequest) {
 
         if (doc && doc.extracted_text) {
             text = doc.extracted_text;
-            console.log(`[Quiz] Retrieved ${text.length} characters.`);
         } else {
              return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
         }
@@ -192,7 +191,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 10. Update Usage
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json({

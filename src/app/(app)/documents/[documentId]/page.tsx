@@ -20,7 +20,6 @@ import {
   PanelRightOpen,
   Sparkles,
   Bot,
-  AlertTriangle,
   Loader2,
   PenTool,
   Play,
@@ -44,11 +43,17 @@ interface StudySet {
 export default function StudyWorkspacePage() {
   const params = useParams();
   const rawId = params?.documentId;
-  
-  // FIX: Explicitly handle "undefined" string to prevent backend crash
-  const documentId = (typeof rawId === 'string' && rawId !== 'undefined') ? rawId : null;
-
   const router = useRouter();
+
+  // FIX: Redirect immediately if ID is explicitly invalid to prevent broken states
+  useEffect(() => {
+    if (rawId === 'undefined' || rawId === 'null') {
+      router.push('/documents');
+    }
+  }, [rawId, router]);
+  
+  // Safe ID resolution
+  const documentId = (typeof rawId === 'string' && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
   
   // --- UI State ---
   const [isContentOpen, setIsContentOpen] = useState(true);
@@ -96,6 +101,7 @@ export default function StudyWorkspacePage() {
   }, [documentId]);
 
   // --- Hook Integration ---
+  // Ensure we pass a stable string or empty string to the hook to avoid null errors
   const { generate, isGenerating } = useTurboGenerator(documentId || '', {
     onSuccess: () => refreshData() 
   });
@@ -112,7 +118,7 @@ export default function StudyWorkspacePage() {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        <p className="text-muted-foreground">Loading workspace...</p>
+        <p className="text-muted-foreground">Initializing workspace...</p>
       </div>
     );
   }
@@ -289,7 +295,7 @@ export default function StudyWorkspacePage() {
                                <h2 className="text-2xl font-bold">{studySet.deck.title}</h2>
                                <p className="text-muted-foreground">
                                   {studySet.deck.flashcards?.length || 'Unknown'} Cards • Active Recall
-                               </p>
+                                </p>
                             </div>
                             <Link href={`/flashcards/${studySet.deck.id}`} className="block w-full">
                                 <Button size="lg" className="w-full rounded-xl text-base h-12">
