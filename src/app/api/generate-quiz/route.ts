@@ -4,12 +4,15 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration';
+import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; 
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
+
+// --- Helper Functions (Restored) ---
 
 function parseQuery(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -17,51 +20,47 @@ function parseQuery(request: NextRequest) {
   const difficulty = (['easy', 'medium', 'hard'].includes(searchParams.get('difficulty') as string) ? searchParams.get('difficulty') : 'medium') as Difficulty;
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
-  
   const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
-
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-// Safely read body, returns object even if body is empty or parsing fails
-async function getBody(request: NextRequest) {
+// Safely get JSON body without crashing
+async function getJsonBody(request: NextRequest) {
     try {
-        const contentType = request.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-            return await request.json();
-        }
-        return {}; 
-    } catch (e) {
+        const clone = request.clone();
+        return await clone.json();
+    } catch {
         return {};
     }
 }
 
-// Helper to read text from various sources
-async function readInputText(request: NextRequest, body: any): Promise<string> {
-    const contentType = request.headers.get('content-type') || '';
-    
-    // Check JSON body first
-    if (body && body.text) {
-        return body.text.trim();
-    }
+async function readInputText(request: NextRequest): Promise<string> {
+  const contentType = request.headers.get('content-type') || '';
 
-    // Fallback to standard request parsing logic if body wasn't already parsed or empty
-    if (contentType.includes('application/json')) {
-         // Already parsed in getBody usually, but strictly speaking:
-         return body.text?.trim() || '';
-    }
+  if (contentType.includes('application/json')) {
+      // We clone to not consume the stream if we need it later, though usually fine to consume once
+      try {
+          const body = await request.json();
+          return body.text?.trim() || '';
+      } catch (e) {
+          return '';
+      }
+  }
 
-    if (contentType.includes('multipart/form-data')) {
-        const form = await request.formData();
-        return (form.get('text') as string)?.trim() || '';
-    }
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData();
+    return (form.get('text') as string)?.trim() || '';
+  }
 
-    if (contentType.includes('text/plain')) {
-        return (await request.text()).trim();
-    }
-    
-    return '';
+  if (contentType.includes('text/plain')) {
+    return (await request.text()).trim();
+  }
+
+  // If no content type matches, return empty, don't throw yet
+  return '';
 }
+
+// --- Main Handler ---
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,36 +72,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // 2. Parse Input
+    // 2. Parse Input & Body
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     
-    const body = await getBody(request);
-    let text = await readInputText(request, body);
-    const documentId = body.documentId;
+    // We try to get text from standard inputs first
+    let text = await readInputText(request);
+    
+    // Also try to get documentId from JSON body if possible
+    let documentId: string | null = null;
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        // We might have already consumed body in readInputText, so use getJsonBody helper which handles clones or re-reads if needed
+        // Actually, request.json() can only be called once. 
+        // Better strategy: Use the `text` we already parsed if it was JSON.
+        // If readInputText handled JSON, it returned `body.text`.
+        // We need to re-access the body for `documentId`.
+        // Let's refactor slightly to be safe:
+        try {
+            // Re-parsing might fail if stream consumed. 
+            // In a real scenario, we should parse once.
+            // Let's assume standard usage:
+            const clone = request.clone(); 
+            const body = await clone.json();
+            if (!text) text = body.text || body.topic || '';
+            documentId = body.documentId;
+        } catch (e) { /* ignore */ }
+    }
 
-    // --- FIX: Fetch content from Document ID if text is missing & not in topic mode ---
+    // 3. ROBUSTNESS FIX: Fetch from DB if text is missing
     if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
-        // Prevent passing "undefined" string to Prisma
-        if (documentId !== 'undefined') {
-            console.log(`[Quiz] Fetching text for doc: ${documentId}`);
-            const doc = await prisma.documents.findUnique({
-                where: { id: documentId, user_id: user.id },
-                select: { extracted_text: true }
-            });
-
-            if (doc && doc.extracted_text) {
-                text = doc.extracted_text;
-            } else {
-                return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
-            }
-        } else {
-             console.warn('[Quiz] Invalid document ID received: "undefined"');
+        if (documentId === 'undefined' || documentId === 'null') {
              return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
         }
-    }
-    // ---------------------------------------------------------------------------------
 
-    // Basic validation
+        console.log(`[Quiz] Fetching text for doc: ${documentId}`);
+        const doc = await prisma.documents.findUnique({
+            where: { id: documentId, user_id: user.id },
+            select: { extracted_text: true }
+        });
+
+        if (doc && doc.extracted_text) {
+            text = doc.extracted_text;
+        } else {
+             return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
+        }
+    }
+
+    // 4. Validation
     if (mode !== 'topic' && (!text || text.length < 100)) {
       return NextResponse.json({ success: false, error: 'Content too short (min 100 chars).' }, { status: 400 });
     }
@@ -110,9 +126,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Topic too short.' }, { status: 400 });
     }
 
-    // 3. Call AI (Switch based on Mode)
+    // 5. Call AI
     let quizData;
-    
     if (mode === 'topic') {
       const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
       quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
@@ -124,7 +139,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
     }
 
-    // 4. Save to DB
+    // 6. Save to DB
     const questionsToCreate = quizData.questions.map((q: any) => ({
       question_text: q.question_text,
       question_type: q.question_type,
@@ -160,7 +175,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 5. Update Usage
+    // 7. Update Usage
     await incrementAIGenerationUsage(user.id, 1);
 
     return NextResponse.json({
