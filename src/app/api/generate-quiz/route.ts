@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth';
 import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
 import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; 
+import { YoutubeTranscript } from 'youtube-transcript';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -12,55 +13,73 @@ export const maxDuration = 60;
 type Difficulty = 'easy' | 'medium' | 'hard';
 type QuestionTypeOption = QuestionType | 'MIXED';
 
-// --- Helper Functions (Restored) ---
+// --- Helper: Clean HTML ---
+function extractTextFromHtml(html: string): string {
+    let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
+    cleanHtml = cleanHtml.replace(/\s+/g, ' ').trim();
+    return cleanHtml;
+}
 
+// --- Helper: Parse Query Params ---
 function parseQuery(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const numQuestions = Math.min(15, Math.max(5, Number(searchParams.get('numQuestions') ?? '10')));
   const difficulty = (['easy', 'medium', 'hard'].includes(searchParams.get('difficulty') as string) ? searchParams.get('difficulty') : 'medium') as Difficulty;
   const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
   const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
+  
+  // 'topic' mode expects the input text to be a short topic string (e.g. "Photosynthesis")
+  // 'content' mode expects the input text to be the full source material
   const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
+
   return { numQuestions, difficulty, questionType, immediateFeedback, mode };
 }
 
-// Safely get JSON body without crashing
-async function getJsonBody(request: NextRequest) {
-    try {
-        const clone = request.clone();
-        return await clone.json();
-    } catch {
-        return {};
+// --- Helper: Parse Body Safe (Stream Safe) ---
+async function parseRequestBody(request: NextRequest) {
+    const contentType = request.headers.get('content-type') || '';
+    
+    // 1. Handle JSON
+    if (contentType.includes('application/json')) {
+        try {
+            return await request.json();
+        } catch (e) {
+            console.error("[Quiz] Failed to parse JSON body");
+            return {};
+        }
     }
+    
+    // 2. Handle FormData (File uploads)
+    if (contentType.includes('multipart/form-data')) {
+        try {
+            const formData = await request.formData();
+            return {
+                text: formData.get('text') as string,
+                documentId: formData.get('documentId') as string,
+                url: formData.get('url') as string,
+                youtubeUrl: formData.get('youtubeUrl') as string,
+                topic: formData.get('topic') as string,
+            };
+        } catch (e) {
+            console.error("[Quiz] Failed to parse FormData");
+            return {};
+        }
+    }
+
+    // 3. Handle Plain Text
+    if (contentType.includes('text/plain')) {
+        try {
+            const text = await request.text();
+            return { text };
+        } catch (e) {
+            return {};
+        }
+    }
+
+    return {};
 }
-
-async function readInputText(request: NextRequest): Promise<string> {
-  const contentType = request.headers.get('content-type') || '';
-
-  if (contentType.includes('application/json')) {
-      // We clone to not consume the stream if we need it later, though usually fine to consume once
-      try {
-          const body = await request.json();
-          return body.text?.trim() || '';
-      } catch (e) {
-          return '';
-      }
-  }
-
-  if (contentType.includes('multipart/form-data')) {
-    const form = await request.formData();
-    return (form.get('text') as string)?.trim() || '';
-  }
-
-  if (contentType.includes('text/plain')) {
-    return (await request.text()).trim();
-  }
-
-  // If no content type matches, return empty, don't throw yet
-  return '';
-}
-
-// --- Main Handler ---
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,35 +91,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
     }
 
-    // 2. Parse Input & Body
+    // 2. Parse Inputs
     const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
     
-    // We try to get text from standard inputs first
-    let text = await readInputText(request);
+    // Read Body (Stream Safe)
+    const body = await parseRequestBody(request);
     
-    // Also try to get documentId from JSON body if possible
-    let documentId: string | null = null;
-    const contentType = request.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-        // We might have already consumed body in readInputText, so use getJsonBody helper which handles clones or re-reads if needed
-        // Actually, request.json() can only be called once. 
-        // Better strategy: Use the `text` we already parsed if it was JSON.
-        // If readInputText handled JSON, it returned `body.text`.
-        // We need to re-access the body for `documentId`.
-        // Let's refactor slightly to be safe:
-        try {
-            // Re-parsing might fail if stream consumed. 
-            // In a real scenario, we should parse once.
-            // Let's assume standard usage:
-            const clone = request.clone(); 
-            const body = await clone.json();
-            if (!text) text = body.text || body.topic || '';
-            documentId = body.documentId;
-        } catch (e) { /* ignore */ }
-    }
+    // Extract potential sources
+    let { text, topic, url, youtubeUrl, documentId } = body;
+    
+    // Normalize text input
+    if (!text && topic) text = topic;
 
-    // 3. ROBUSTNESS FIX: Fetch from DB if text is missing
-    if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
+    console.log(`[API] Generate Quiz: mode=${mode}, docId=${documentId}, url=${!!url}, yt=${!!youtubeUrl}, textLen=${text?.length}`);
+
+    // 3. SOURCE RESOLUTION LOGIC
+    
+    // A. Handle URL Source
+    if (!text && url) {
+        try {
+            console.log(`[Quiz] Fetching URL: ${url}`);
+            const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const html = await response.text();
+            text = extractTextFromHtml(html);
+        } catch (e: any) {
+            return NextResponse.json({ success: false, error: `Failed to fetch URL: ${e.message}` }, { status: 400 });
+        }
+    }
+    
+    // B. Handle YouTube Source
+    else if (!text && youtubeUrl) {
+        try {
+            console.log(`[Quiz] Fetching Transcript: ${youtubeUrl}`);
+            const transcript = await YoutubeTranscript.fetchTranscript(youtubeUrl);
+            if (!transcript || transcript.length === 0) throw new Error("No transcript found.");
+            text = transcript.map(item => item.text).join(' ');
+        } catch (e: any) {
+            return NextResponse.json({ success: false, error: `Failed to fetch YouTube transcript: ${e.message}` }, { status: 400 });
+        }
+    }
+    
+    // C. Handle Document ID Backfill (The Fix)
+    else if ((!text || text.length < 50) && documentId) {
         if (documentId === 'undefined' || documentId === 'null') {
              return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
         }
@@ -113,21 +146,21 @@ export async function POST(request: NextRequest) {
 
         if (doc && doc.extracted_text) {
             text = doc.extracted_text;
+            console.log(`[Quiz] Fetched ${text.length} characters from DB.`);
         } else {
              return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
         }
     }
 
     // 4. Validation
-    if (mode !== 'topic' && (!text || text.length < 100)) {
-      return NextResponse.json({ success: false, error: 'Content too short (min 100 chars).' }, { status: 400 });
-    }
-    if (mode === 'topic' && (!text || text.length < 3)) {
-      return NextResponse.json({ success: false, error: 'Topic too short.' }, { status: 400 });
+    const minLength = mode === 'topic' ? 3 : 100;
+    if (!text || text.length < minLength) {
+      return NextResponse.json({ success: false, error: `Content too short (min ${minLength} chars).` }, { status: 400 });
     }
 
-    // 5. Call AI
+    // 5. Generate with AI
     let quizData;
+    
     if (mode === 'topic') {
       const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
       quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
