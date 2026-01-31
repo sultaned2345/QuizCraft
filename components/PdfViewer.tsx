@@ -19,9 +19,12 @@ import {
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
-// --- Worker Configuration ---
-// [FIX] Changed extension from .min.js to .mjs to match package.json postinstall script
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+// --- Debug: Log Worker Configuration ---
+// [FIX] Ensure this matches the file in your /public folder exactly.
+// Based on your package.json, it should be .mjs
+const WORKER_SRC = '/pdf.worker.mjs'; 
+pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+console.log('[PdfViewer] Initializing Worker Src:', pdfjs.GlobalWorkerOptions.workerSrc);
 
 interface PdfViewerProps {
   documentId?: string | null;
@@ -30,11 +33,17 @@ interface PdfViewerProps {
 }
 
 export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
+  // --- Debug: Log Props ---
+  useEffect(() => {
+    console.log('[PdfViewer] Props Received:', { documentId, url });
+  }, [documentId, url]);
+
   // --- State ---
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [rotation, setRotation] = useState<number>(0);
+  const [loadError, setLoadError] = useState<Error | null>(null); // Track specific error
   
   // Selection State for "Highlight to Ask"
   const [selection, setSelection] = useState<{
@@ -50,14 +59,31 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
   const { width } = useContainerWidth(containerRef);
 
   // Determine the source URL
-  // [FIX] Append ?mode=binary so the API returns the raw file, not JSON
   const fileUrl = url || (documentId ? `/api/documents/${documentId}/content?mode=binary` : null);
+
+  // --- Debug: Log computed URL ---
+  useEffect(() => {
+    if (fileUrl) {
+      console.log('[PdfViewer] Attempting to load from URL:', fileUrl);
+    } else {
+      console.log('[PdfViewer] No URL available to load.');
+    }
+  }, [fileUrl]);
 
   // --- Handlers ---
   
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    console.log('[PdfViewer] Load Success. Total Pages:', numPages);
     setNumPages(numPages);
     setPageNumber(1);
+    setLoadError(null);
+  }
+
+  function onDocumentLoadError(error: Error) {
+    console.error('[PdfViewer] CRITICAL LOAD ERROR:', error);
+    console.error('[PdfViewer] Error Name:', error.name);
+    console.error('[PdfViewer] Error Message:', error.message);
+    setLoadError(error);
   }
 
   // Handle Text Selection
@@ -161,19 +187,34 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
           <Document
             file={fileUrl}
             onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError} // Capture detailed error
             loading={
               <div className="flex flex-col items-center gap-2 mt-20">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Loading Document...</p>
+                <p className="text-xs text-muted-foreground font-mono">{fileUrl}</p>
               </div>
             }
             error={
-               <div className="mt-20 flex flex-col items-center text-destructive max-w-sm text-center gap-2">
-                 <AlertCircle className="w-8 h-8" />
-                 <p className="font-medium">Failed to load PDF</p>
-                 <p className="text-xs text-muted-foreground">
-                   The file might be corrupted, missing, or requires a different format.
-                 </p>
+               <div className="mt-20 flex flex-col items-center text-destructive max-w-lg text-center gap-4 p-6 border border-destructive/20 rounded-lg bg-destructive/5">
+                 <AlertCircle className="w-10 h-10" />
+                 <div>
+                   <p className="font-semibold text-lg">Failed to load PDF</p>
+                   {loadError && (
+                     <div className="mt-2 text-left bg-white/50 p-2 rounded text-xs font-mono overflow-auto max-h-32 border border-destructive/10">
+                       <p><strong>Error:</strong> {loadError.message}</p>
+                       <p><strong>Name:</strong> {loadError.name}</p>
+                     </div>
+                   )}
+                 </div>
+                 <div className="text-xs text-muted-foreground space-y-1 text-left w-full">
+                   <p><strong>Troubleshooting:</strong></p>
+                   <ul className="list-disc list-inside">
+                     <li>Check Browser Console (F12) for network errors (404/500).</li>
+                     <li>Verify worker file exists at: <code>{WORKER_SRC}</code></li>
+                     <li>Ensure API returns binary PDF, not JSON.</li>
+                   </ul>
+                 </div>
                </div>
             }
             className="shadow-2xl"
@@ -214,6 +255,7 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
           <Button 
             size="sm" 
             onClick={() => {
+              console.log('[PdfViewer] Asking AI about:', selection.text);
               if (onAskAI) onAskAI(selection.text);
               setSelection(null); // Close menu
               window.getSelection()?.removeAllRanges(); // Deselect visual text
@@ -243,6 +285,7 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
     const observer = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       setWidth(entries[0].contentRect.width);
+      // console.log('[PdfViewer] Container Resized:', entries[0].contentRect.width); // Uncomment if layout issues occur
     });
 
     observer.observe(ref.current);

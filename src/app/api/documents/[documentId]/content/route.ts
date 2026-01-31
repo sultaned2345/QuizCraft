@@ -2,9 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from "@supabase/supabase-js"; // [!code ++]
+import { createClient } from "@supabase/supabase-js";
 import { ApiResponse } from '@/types/database';
-import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
@@ -18,7 +17,7 @@ export async function GET(
         
         const url = new URL(request.url);
         const includeText = url.searchParams.get('text') !== 'false';
-        const mode = url.searchParams.get('mode'); // [!code ++] Check for binary mode
+        const mode = url.searchParams.get('mode');
 
         if (!documentId) {
             return NextResponse.json({ success: false, error: 'Document ID required.' }, { status: 400 });
@@ -33,29 +32,33 @@ export async function GET(
             return NextResponse.json({ success: false, error: 'Document not found.' }, { status: 404 });
         }
 
-        // [!code ++] --- SERVE BINARY FILE ---
+        // --- SERVE BINARY FILE ---
         if (mode === 'binary') {
             if (!document.storage_path) {
                 return new NextResponse('No storage path found', { status: 404 });
             }
 
-            const supabase = createClient(
+            // [FIX] Use SERVICE_ROLE_KEY to bypass RLS for the download.
+            // We already verified the user owns the document via Prisma above.
+            const supabaseAdmin = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+                process.env.SUPABASE_SERVICE_ROLE_KEY! // Ensure this env var exists
             );
 
-            const { data, error } = await supabase.storage
+            const { data, error } = await supabaseAdmin.storage
                 .from('documents')
                 .download(document.storage_path);
 
             if (error || !data) {
-                return new NextResponse('Failed to download file', { status: 500 });
+                console.error("Storage download error:", error);
+                return new NextResponse('Failed to download file from storage', { status: 500 });
             }
 
             return new NextResponse(data, {
                 headers: {
-                    'Content-Type': 'application/pdf', // Ensure browser sees it as PDF
-                    'Content-Disposition': `inline; filename="${document.file_name}"`
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `inline; filename="${document.file_name}"`,
+                    'Content-Length': data.size.toString() // [Optional] Good practice
                 }
             });
         }
