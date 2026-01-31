@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import {
-  checkAIGenerationUsageLimit,
-  incrementAIGenerationUsage,
-} from '@/lib/usage-limits';
-import { callAIToGenerateQuiz } from '@/lib/aiGeneration';
-import { ApiResponse, Quiz } from '@/types/database';
-import { Prisma } from '@prisma/client';
-// CHANGE: Import the robust helper instead of the raw library
-import { fetchYoutubeTranscript } from '@/lib/youtube'; 
+import { fetchYoutubeTranscript } from '@/lib/youtube'; // Ensure you have this helper
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,126 +9,84 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
-    const { videoUrl } = await request.json();
+    const body = await request.json();
+    const { url } = body; // Frontend sends 'url', not 'videoUrl'
 
-    if (!videoUrl) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Missing videoUrl' },
-        { status: 400 }
-      );
+    if (!url) {
+      return NextResponse.json({ success: false, error: 'Missing YouTube URL' }, { status: 400 });
     }
 
-    // 1. Check Usage Limit
-    const usageCheck = await checkAIGenerationUsageLimit(user.id);
-    if (!usageCheck.isValid) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'limit_exceeded',
-          message: usageCheck.message,
-        },
-        { status: 403 }
-      );
-    }
-
-    // 2. Fetch Transcript (using robust helper with fallback)
+    // 1. Fetch Transcript (Fast operation)
     let transcriptText = '';
-    let videoTitle = '';
-
+    let videoTitle = 'YouTube Video';
+    
     try {
-      // CHANGE: Use the helper from src/lib/youtube.ts
-      // This automatically tries the API first, then falls back to page scraping
-      const videoData = await fetchYoutubeTranscript(videoUrl);
+      const videoData = await fetchYoutubeTranscript(url);
       transcriptText = videoData.transcript;
       videoTitle = videoData.title;
-
-    } catch (toolError: any) {
-      console.warn(`YouTube tool error for URL ${videoUrl}:`, toolError.message);
-
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'transcript_failed',
-          message: toolError.message || 'Could not fetch video transcript. Ensure the video has captions enabled.',
-        },
+    } catch (e: any) {
+      return NextResponse.json(
+        { success: false, error: `YouTube Error: ${e.message}` },
         { status: 400 }
       );
     }
 
-    // 3. Check for sufficient length
-    if (!transcriptText || transcriptText.trim().length < 100) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'transcript_unavailable',
-          message: 'The transcript is too short to generate a quiz.',
-        },
+    if (!transcriptText || transcriptText.length < 50) {
+      return NextResponse.json(
+        { success: false, error: 'Transcript too short or unavailable.' },
         { status: 400 }
       );
     }
 
-    // 4. Proceed with Quiz Generation
-    const quizData = await callAIToGenerateQuiz(
-      transcriptText,
-      10, // numQuestions
-      'medium', // difficulty
-      'MIXED' // questionType
-    );
+    // 2. Transaction: Create Document + Jobs
+    const result = await prisma.$transaction(async (tx) => {
+      // A. Create Document Record
+      const doc = await tx.documents.create({
+        data: {
+          user_id: user.id,
+          file_name: videoTitle,
+          file_type: 'youtube',
+          extracted_text: transcriptText,
+          storage_path: url, // Store URL as path for reference
+          processing_status: 'processing'
+        }
+      });
 
-    if (!quizData) {
-        return NextResponse.json<ApiResponse>(
-            { success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz from transcript.' },
-            { status: 500 }
-        );
-    }
+      // B. Queue Background Jobs
+      await tx.generation_jobs.createMany({
+        data: ['note', 'quiz', 'flashcard'].map(type => ({
+          user_id: user.id,
+          document_id: doc.id,
+          job_type: type,
+          status: 'pending'
+        }))
+      });
 
-    // 5. Save quiz to database
-    const questionsToCreate = quizData.questions.map((q: any) => ({
-      question_text: q.question_text,
-      question_type: q.question_type,
-      correct_answer: q.correct_answer,
-      options: Array.isArray(q.options) ? q.options : Prisma.JsonNull,
-      prompts: Array.isArray(q.prompts) ? q.prompts : Prisma.JsonNull,
-      explanation: q.explanation || '',
-    }));
-
-    const savedQuiz = await prisma.quiz.create({
-      data: {
-        title: quizData.title || videoTitle || 'Quiz from YouTube Video',
-        is_public: false,
-        immediate_feedback: true,
-        userId: user.id,
-        questions: {
-          create: questionsToCreate,
-        },
-      },
+      return doc;
     });
 
-    // 6. Increment usage
-    await incrementAIGenerationUsage(user.id, 1);
+    // 3. Trigger Background Worker (Fire and Forget)
+    const workerUrl = new URL('/api/generation-jobs/start', request.url);
+    fetch(workerUrl.toString(), {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Cookie': request.headers.get('cookie') || '' 
+      },
+      body: JSON.stringify({ documentId: result.id })
+    }).catch(console.error);
 
-    const responseQuiz: Quiz = {
-      id: savedQuiz.id,
-      user_id: savedQuiz.userId!,
-      title: savedQuiz.title,
-      share_link: savedQuiz.share_link,
-      created_at: savedQuiz.createdAt ? savedQuiz.createdAt.toISOString() : new Date().toISOString(),
-      is_public: savedQuiz.is_public ?? false,
-      immediate_feedback: savedQuiz.immediate_feedback ?? true,
-      time_limit_minutes: savedQuiz.time_limit_minutes,
-      questions: [],
-    };
-
-    return NextResponse.json<ApiResponse<Quiz>>({
+    // 4. Return ID for Frontend Redirect
+    return NextResponse.json({
       success: true,
-      data: responseQuiz,
+      documentId: result.id,
+      message: 'Video processing started.'
     });
 
   } catch (error: any) {
-    if (error instanceof Response) return error;
-    console.error('Error in generate-from-youtube route:', error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: error.message || 'Internal server error.' },
+    console.error('YouTube Route Error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Server Error' },
       { status: 500 }
     );
   }

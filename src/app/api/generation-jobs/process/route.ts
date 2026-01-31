@@ -1,4 +1,3 @@
-// src/app/api/generation-jobs/process/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -10,58 +9,43 @@ import {
 } from '@/lib/aiGeneration';
 import { generateEmbeddings } from '@/lib/ai-service';
 
-// Allow this route to run for up to 60 seconds (Vercel Pro/Hobby limit)
+// Allow this route to run for up to 60 seconds (Vercel Limit)
+// If you are on a Pro plan, you can increase this.
 export const maxDuration = 60; 
 
 export async function POST(req: NextRequest) {
   let jobId = ""; 
-  console.log("---------------------------------------------------------");
-  console.log("[Process API] ⚙️ Incoming Process Request");
-
+  
   try {
     // 1. Authentication
-    // We expect the auth cookie to be passed from the 'start' route
+    // The 'start' route forwards the user's cookie, so requireAuth works here.
     const user = await requireAuth(req);
-    if (!user) {
-        console.error("[Process API] ❌ Unauthorized: No valid session found.");
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // 2. Parse Body
     const body = await req.json();
     jobId = body.jobId;
 
     if (!jobId) {
-      console.error("[Process API] ❌ Missing Job ID in body");
       return NextResponse.json({ error: "Missing Job ID" }, { status: 400 });
     }
 
-    console.log(`[Process API] 🔄 Processing Job ID: ${jobId}`);
-
-    // 3. Fetch Job and Document
+    // 2. Fetch Job & Document Data
     const job = await prisma.generation_jobs.findUnique({
       where: { id: jobId },
       include: { document: true }
     });
 
-    if (!job) {
-      console.error("[Process API] ❌ Job not found in DB");
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-
-    // Security check: ensure the job belongs to the authenticated user
+    if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    
+    // Security Check: Ensure user owns this job
     if (job.user_id !== user.id) {
-        console.error(`[Process API] ❌ User mismatch. Job User: ${job.user_id}, Current User: ${user.id}`);
-        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    // Idempotency check
+    // Idempotency: Don't re-run completed jobs
     if (job.status === 'completed') {
-      console.log("[Process API] ⚠️ Job already completed. Skipping.");
-      return NextResponse.json({ success: true, message: "Already completed" });
+      return NextResponse.json({ success: true, message: "Job already completed" });
     }
 
-    // 4. Update status to 'processing'
+    // 3. Mark as Processing
     await prisma.generation_jobs.update({
       where: { id: jobId },
       data: { status: 'processing' }
@@ -71,26 +55,22 @@ export async function POST(req: NextRequest) {
     const fileName = job.document.file_name;
     let outputId: string | null = null;
 
-    if (!text && job.job_type !== 'podcast') { 
-        // Podcast might work with just a title/prompt in future, but generally we need text
-        throw new Error("Document has no extracted text content.");
-    }
+    console.log(`[Worker] Processing '${job.job_type}' for Job ${jobId}...`);
 
-    console.log(`[Process API] 🧠 Generating '${job.job_type}' for '${fileName}'...`);
-
-    // 5. Execute Logic based on Job Type
+    // 4. Execute Logic based on Job Type
     switch (job.job_type) {
       case 'note': {
-        const noteContent = await generateNotesFromContent(text);
+        if (!text) throw new Error("No text content available for notes.");
         
-        if (!noteContent) throw new Error("AI failed to generate notes (returned null/empty).");
+        const noteContent = await generateNotesFromContent(text);
+        if (!noteContent) throw new Error("AI returned empty content for notes.");
 
         const note = await prisma.notes.create({
           data: {
             user_id: user.id,
             document_id: job.document_id,
             title: `${fileName} - Study Notes`,
-            content: noteContent, 
+            content: noteContent,
             tags: ['auto-generated']
           }
         });
@@ -99,10 +79,12 @@ export async function POST(req: NextRequest) {
       }
 
       case 'flashcard': {
-        const cardsData = await generateFlashcardsFromContent(text);
-        
-        if (!cardsData || cardsData.length === 0) throw new Error("AI returned 0 flashcards.");
+        if (!text) throw new Error("No text content available for flashcards.");
 
+        const cards = await generateFlashcardsFromContent(text);
+        if (!cards || cards.length === 0) throw new Error("AI returned 0 flashcards.");
+
+        // Transaction: Create Deck -> Create Cards
         const deck = await prisma.flashcard_decks.create({
           data: {
             user_id: user.id,
@@ -110,12 +92,11 @@ export async function POST(req: NextRequest) {
             title: `${fileName} - Flashcards`
           }
         });
-        
-        // Batch insert flashcards
+
         await prisma.flashcards.createMany({
-          data: cardsData.map((c: any) => ({
+          data: cards.map((c: any) => ({
             deck_id: deck.id,
-            front_content: c.front_content || c.front || "Error", 
+            front_content: c.front_content || c.front || "Error",
             back_content: c.back_content || c.back || "Error"
           }))
         });
@@ -124,74 +105,71 @@ export async function POST(req: NextRequest) {
       }
 
       case 'quiz': {
-        const quizResult = await generateQuizFromContent(text);
-        
-        if (!quizResult || !quizResult.questions || quizResult.questions.length === 0) {
-            throw new Error("AI generated 0 questions.");
+        if (!text) throw new Error("No text content available for quiz.");
+
+        const quizRes = await generateQuizFromContent(text);
+        if (!quizRes || !quizRes.questions || quizRes.questions.length === 0) {
+           throw new Error("AI generated 0 questions.");
         }
 
         const quiz = await prisma.quiz.create({
           data: {
             userId: user.id,
             document_id: job.document_id,
-            title: quizResult.title || `${fileName} - Pop Quiz`,
-            time_limit_minutes: 15
+            title: quizRes.title || `${fileName} - Quiz`,
+            time_limit_minutes: 15,
+            questions: {
+              create: quizRes.questions.map((q: any) => ({
+                question_text: q.question_text,
+                question_type: q.question_type,
+                correct_answer: q.correct_answer,
+                options: q.options || [],
+                explanation: q.explanation || ""
+              }))
+            }
           }
         });
-
-        // Insert questions one by one (createMany doesn't support nested relations easily in all Prisma versions yet)
-        for (const q of quizResult.questions) {
-          await prisma.questions.create({
-            data: {
-              quiz_id: quiz.id,
-              question_text: q.question_text,
-              question_type: q.question_type,
-              correct_answer: q.correct_answer,
-              options: q.options || [],
-              explanation: q.explanation || ""
-            }
-          });
-        }
         outputId = quiz.id;
         break;
       }
 
       case 'podcast': {
-        // This function handles the DB creation internally usually, 
-        // but if it returns the object, we just grab the ID.
+        // Only run if specifically requested (text is optional if we implement topic-based later, but required for now)
+        if (!text) throw new Error("No text content for podcast generation.");
+        
         const podcast = await generatePodcastForDocument(
-            text, 
-            fileName, 
-            user.id, 
-            job.document_id, 
-            'document'
+          text, 
+          fileName, 
+          user.id, 
+          job.document_id, 
+          'document'
         );
         
-        if (!podcast) throw new Error("Podcast generation returned null");
+        if (!podcast) throw new Error("Podcast generation returned null.");
         outputId = podcast.id;
         break;
       }
 
       case 'embedding': {
-        // Truncate to avoid token limits if necessary
-        const chunk = text.slice(0, 8000); 
-        const vector = await generateEmbeddings(chunk);
+        if (!text) break; // Skip if no text
+        // Truncate to first 2000 chars to save costs/tokens for search
+        const vector = await generateEmbeddings(text.slice(0, 2000));
         
-        if (!vector) throw new Error("Failed to generate embeddings.");
-
-        // Using raw SQL because Prisma doesn't natively support pgvector syntax cleanly without extensions
-        await prisma.$executeRaw`
-          INSERT INTO content_embeddings (id, user_id, content_id, content_type, content_chunk, embedding)
-          VALUES (
-            gen_random_uuid(), 
-            ${user.id}::uuid, 
-            ${job.document_id}::uuid, 
-            'document', 
-            ${text.slice(0, 1000)}, 
-            ${vector}::vector
-          )
-        `;
-        outputId = job.document_id; 
+        if (vector) {
+           // Use raw SQL for pgvector insertion
+           await prisma.$executeRaw`
+             INSERT INTO content_embeddings (id, user_id, content_id, content_type, content_chunk, embedding)
+             VALUES (
+               gen_random_uuid(), 
+               ${user.id}::uuid, 
+               ${job.document_id}::uuid, 
+               'document', 
+               ${text.slice(0, 1000)}, 
+               ${vector}::vector
+             )
+           `;
+           outputId = job.document_id;
+        }
         break;
       }
 
@@ -199,54 +177,55 @@ export async function POST(req: NextRequest) {
         throw new Error(`Unknown job type: ${job.job_type}`);
     }
 
-    // 6. Mark Job Complete
+    // 5. Mark Job as Completed
     await prisma.generation_jobs.update({
       where: { id: jobId },
       data: { 
         status: 'completed',
-        output_id: outputId
+        output_id: outputId,
+        error_message: null // Clear any previous errors
       }
     });
-    
-    console.log(`[Process API] ✅ Job Completed Successfully. Output ID: ${outputId}`);
 
-    // 7. Check if ALL jobs for this document are done
-    // If so, mark the document itself as 'completed' so it stops showing "Processing..." in the UI
-    const pendingJobs = await prisma.generation_jobs.count({
+    console.log(`[Worker] Job ${jobId} Completed Successfully.`);
+
+    // 6. Check for Document Completion
+    // If NO other jobs are "pending" or "processing" for this doc, mark the doc as complete.
+    const remainingJobs = await prisma.generation_jobs.count({
       where: { 
         document_id: job.document_id,
-        status: { not: 'completed' } // Count anything that is NOT completed (pending, processing, failed)
+        status: { in: ['pending', 'processing'] }
       }
     });
 
-    if (pendingJobs === 0) {
-      console.log(`[Process API] All jobs finished for Document ${job.document_id}. Marking doc as completed.`);
+    if (remainingJobs === 0) {
+      console.log(`[Worker] All jobs finished for Document ${job.document_id}. Marking complete.`);
       await prisma.documents.update({
         where: { id: job.document_id },
         data: { processing_status: 'completed' }
       });
     }
 
-    return NextResponse.json({ success: true, jobId, outputId });
+    return NextResponse.json({ success: true, outputId });
 
   } catch (e: any) {
-    console.error(`[Process API] 💥 Job Processing Failed:`, e);
-    
-    // Attempt to mark the job as failed in the DB so it doesn't hang forever
+    console.error(`[Worker Error] Job ${jobId}:`, e);
+
+    // Fail the job in the DB so it doesn't stay 'processing' forever
     if (jobId) {
-        try {
-            await prisma.generation_jobs.update({
-                where: { id: jobId },
-                data: { 
-                    status: 'failed',
-                    error_message: e.message || "Unknown error during processing."
-                }
-            });
-        } catch (dbErr) {
-            console.error("Failed to update job status to failed:", dbErr);
-        }
+      try {
+        await prisma.generation_jobs.update({
+          where: { id: jobId },
+          data: { 
+            status: 'failed', 
+            error_message: e.message || "Unknown processing error" 
+          }
+        });
+      } catch (dbErr) {
+        console.error("Failed to update job status to failed:", dbErr);
+      }
     }
 
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: e.message || "Internal Server Error" }, { status: 500 });
   }
 }

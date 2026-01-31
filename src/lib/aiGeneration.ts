@@ -28,7 +28,6 @@ async function generateWithFallback(
     const result = await model.generateContent(prompt);
     return await result.response;
   } catch (error: any) {
-    // If 404 (Model Not Found) or 400 (Bad Request), try fallback
     if (error.message?.includes("404") || error.message?.includes("not found")) {
       console.warn(`⚠️ Model ${preferredModelName} not found. Falling back to ${fallbackModelName}.`);
       const fallback = genAI.getGenerativeModel({ model: fallbackModelName });
@@ -44,13 +43,8 @@ async function generateWithFallback(
 // ------------------------------------------------------------------
 function cleanAndParseJSON(text: string) {
   try {
-    // 1. Remove markdown code blocks
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    // 2. Find the FIRST opening brace/bracket
     const firstBrace = cleaned.search(/[{[]/);
-
-    // 3. Find the LAST closing brace/bracket
     const lastCurly = cleaned.lastIndexOf('}');
     const lastSquare = cleaned.lastIndexOf(']');
     const lastBrace = Math.max(lastCurly, lastSquare);
@@ -59,14 +53,25 @@ function cleanAndParseJSON(text: string) {
       return JSON.parse(cleaned);
     }
 
-    // Extract the complete JSON substring
     const jsonString = cleaned.substring(firstBrace, lastBrace + 1);
     return JSON.parse(jsonString);
   } catch (e) {
     console.error("JSON Parse Error:", e);
-    console.error("Raw Text:", text);
     return null;
   }
+}
+
+// ------------------------------------------------------------------
+// HELPER: Clean Markdown (Fixes the formatting issue)
+// ------------------------------------------------------------------
+function cleanMarkdown(text: string) {
+  return text
+    // 1. Force double newlines before headers (fixes "...text. ## Header" -> "...text.\n\n## Header")
+    .replace(/([^\n])\s*(#{1,6}\s+)/g, "$1\n\n$2")
+    // 2. Ensure bold text isn't stuck to previous words
+    .replace(/([a-zA-Z0-9])(\*\*)/g, "$1 $2")
+    // 3. Clean up excessive newlines (max 3)
+    .replace(/\n{4,}/g, "\n\n\n");
 }
 
 // ------------------------------------------------------------------
@@ -100,7 +105,6 @@ export async function generateQuizFromContent(
       ]
     `;
     
-    // Using Flash Lite for speed
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     const questions = cleanAndParseJSON(response.text());
 
@@ -118,7 +122,7 @@ export async function generateQuizFromContent(
 }
 
 // ------------------------------------------------------------------
-// 1.5 TOPIC QUIZ GENERATION (For Weakness Slayer)
+// 1.5 TOPIC QUIZ GENERATION
 // ------------------------------------------------------------------
 export async function generateQuizFromTopic(
   topic: string, 
@@ -133,8 +137,6 @@ export async function generateQuizFromTopic(
       
       Create ${numQuestions} ${difficulty} level questions about this topic.
       Question Types: ${questionType} (If "MIXED", vary the types).
-      
-      Focus on core concepts, common misconceptions, and critical thinking.
       
       Return ONLY a raw JSON array (no markdown) with this structure:
       [
@@ -195,61 +197,34 @@ export async function generateFlashcardsFromContent(content: string, numCards: n
 }
 
 // ------------------------------------------------------------------
-// 3. NOTES GENERATION (Heavy Prompt Engineering + Flash Lite)
+// 3. NOTES GENERATION (Fixed formatting)
 // ------------------------------------------------------------------
 export async function generateNotesFromContent(content: string) {
   try {
     const safeContent = content.substring(0, 45000);
     
-    // Refined Prompt: Optimized to force "Pro-like" quality from "Flash-Lite"
     const prompt = `
-      You are an expert academic author and educational content creator. 
-      Your task is to transform the provided raw content into a **high-quality, textbook-style study guide**.
+      You are an expert academic author. Transform the provided raw content into a **visually structured textbook chapter**.
 
       ### 🎯 GOAL
-      Create a comprehensive, engaging, and visually structured note.
-      **DO NOT** simply output a list of bullet points.
-      **DO** write in full narrative paragraphs (prose) to explain concepts, using bullet points only for actual lists.
-
-      ### 📝 FORMATTING RULES (Strict)
-      1. **Narrative Prose:** - Write as if you are writing a textbook chapter. 
-         - Explain the "Why" and "How" concepts in full sentences. 
-         - Use transition words to connect ideas (e.g., "Furthermore," "In contrast," "Consequently").
-         - Avoid "outline style" (e.g., avoid "* Concept: definition"). Instead write: "The concept of [Concept] is defined as..."
-
-      2. **Hierarchy & Structure:**
-         - Start with a clear H1 (#) Title.
-         - Use H2 (##) for major sections.
-         - Use H3 (###) for sub-sections.
+      Create comprehensive, engaging, and well-structured notes.
       
-      3. **Visuals & Emphasis:**
-         - **Bold** all key terminology upon first mention.
-         - Use **Blockquotes (>)** for "Key Takeaways", "Analogies", or "Important Warnings".
-         - Use **Code Blocks** for any code snippets, formulas, or math equations.
+      ### 📝 STRICT FORMATTING RULES
+      1. **Hierarchy:** Use Markdown Headers (#, ##, ###).
+      2. **Spacing (CRITICAL):** YOU MUST insert TWO blank lines before every Header. Never start a header on the same line as a paragraph.
+      3. **Visuals:** Use **Bold** for key terms. Use Blockquotes (>) for key takeaways.
+      4. **Tables:** Use Markdown tables for comparisons.
+      5. **Diagrams:** Use Mermaid.js blocks for processes.
 
-      4. **Structured Data (MANDATORY):**
-         - If the text compares items (e.g., "Hardware vs Software", "Pros vs Cons", "Data Types"), YOU MUST use a **Markdown Table**.
-      
-      5. **Diagrams (Mermaid.js):**
-         - If the text describes a process, flowchart, cycle, or hierarchy, you MUST generate a Mermaid diagram.
-         - Syntax: 
-           \`\`\`mermaid
-           graph TD
-           A[Start] --> B{Decision}
-           B -->|Yes| C[Result]
-           \`\`\`
-
-      6. **Conclusion:**
-         - End with a "## 🏁 Summary" section containing a short paragraph followed by 3-5 bullet points of the most critical takeaways.
-
-      ### 🔍 INPUT TEXT TO TRANSFORM
+      ### 🔍 INPUT TEXT
       "${safeContent}"
     `;
 
-    // Using gemini-2.5-flash-lite as requested
     const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
     
-    return response.text();
+    // Apply the cleanup to fix any "inline header" issues from the AI
+    return cleanMarkdown(response.text());
+
   } catch (error) {
     console.error("Note Gen Error:", error);
     return null;
@@ -266,7 +241,7 @@ export async function generateInsightsFromContent(content: string) {
       Analyze the following text and extract key learning insights.
       Text: "${safeContent}"
       
-      Return ONLY a raw JSON object with this exact structure:
+      Return ONLY a raw JSON object with this structure:
       {
         "keyConcepts": ["concept 1", "concept 2", ...],
         "examQuestions": ["question 1", "question 2", ...],
@@ -293,12 +268,8 @@ export async function generateChatResponse(context: string, query: string, histo
      const safeContext = context.substring(0, 25000); 
      const prompt = `
       You are a helpful AI tutor. Use the context below to answer the student's question accurately.
-      
-      Context:
-      "${safeContext}"
-
+      Context: "${safeContext}"
       Student Question: "${query}"
-      
       Answer concisely and clearly.
      `;
      const response = await generateWithFallback("gemini-2.5-flash-lite", prompt, "gemini-1.5-flash");
@@ -310,17 +281,15 @@ export async function generateChatResponse(context: string, query: string, histo
 }
 
 // ------------------------------------------------------------------
-// 6. MASTER ORCHESTRATOR (The "Turbo" Function)
+// 6. MASTER ORCHESTRATOR
 // ------------------------------------------------------------------
 export async function generateFromYoutube(videoUrlOrId: string) {
     console.log("🚀 Turbo Generation for:", videoUrlOrId);
     
-    // 1. Fetch Full Transcript
     const { videoId, title, transcript } = await fetchYoutubeTranscript(videoUrlOrId);
 
     if (!transcript) throw new Error("Could not retrieve transcript.");
 
-    // 2. Generate Everything Else in Parallel
     const [notes, flashcards, quiz, insights] = await Promise.all([
         generateNotesFromContent(transcript),
         generateFlashcardsFromContent(transcript, 10),
@@ -328,7 +297,6 @@ export async function generateFromYoutube(videoUrlOrId: string) {
         generateInsightsFromContent(transcript)
     ]);
 
-    // 3. Return Bundle
     return {
         videoId,
         title,
@@ -353,7 +321,6 @@ export async function generatePodcastForDocument(
   try {
     console.log(`🎙️ Generating Podcast for: ${title}`);
 
-    // A. Generate Script (Host vs Expert)
     const script = await generatePodcastScript(content.substring(0, 15000));
     
     if (!script || !Array.isArray(script) || script.length === 0) {
@@ -361,12 +328,12 @@ export async function generatePodcastForDocument(
       return null;
     }
 
-    // B. Synthesize Audio
     const MAX_LINES = 12; 
     const limitedScript = script.slice(0, MAX_LINES);
     const audioBuffers: Buffer[] = [];
 
     for (const line of limitedScript) {
+      // Logic handled inside podcast-service (ElevenLabs -> OpenAI fallback)
       const voice = line.speaker === "Host" ? "alloy" : "onyx";
       try {
         const audioBuffer = await synthesizeSpeech(line.text, voice);
@@ -380,7 +347,6 @@ export async function generatePodcastForDocument(
 
     const combinedBuffer = Buffer.concat(audioBuffers);
 
-    // C. Upload to Supabase Storage
     const fileName = `${userId}/${Date.now()}-podcast.mp3`;
     const { error: uploadError } = await supabaseAdmin.storage
       .from("audio") 
@@ -395,7 +361,6 @@ export async function generatePodcastForDocument(
       .from("audio")
       .getPublicUrl(fileName);
 
-    // D. Save to Database
     return await prisma.recordings.create({
       data: {
         user_id: userId,

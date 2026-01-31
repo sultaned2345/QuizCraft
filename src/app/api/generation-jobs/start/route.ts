@@ -1,68 +1,27 @@
-// src/app/api/generation-jobs/start/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/getServerSession';
 import { prisma } from '@/lib/prisma';
 
-export async function POST(req: Request) {
-  console.log("---------------------------------------------------------");
-  console.log("[API] Incoming Request: POST /api/generation-jobs/start");
+export const runtime = 'nodejs';
 
+export async function POST(req: Request) {
   try {
-    // 1. Authentication Check
+    // 1. Authentication
     const session = await getServerSession();
     if (!session?.user) {
-      console.log("❌ [API] Auth Failed: No user session.");
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Parse Request Body
+    // 2. Parse Request
     const body = await req.json();
-    
-    // FIX: Default jobType to 'quiz' if missing to prevent 400 errors on simple calls
-    let { documentId, jobType = 'quiz' } = body;
+    let { documentId } = body;
 
-    // DEBUG: Log Source Page and Payload to trace "undefined" errors
-    const referer = req.headers.get('referer') || 'Unknown Source';
-    console.log(`📝 [API] Source: ${referer}`);
-    console.log(`📝 [API] Payload:`, JSON.stringify({ documentId, jobType }));
-
-    // 3. Validation
-    const missingFields = [];
-    if (!documentId) missingFields.push('documentId');
-    // Note: jobType is no longer checked for "existence" here because it has a default
-    
-    if (missingFields.length > 0) {
-      console.error(`❌ [API] Validation Failed: Missing ${missingFields.join(', ')}`);
-      return NextResponse.json(
-        { error: `Missing required fields: ${missingFields.join(', ')}` }, 
-        { status: 400 }
-      );
+    if (!documentId) {
+      return NextResponse.json({ error: 'Missing documentId' }, { status: 400 });
     }
 
-    // Clean and Validate UUID
-    if (typeof documentId === 'string') {
-        documentId = documentId.trim();
-    }
-
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (typeof documentId !== 'string' || !uuidRegex.test(documentId)) {
-       console.log(`❌ [API] Validation Failed: Invalid UUID format '${documentId}'`);
-       return NextResponse.json(
-        { error: 'Invalid documentId format. Must be a valid UUID.' }, 
-        { status: 400 }
-      );
-    }
-
-    const validJobTypes = ['quiz', 'flashcard', 'note', 'podcast', 'embedding'];
-    if (!validJobTypes.includes(jobType)) {
-      console.log(`❌ [API] Validation Failed: Invalid jobType '${jobType}'`);
-      return NextResponse.json(
-        { error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    // 4. Verify Document Ownership
+    // 3. Verify Document Ownership
+    // Ensure the user actually owns the document they are trying to process
     const doc = await prisma.documents.findUnique({
       where: { 
         id: documentId,
@@ -71,53 +30,59 @@ export async function POST(req: Request) {
     });
 
     if (!doc) {
-      console.log(`❌ [API] Document not found or access denied: ${documentId}`);
-      return NextResponse.json(
-        { error: 'Document not found or access denied.' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Document not found or access denied' }, { status: 404 });
     }
 
-    // 5. Create the Job Record
-    const job = await prisma.generation_jobs.create({
-      data: {
-        user_id: session.user.id,
-        document_id: documentId,
-        job_type: jobType,
+    // 4. Find Pending Jobs
+    // We look for any jobs created by the Upload route that haven't started yet
+    const pendingJobs = await prisma.generation_jobs.findMany({
+      where: { 
+        document_id: documentId, 
         status: 'pending' 
       }
     });
 
-    console.log(`🚀 [API] Job Created: ${job.id} (${jobType}). Triggering process...`);
+    console.log(`[Job Start] Found ${pendingJobs.length} pending jobs for doc ${documentId}`);
 
-    // 6. Trigger the Processing Endpoint (Fire and Forget)
+    if (pendingJobs.length === 0) {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'No pending jobs found.', 
+        count: 0 
+      });
+    }
+
+    // 5. Trigger Processing (Fire and Forget)
+    // We construct the absolute URL to the process endpoint
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
     const host = req.headers.get('host');
     const processUrl = `${protocol}://${host}/api/generation-jobs/process`;
+    
+    // We forward the cookie so the Process route can verify auth if needed
     const cookieHeader = req.headers.get('cookie') || '';
 
-    fetch(processUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': cookieHeader
-      },
-      body: JSON.stringify({ jobId: job.id })
-    }).catch(err => {
-      console.error(`⚠️ [API] Process Trigger Failed:`, err);
+    // Loop through all pending jobs and fire off a request for each.
+    // We do NOT await these fetches because we don't want to hold up the response.
+    pendingJobs.forEach(job => {
+      fetch(processUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Cookie': cookieHeader 
+        },
+        body: JSON.stringify({ jobId: job.id })
+      }).catch(err => console.error(`Failed to trigger job ${job.id}:`, err));
     });
 
+    // 6. Return Immediately
     return NextResponse.json({ 
       success: true, 
-      jobId: job.id,
-      message: 'Job queued successfully.' 
+      count: pendingJobs.length,
+      message: `Triggered ${pendingJobs.length} jobs.` 
     });
 
   } catch (error: any) {
-    console.error('💥 [API] Critical Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
-    );
+    console.error('[Job Start] Error:', error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

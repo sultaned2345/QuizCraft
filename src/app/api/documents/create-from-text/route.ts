@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = 'nodejs';
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
@@ -12,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Content too short" }, { status: 400 });
     }
 
-    // Transaction: Create Doc + Jobs
+    // Transaction: Doc + Jobs
     const result = await prisma.$transaction(async (tx) => {
       const doc = await tx.documents.create({
         data: {
@@ -22,30 +24,38 @@ export async function POST(req: NextRequest) {
           extracted_text: content,
           file_size: BigInt(Buffer.byteLength(content)),
           storage_path: "pasted_text",
-          processing_status: "processing"
+          processing_status: 'processing'
         }
       });
 
       // Create Jobs
       await tx.generation_jobs.createMany({
-        data: ["note", "flashcard", "quiz", "embedding"].map(type => ({
+        data: ['note', 'quiz', 'flashcard'].map(type => ({
           user_id: user.id,
           document_id: doc.id,
           job_type: type,
-          status: "pending"
+          status: 'pending'
         }))
       });
-      
+
       return doc;
     });
 
+    // Trigger Worker
+    const workerUrl = new URL('/api/generation-jobs/start', req.url);
+    fetch(workerUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.get('cookie') || '' },
+      body: JSON.stringify({ documentId: result.id })
+    }).catch(console.error);
+
     return NextResponse.json({ 
       success: true, 
-      data: { document: { id: result.id } } 
+      documentId: result.id 
     });
 
   } catch (error: any) {
-    console.error("Create Text API Error:", error);
+    console.error("Text Upload Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
