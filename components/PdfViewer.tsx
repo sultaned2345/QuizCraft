@@ -20,8 +20,8 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 // --- Worker Configuration ---
-// We use the local worker file from your public/ folder to ensure strict version matching
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+// [FIX] Changed extension from .min.js to .mjs to match package.json postinstall script
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 
 interface PdfViewerProps {
   documentId?: string | null;
