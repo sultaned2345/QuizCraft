@@ -18,11 +18,19 @@ export function QuickUploadWidget() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf') {
+    // Optional: Add more types if needed, matching the API
+    const validTypes = [
+      'application/pdf', 
+      'text/plain', 
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ];
+
+    if (!validTypes.includes(file.type)) {
       toast({
         variant: "destructive",
         title: "Invalid file type",
-        description: "Please upload a PDF document.",
+        description: "Please upload a PDF, DOCX, PPTX, or TXT file.",
       });
       return;
     }
@@ -32,36 +40,50 @@ export function QuickUploadWidget() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/documents/upload', {
+      // 1. Upload the file to Supabase via our API
+      const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
 
-      if (!res.ok) throw new Error('Upload failed');
-
       const data = await res.json();
-      
-      // FIX: Handle the nested API response structure 
-      // API returns: { success: true, data: { document: { id: "..." }, ... } }
-      const documentId = data.data?.document?.id || data.id;
 
-      if (!documentId) {
-         throw new Error("Invalid server response: Missing document ID");
+      if (!res.ok) {
+        throw new Error(data.error || 'Upload failed');
       }
+
+      // 2. Success! We have the file URL and metadata.
+      // Now we can redirect to a "processing" page or the document view.
+      // Assuming we want to start a "Project" or "Study Session" with this file:
       
       toast({
-        title: "Turbo Upload Complete!",
-        description: "Redirecting to your study space...",
+        title: "Upload Successful!",
+        description: "Your file is ready. Setting up your workspace...",
       });
+
+      // Navigate to a page that will use this file. 
+      // You might pass the file URL as a query param or create a 'Project' first.
+      // For now, let's assume we go to a generic 'new project' page with the file URL.
+      // Alternatively, if your API created a 'Document' record, use its ID.
       
-      router.push(`/documents/${documentId}`);
-    } catch (error) {
+      // If the API only returned a file path/url (as per my previous fix):
+      if (data.file && data.file.url) {
+         // Encode the URL to safely pass it
+         const encodedUrl = encodeURIComponent(data.file.url);
+         // Example: Go to a page that generates content from this URL
+         router.push(`/projects/create?docUrl=${encodedUrl}&fileName=${encodeURIComponent(data.file.name)}`);
+      } else {
+         // Fallback if your API structure is different
+         router.push('/dashboard');
+      }
+
+    } catch (error: any) {
       console.error(error);
       setIsUploading(false);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "Please try again later.",
+        description: error.message || "Please try again later.",
       });
     }
   };
@@ -86,12 +108,12 @@ export function QuickUploadWidget() {
         <div className="text-center space-y-1">
           <h3 className="text-lg font-bold tracking-tight flex items-center justify-center gap-2">
             <span className="bg-gradient-to-br from-foreground to-muted-foreground bg-clip-text text-transparent">
-              Turbo Upload
+              Quick Upload
             </span>
             <Zap className={cn("w-4 h-4 text-primary", isHovering || isUploading ? "fill-primary" : "")} />
           </h3>
           <p className="text-xs text-muted-foreground font-medium">
-            Drag & drop PDF to instant-start
+            Drag & drop to start studying
           </p>
         </div>
 
@@ -103,7 +125,8 @@ export function QuickUploadWidget() {
         >
           <input
             type="file"
-            accept=".pdf"
+            // Accept all supported types
+            accept=".pdf,.docx,.pptx,.txt"
             onChange={handleFileUpload}
             disabled={isUploading}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-20"
@@ -156,7 +179,7 @@ export function QuickUploadWidget() {
             "absolute bottom-2 text-xs font-bold uppercase tracking-wider transition-all duration-300",
             isUploading ? "text-primary animate-pulse" : "text-muted-foreground opacity-0 group-hover:opacity-100"
           )}>
-            {isUploading ? "Processing..." : "Drop to Upload"}
+            {isUploading ? "Uploading..." : "Drop File"}
           </div>
         </div>
 
