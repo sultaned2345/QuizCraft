@@ -50,7 +50,8 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
   const { width } = useContainerWidth(containerRef);
 
   // Determine the source URL
-  const fileUrl = url || (documentId ? `/api/documents/${documentId}/content` : null);
+  // [FIX] Append ?mode=binary so the API returns the raw file, not JSON
+  const fileUrl = url || (documentId ? `/api/documents/${documentId}/content?mode=binary` : null);
 
   // --- Handlers ---
   

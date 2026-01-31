@@ -1,6 +1,8 @@
+// src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { createClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma"; // ✅ Import Prisma
 
 // Force Node.js runtime for reliable file handling (Edge has 1MB limits in some cases)
 export const runtime = "nodejs";
@@ -39,8 +41,9 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: "File exceeds 10MB limit" }, { status: 400 });
     }
+    
+    // Strict type check + Extension fallback
     if (!ALLOWED_TYPES.includes(file.type)) {
-      // Fallback check for extensions if mime type is generic
       const ext = file.name.split('.').pop()?.toLowerCase();
       const validExts = ['pdf', 'txt', 'docx', 'pptx'];
       if (!ext || !validExts.includes(ext)) {
@@ -49,12 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Initialize Supabase Client
-    // We use a fresh client with the user's auth context or Service Role if needed.
-    // Ideally, pass the request headers to forward the user's session.
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     
-    // Create a client that uses the incoming request's Authorization header
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: {
         headers: {
@@ -80,15 +80,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    // 6. Get Public URL
+    // 6. Get Public URL (Optional, but useful)
     const { data: { publicUrl } } = supabase.storage
       .from("documents")
       .getPublicUrl(filePath);
 
-    // 7. Return Success
-    // We return the URL and Path so the frontend can immediately trigger generation
+    // 7. ✅ INSERT INTO DATABASE (Fixes the redirection issue)
+    const document = await prisma.documents.create({
+      data: {
+        user_id: user.id,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: BigInt(file.size), // Prisma uses BigInt for file_size
+        storage_path: uploadData.path, // Store the internal path for secure access later
+        processing_status: 'pending', // Mark as pending so the UI can poll for updates
+        created_at: new Date(),
+      }
+    });
+
+    // 8. Return Success with Document ID
     return NextResponse.json({
       success: true,
+      documentId: document.id, // ✅ This is what the frontend needs for the redirect
       file: {
         name: file.name,
         path: uploadData.path,
