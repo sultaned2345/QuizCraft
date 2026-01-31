@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
 import { cleanExtractedText } from '@/lib/file-parser'; 
 
-// ✅ FIX: Explicitly import the worker to ensure it is bundled
+// Ensure worker is imported for PDF.js in Node environment
 import 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 
 export const runtime = 'nodejs';
@@ -13,7 +13,6 @@ export const runtime = 'nodejs';
 // --- Text Extraction Helpers ---
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  // Convert Buffer to Uint8Array for pdfjs-dist
   const data = new Uint8Array(buffer);
   
   try {
@@ -21,7 +20,6 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
       data,
       useSystemFonts: true, 
       disableFontFace: true, 
-      // ✅ FIX: Prevent worker errors from stopping execution
       stopAtErrors: false,
     });
 
@@ -41,7 +39,6 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
     return fullText;
   } catch (err: any) {
     console.error("PDFJS Error:", err);
-    // Fallback: If strict PDF parsing fails, try a simpler approach or throw clearer error
     throw new Error(`Failed to parse PDF: ${err.message}`);
   }
 }
@@ -92,9 +89,6 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
   }
 }
 
-/**
- * Extracts text from various file types using server-side libraries.
- */
 export async function extractTextFromServerFile(
   file: File,
   buffer: Buffer

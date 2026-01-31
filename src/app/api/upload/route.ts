@@ -1,55 +1,24 @@
-// src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { cleanExtractedText } from "@/lib/file-parser";
 import { requireAuth } from "@/lib/auth";
-import pdfParse from "pdf-parse-fork";
+import { extractTextFromServerFile } from "@/lib/file-parser.server"; // Consolidated parser
 
 export const runtime = "nodejs";
 
 // Synchronized with frontend 10MB limit
 const MAX_BYTES = 10 * 1024 * 1024; 
-const SUPPORTED_TYPES = ["application/pdf", "text/plain"];
-const SUPPORTED_EXTENSIONS = [".pdf", ".txt"];
 
-async function getCleanTextFromFile(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  if (buffer.byteLength > MAX_BYTES) {
-    throw new Error(`File exceeds 10MB limit. Current size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
-  }
-
-  const nameLower = file.name.toLowerCase();
-  const hasValidExtension = SUPPORTED_EXTENSIONS.some(ext => nameLower.endsWith(ext));
-  const type = file.type || (nameLower.endsWith(".pdf") ? "application/pdf" : "text/plain");
-
-  if (!SUPPORTED_TYPES.includes(type) || !hasValidExtension) {
-    throw new Error(`Unsupported file type. Only PDF and TXT files are allowed.`);
-  }
-
-  let rawText = "";
-  try {
-    if (type === "application/pdf") {
-      const result = await pdfParse(buffer, { max: 0, version: 'v1.10.100' });
-      rawText = result.text || "";
-    } else {
-      rawText = buffer.toString("utf8");
-    }
-  } catch (error: any) {
-    throw new Error(`Failed to extract text: ${error.message}`);
-  }
-
-  const cleanedText = cleanExtractedText(rawText);
-  if (!cleanedText || cleanedText.trim().length < 50) {
-    throw new Error("File contains insufficient text content (minimum 50 characters).");
-  }
-
-  return cleanedText;
-}
+// Expanded to support DOCX and PPTX
+const SUPPORTED_TYPES = [
+  "application/pdf", 
+  "text/plain",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation" // .pptx
+];
+const SUPPORTED_EXTENSIONS = [".pdf", ".txt", ".docx", ".pptx"];
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth(request); //
+    const user = await requireAuth(request); 
     
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
@@ -63,7 +32,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No file provided." }, { status: 400 });
     }
 
-    const cleanedText = await getCleanTextFromFile(file);
+    // 1. Validate Size
+    if (file.size > MAX_BYTES) {
+       return NextResponse.json({ success: false, error: `File exceeds 10MB limit.` }, { status: 400 });
+    }
+
+    // 2. Validate Extension
+    const nameLower = file.name.toLowerCase();
+    const hasValidExtension = SUPPORTED_EXTENSIONS.some(ext => nameLower.endsWith(ext));
+    
+    if (!hasValidExtension) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Unsupported file type. Please upload PDF, DOCX, PPTX, or TXT." 
+      }, { status: 400 });
+    }
+
+    // 3. Extract Text (with OCR Fallback Detection)
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    let cleanedText = "";
+
+    try {
+      // Uses `file-parser.server.ts` logic for PDF, DOCX, PPTX, TXT
+      cleanedText = await extractTextFromServerFile(file, buffer);
+    } catch (error: any) {
+      console.error("Text Extraction Error:", error.message);
+      
+      // OCR Fallback: Detect if the error indicates a scanned/empty PDF
+      if (
+        error.message.includes("scanned image") || 
+        error.message.includes("No text found")
+      ) {
+        return NextResponse.json({ 
+          success: false, 
+          error: "This PDF appears to be a scanned image (no text found).", 
+          code: "SCANNED_PDF_DETECTED",
+          requiresOcr: true, // Signal to frontend to show "Use OCR" button
+          suggestion: "Try using our OCR tool for scanned documents."
+        }, { status: 422 });
+      }
+
+      return NextResponse.json({ 
+        success: false, 
+        error: `Failed to extract text: ${error.message}` 
+      }, { status: 400 });
+    }
+
+    // 4. Pass Cleaned Text to Generator
     const url = new URL("/api/generate-quiz", request.url);
     const authHeader = request.headers.get("authorization");
     
@@ -80,7 +96,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: resp.ok, ...data }, { status: resp.status });
 
   } catch (error: any) {
-    // Always return JSON to prevent frontend parsing errors
+    // Handle Auth or System errors
     return NextResponse.json({ 
       success: false, 
       error: error?.message || "Internal server error during upload" 

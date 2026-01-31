@@ -1,3 +1,4 @@
+// src/app/(app)/upload/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -5,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileUp, Youtube, FileText, Loader2, Mic } from 'lucide-react';
+import { FileUp, Youtube, FileText, Loader2, Mic, ScanEye } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AudioInput } from '@/components/AudioInput';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function UploadPage() {
   const router = useRouter();
@@ -20,31 +21,50 @@ export default function UploadPage() {
   
   const [activeTab, setActiveTab] = useState('file');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState('Uploading & Starting AI...');
+  
   const [file, setFile] = useState<File | null>(null);
   const [textTitle, setTextTitle] = useState('');
   const [textContent, setTextContent] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
-  // 1. Handle File Upload (Backend Driven)
+  // OCR specific state
+  const [isOcrRequired, setIsOcrRequired] = useState(false);
+
+  // 1. Handle File Upload
   const handleFileUpload = async () => {
     if (!file || !session) return;
     setIsProcessing(true);
+    setProcessingMessage('Uploading & Analyzing...');
+    setIsOcrRequired(false); // Reset OCR state
     
     try {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await fetch('/api/documents/upload', {
+      const response = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` },
         body: formData,
       });
 
       const data = await response.json();
+      
+      // Handle Scanned PDF Detection (422)
+      if (response.status === 422 && data.code === 'SCANNED_PDF_DETECTED') {
+        setIsProcessing(false);
+        setIsOcrRequired(true);
+        toast({ 
+          title: "Scanned Document Detected", 
+          description: data.error, 
+          variant: "destructive" // Changed to destructive to match typical error styling or use "default"
+        });
+        return;
+      }
+
       if (!response.ok) throw new Error(data.error || 'Upload failed');
       
-      // Success: Redirect immediately. The backend is doing the work.
-      toast({ title: "Upload Complete", description: "We are generating your study materials in the background." });
+      toast({ title: "Upload Complete", description: "Generating study materials..." });
       router.push(`/documents/${data.documentId}`);
       
     } catch (error: any) {
@@ -54,10 +74,40 @@ export default function UploadPage() {
     }
   };
 
-  // 2. Handle Text Upload (Backend Driven)
+  // 1.5 Handle OCR Upload (Fallback)
+  const handleOcrUpload = async () => {
+    if (!file || !session) return;
+    setIsProcessing(true);
+    setProcessingMessage('Running OCR (This may take a moment)...');
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload/ocr', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'OCR Processing failed');
+
+      toast({ title: "OCR Complete", description: "Text extracted successfully!" });
+      router.push(`/documents/${data.documentId}`);
+
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: "OCR Error", description: error.message, variant: "destructive" });
+      setIsProcessing(false);
+    }
+  };
+
+  // 2. Handle Text Upload
   const handleTextUpload = async () => {
     if (!textTitle || !textContent || !session) return;
     setIsProcessing(true);
+    setProcessingMessage('Processing text...');
     
     try {
       const response = await fetch('/api/documents/create-from-text', {
@@ -78,10 +128,11 @@ export default function UploadPage() {
     }
   };
 
-  // 3. Handle YouTube (Backend Driven)
+  // 3. Handle YouTube
   const handleYoutubeUpload = async () => {
     if (!youtubeUrl || !session) return;
     setIsProcessing(true);
+    setProcessingMessage('Analyzing video...');
     
     try {
       const response = await fetch('/api/generate-from-youtube', {
@@ -102,19 +153,16 @@ export default function UploadPage() {
     }
   };
 
-  // 4. Audio Handler
   const handleAudioComplete = async (documentId: string) => {
-    // Audio component handles the upload, we just redirect
     router.push(`/documents/${documentId}`);
   };
 
-  // Loading Overlay
   if (isProcessing) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">
         <div className="flex flex-col items-center gap-4">
            <Loader2 className="w-12 h-12 text-primary animate-spin" />
-           <h2 className="text-xl font-medium">Uploading & Starting AI...</h2>
+           <h2 className="text-xl font-medium">{processingMessage}</h2>
         </div>
       </div>
     );
@@ -141,19 +189,54 @@ export default function UploadPage() {
         <TabsContent value="file" className="mt-0">
           <Card className="border-2 border-dashed border-border/60 shadow-none">
             <CardContent className="flex flex-col items-center justify-center py-16 space-y-6 text-center">
-              <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
-                 <FileUp className="w-10 h-10 text-primary" />
-              </div>
-              <Input id="document" type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} accept=".pdf,.docx,.txt,.md" className="hidden" />
-              <label htmlFor="document" className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 rounded-xl flex items-center">
-                Select File
-              </label>
-              {file && (
-                 <div className="flex items-center gap-4 p-4 bg-background border rounded-xl w-full max-w-sm mt-4">
-                    <span className="truncate flex-1">{file.name}</span>
-                    <Button onClick={handleFileUpload} size="sm">Upload</Button>
-                 </div>
+              
+              {!isOcrRequired ? (
+                <>
+                  <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
+                     <FileUp className="w-10 h-10 text-primary" />
+                  </div>
+                  <Input 
+                    id="document" 
+                    type="file" 
+                    onChange={(e) => {
+                      setFile(e.target.files?.[0] || null);
+                      setIsOcrRequired(false); // Reset OCR if file changes
+                    }} 
+                    accept=".pdf,.docx,.txt,.md,.pptx" 
+                    className="hidden" 
+                  />
+                  <label htmlFor="document" className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 rounded-xl flex items-center">
+                    Select File
+                  </label>
+                  {file && (
+                     <div className="flex items-center gap-4 p-4 bg-background border rounded-xl w-full max-w-sm mt-4">
+                        <span className="truncate flex-1">{file.name}</span>
+                        <Button onClick={handleFileUpload} size="sm">Upload</Button>
+                     </div>
+                  )}
+                </>
+              ) : (
+                /* OCR Fallback UI */
+                <div className="w-full max-w-md space-y-4">
+                  <Alert variant="destructive" className="border-orange-500/50 bg-orange-500/10 text-orange-700 dark:text-orange-400">
+                    <ScanEye className="h-4 w-4" />
+                    <AlertTitle>No text found!</AlertTitle>
+                    <AlertDescription>
+                      This looks like a scanned document or image. We can use Optical Character Recognition (OCR) to read it.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="flex gap-3 justify-center">
+                    <Button variant="outline" onClick={() => { setIsOcrRequired(false); setFile(null); }}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleOcrUpload} className="bg-orange-600 hover:bg-orange-700 text-white">
+                      <ScanEye className="w-4 h-4 mr-2" />
+                      Process with OCR
+                    </Button>
+                  </div>
+                </div>
               )}
+
             </CardContent>
           </Card>
         </TabsContent>
@@ -169,8 +252,7 @@ export default function UploadPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
-        {/* YouTube Tab */}
+
         <TabsContent value="youtube" className="mt-0">
           <Card>
             <CardHeader><CardTitle>YouTube URL</CardTitle></CardHeader>
@@ -181,7 +263,6 @@ export default function UploadPage() {
           </Card>
         </TabsContent>
 
-        {/* Audio Tab */}
         <TabsContent value="audio" className="mt-0">
            <AudioInput onTranscriptionComplete={handleAudioComplete} />
         </TabsContent>
