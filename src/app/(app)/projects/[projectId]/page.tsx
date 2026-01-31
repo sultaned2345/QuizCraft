@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { FileText, Play, BrainCircuit, Mic, Layers, MessageSquare, Share2, MoreVertical, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
-import PdfViewer from '@/components/PdfViewer'; // ✅ Ensure this component exists
+import { PdfViewer } from '@/components/PdfViewer'; // ✅ Fixed: Changed to named import
 
 export default function ProjectHubPage({ params }: { params: { projectId: string } }) {
   const { projectId } = params;
