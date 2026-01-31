@@ -1,280 +1,252 @@
-// components/PdfViewer.tsx
+// src/components/PdfViewer.tsx
 'use client';
 
-import * as React from 'react';
-import * as pdfjs from 'pdfjs-dist';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useState, useEffect, useRef } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import { Button } from '@/components/ui/button';
+import { 
+  Loader2, 
+  ZoomIn, 
+  ZoomOut, 
+  RotateCw, 
+  MessageSquarePlus, 
+  ChevronLeft, 
+  ChevronRight,
+  AlertCircle
+} from 'lucide-react';
 
-// Initialize worker
-if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
-}
+// CSS imports are required for react-pdf to render text layers correctly
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+// --- Worker Configuration ---
+// We use the local worker file from your public/ folder to ensure strict version matching
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 interface PdfViewerProps {
-  url?: string;
-  documentId?: string;
-  onTextSelect?: (e: React.MouseEvent) => void;
-  className?: string;
+  documentId?: string | null;
+  url?: string | null;
+  onAskAI?: (text: string) => void;
 }
 
-interface PdfPageProps {
-  doc: pdfjs.PDFDocumentProxy;
-  pageNum: number;
-  width: number;
-  onTextSelect?: (e: React.MouseEvent) => void;
-}
+export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
+  // --- State ---
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
+  const [rotation, setRotation] = useState<number>(0);
+  
+  // Selection State for "Highlight to Ask"
+  const [selection, setSelection] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
-// --- Custom Hook for Visibility (Lazy Rendering) ---
-function useInView(options: IntersectionObserverInit = {}) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  const [isInView, setIsInView] = React.useState(false);
+  // --- Layout & Sizing ---
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // ✅ Custom Resize Hook (No external dependency needed)
+  const { width } = useContainerWidth(containerRef);
 
-  React.useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
+  // Determine the source URL
+  const fileUrl = url || (documentId ? `/api/documents/${documentId}/content` : null);
 
-    const observer = new IntersectionObserver(([entry]) => {
-      setIsInView(entry.isIntersecting);
-    }, options);
+  // --- Handlers ---
+  
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setNumPages(numPages);
+    setPageNumber(1);
+  }
 
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [options]);
+  // Handle Text Selection
+  useEffect(() => {
+    const handleSelection = () => {
+      const activeSelection = window.getSelection();
+      
+      // If no selection or selection is empty/collapsed, hide menu
+      if (!activeSelection || activeSelection.isCollapsed) {
+        setSelection(null);
+        return;
+      }
 
-  return { ref, isInView };
-}
+      const text = activeSelection.toString().trim();
+      if (!text || text.length < 3) return; // Ignore accidental small clicks
 
-function PdfPage({ doc, pageNum, width, onTextSelect }: PdfPageProps) {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const textLayerRef = React.useRef<HTMLDivElement>(null);
-  const [page, setPage] = React.useState<pdfjs.PDFPageProxy | null>(null);
+      // Ensure the selection happened INSIDE our PDF container
+      if (
+        containerRef.current && 
+        containerRef.current.contains(activeSelection.anchorNode?.parentElement || null)
+      ) {
+         const range = activeSelection.getRangeAt(0);
+         const rect = range.getBoundingClientRect();
+         
+         // Position logic: Center horizontally over selection, slightly above
+         setSelection({
+           text,
+           x: rect.left + (rect.width / 2),
+           y: rect.top - 10 
+         });
+      } else {
+        setSelection(null);
+      }
+    };
 
-  // Load content when within 200px of viewport
-  const { ref, isInView } = useInView({ rootMargin: '200px' });
+    // Attach listener to document so we catch selection events bubble up
+    document.addEventListener('selectionchange', handleSelection);
+    return () => document.removeEventListener('selectionchange', handleSelection);
+  }, []);
 
-  // 1. Always fetch the page proxy (lightweight) to get dimensions/rotation
-  React.useEffect(() => {
-    let isMounted = true;
-    doc.getPage(pageNum).then((p) => {
-      if (isMounted) setPage(p);
-    }).catch(console.error);
-    return () => { isMounted = false; };
-  }, [doc, pageNum]);
+  // Controls
+  const zoomIn = () => setScale(prev => Math.min(prev + 0.2, 3.0));
+  const zoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
+  const rotate = () => setRotation(prev => (prev + 90) % 360);
 
-  // 2. Only render the heavy Canvas/Text Layer when "isInView" is true
-  React.useEffect(() => {
-    if (!page || !isInView || !canvasRef.current || width === 0) return;
+  // --- Render ---
 
-    // Calculate scale based on desired width vs original viewport width
-    const unscaledViewport = page.getViewport({ scale: 1 });
-    const scale = width / unscaledViewport.width;
-    const viewport = page.getViewport({ scale });
+  // High-DPI Scaling Logic:
+  // Render at (scale * devicePixelRatio) for sharpness, but style width at (scale * 100)%
+  const pixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
 
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
+  return (
+    <div className="flex flex-col h-full bg-muted/20 relative w-full" ref={containerRef}>
+      
+      {/* 1. Toolbar */}
+      <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur z-20 shadow-sm sticky top-0">
+        <div className="flex items-center gap-2">
+           <Button 
+             variant="ghost" 
+             size="sm" 
+             onClick={() => setPageNumber(p => Math.max(p - 1, 1))} 
+             disabled={pageNumber <= 1}
+           >
+             <ChevronLeft className="w-4 h-4" />
+           </Button>
+           
+           <span className="text-sm font-medium w-20 text-center font-mono">
+             {pageNumber} / {numPages || '--'}
+           </span>
+           
+           <Button 
+             variant="ghost" 
+             size="sm" 
+             onClick={() => setPageNumber(p => Math.min(p + 1, numPages))} 
+             disabled={pageNumber >= numPages}
+           >
+             <ChevronRight className="w-4 h-4" />
+           </Button>
+        </div>
 
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+        <div className="flex items-center gap-1">
+           <Button variant="ghost" size="icon" onClick={zoomOut} title="Zoom Out">
+             <ZoomOut className="w-4 h-4" />
+           </Button>
+           <span className="text-xs w-10 text-center text-muted-foreground tabular-nums">
+             {Math.round(scale * 100)}%
+           </span>
+           <Button variant="ghost" size="icon" onClick={zoomIn} title="Zoom In">
+             <ZoomIn className="w-4 h-4" />
+           </Button>
+           <div className="w-px h-4 bg-border mx-1" />
+           <Button variant="ghost" size="icon" onClick={rotate} title="Rotate">
+             <RotateCw className="w-4 h-4" />
+           </Button>
+        </div>
+      </div>
 
-    let renderTask: any = null;
-
-    const render = async () => {
-      try {
-        renderTask = page.render({ canvasContext: context, viewport });
-        await renderTask.promise;
-        
-        // Render Text Layer (if available)
-        const pdfJsAny = pdfjs as any;
-        if (typeof pdfJsAny.renderTextLayer === 'function' && textLayerRef.current) {
-            const textContent = await page.getTextContent();
-            
-            // Check ref again before modifying
-            if (textLayerRef.current) {
-                textLayerRef.current.style.height = `${viewport.height}px`;
-                textLayerRef.current.style.width = `${viewport.width}px`;
-                textLayerRef.current.innerHTML = '';
-                textLayerRef.current.style.setProperty('--pdf-highlight-color', 'rgba(255, 226, 143, 0.5)');
-
-                await pdfJsAny.renderTextLayer({
-                    textContentSource: textContent,
-                    container: textLayerRef.current,
-                    viewport: viewport,
-                    textDivs: [],
-                }).promise;
+      {/* 2. PDF Content Area */}
+      <div className="flex-1 overflow-auto flex justify-center p-4 md:p-8 relative">
+        {fileUrl ? (
+          <Document
+            file={fileUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={
+              <div className="flex flex-col items-center gap-2 mt-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading Document...</p>
+              </div>
             }
-        }
-      } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
-            console.error("Error rendering PDF page:", err);
-        }
-      }
-    };
+            error={
+               <div className="mt-20 flex flex-col items-center text-destructive max-w-sm text-center gap-2">
+                 <AlertCircle className="w-8 h-8" />
+                 <p className="font-medium">Failed to load PDF</p>
+                 <p className="text-xs text-muted-foreground">
+                   The file might be corrupted, missing, or requires a different format.
+                 </p>
+               </div>
+            }
+            className="shadow-2xl"
+          >
+            <Page 
+              pageNumber={pageNumber} 
+              scale={scale} 
+              rotate={rotation}
+              // Enhances sharpness on retina screens
+              devicePixelRatio={pixelRatio} 
+              // Limits render width to container (prevent huge horizontal scroll)
+              width={width ? Math.min(width * 0.95, 1000) : undefined} 
+              className="bg-white shadow-lg"
+              renderTextLayer={true} // Essential for selection
+              renderAnnotationLayer={true} // Essential for links
+              loading={
+                <div className="h-[800px] w-[600px] bg-white animate-pulse rounded shadow-lg" />
+              }
+            />
+          </Document>
+        ) : (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+             <p>Select a document to view</p>
+          </div>
+        )}
+      </div>
 
-    render();
-
-    return () => {
-      if (renderTask) {
-        renderTask.cancel();
-      }
-      // Optional: Clear canvas when scrolling away to save memory
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      }
-    };
-  }, [page, width, isInView]);
-
-  // Loading State / Placeholder
-  if (!page) return <div className="w-full aspect-[1/1.4] bg-muted/20 animate-pulse rounded-md mb-4" />;
-
-  const aspectRatio = page.view[3] / page.view[2];
-  const calculatedHeight = width * aspectRatio;
-  
-  return (
-    <div
-      ref={ref}
-      className="relative shadow-md mb-4 bg-white"
-      style={{ width: width, minHeight: calculatedHeight }}
-    >
-      {isInView ? (
-        <>
-          <canvas ref={canvasRef} className="block" />
-          <div ref={textLayerRef} className="textLayer absolute inset-0 mix-blend-multiply" onMouseUpCapture={onTextSelect} />
-        </>
-      ) : (
-        // Placeholder to maintain scroll height when off-screen
-        <div style={{ height: calculatedHeight, width: '100%' }} />
+      {/* 3. "Ask AI" Floating Button */}
+      {selection && (
+        <div 
+          className="fixed z-50 animate-in fade-in zoom-in duration-200"
+          style={{ 
+            left: selection.x, 
+            top: selection.y - 50, // Position slightly above the text
+            transform: 'translateX(-50%)' 
+          }}
+        >
+          <Button 
+            size="sm" 
+            onClick={() => {
+              if (onAskAI) onAskAI(selection.text);
+              setSelection(null); // Close menu
+              window.getSelection()?.removeAllRanges(); // Deselect visual text
+            }}
+            className="rounded-full shadow-xl bg-primary text-primary-foreground hover:scale-105 transition-all gap-2"
+          >
+            <MessageSquarePlus className="w-4 h-4" />
+            Ask AI
+          </Button>
+          
+          {/* Tooltip Arrow */}
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-primary" />
+        </div>
       )}
+
     </div>
   );
 }
 
-export function PdfViewer({ url, documentId, onTextSelect, className }: PdfViewerProps) {
-  const [pdfDoc, setPdfDoc] = React.useState<pdfjs.PDFDocumentProxy | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [resolvedUrl, setResolvedUrl] = React.useState<string | null>(null);
-  
-  // Responsive Width
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = React.useState<number>(0);
+// --- Internal Helper Hook (No External Dependency) ---
+function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
+  const [width, setWidth] = useState<number>(0);
 
-  // 1. Handle Window Resize
-  React.useEffect(() => {
-    if (!containerRef.current) return;
+  useEffect(() => {
+    if (!ref.current) return;
 
-    const updateWidth = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth - 48);
-      }
-    };
+    const observer = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      setWidth(entries[0].contentRect.width);
+    });
 
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(containerRef.current);
-
+    observer.observe(ref.current);
     return () => observer.disconnect();
-  }, [isLoading]);
+  }, [ref]);
 
-  // 2. Resolve URL: Use prop or fetch via documentId
-  React.useEffect(() => {
-    if (url) {
-      setResolvedUrl(url);
-      return;
-    }
-
-    if (documentId) {
-      setIsLoading(true);
-      fetch(`/api/documents/${documentId}/url`)
-        .then(res => {
-          if (!res.ok) throw new Error('Failed to fetch document URL');
-          return res.json();
-        })
-        .then(data => {
-          if (data.url) setResolvedUrl(data.url);
-          else throw new Error('URL not found in response');
-        })
-        .catch(err => {
-          console.error("Error fetching PDF URL:", err);
-          setError("Could not retrieve document.");
-          setIsLoading(false);
-        });
-    } else {
-        // No source provided
-        setIsLoading(false);
-        setError("No document source provided.");
-    }
-  }, [url, documentId]);
-
-  // 3. Load PDF Document
-  React.useEffect(() => {
-    const loadPdf = async () => {
-      if (!resolvedUrl) return;
-
-      setIsLoading(true);
-      setError(null);
-      try {
-        const loadingTask = pdfjs.getDocument(resolvedUrl);
-        const doc = await loadingTask.promise;
-        setPdfDoc(doc);
-      } catch (e: any) {
-        console.error("PDF Load Error:", e);
-        setError(e.message || "Failed to load PDF");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPdf();
-  }, [resolvedUrl]);
-
-  if (isLoading) {
-    return (
-        <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2 text-sm text-muted-foreground">Loading Document...</span>
-        </div>
-    );
-  }
-
-  if (error) {
-    return (
-        <div className="p-8 flex flex-col items-center justify-center h-full text-destructive">
-            <Alert variant="destructive" className="max-w-md">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>
-                    {error}
-                </AlertDescription>
-            </Alert>
-        </div>
-    );
-  }
-
-  const numPages = pdfDoc ? pdfDoc.numPages : 0;
-  const pages = Array.from({ length: numPages }, (_, i) => i + 1);
-
-  return (
-    <div className={cn("h-full w-full bg-zinc-100 dark:bg-zinc-900/50 flex flex-col", className)}>
-        <ScrollArea className="flex-1 w-full" ref={containerRef}>
-            <div className="flex flex-col items-center py-8 px-4 min-h-full">
-                {containerWidth > 0 && pages.map((pageNum) => (
-                <PdfPage 
-                    key={pageNum} 
-                    doc={pdfDoc!} 
-                    pageNum={pageNum} 
-                    width={containerWidth} 
-                    onTextSelect={onTextSelect} 
-                />
-                ))}
-            </div>
-        </ScrollArea>
-    </div>
-  );
+  return { width };
 }
-
-export default PdfViewer;

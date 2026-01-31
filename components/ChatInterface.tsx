@@ -17,8 +17,11 @@ interface ChatInterfaceProps {
   documentId?: string;
   projectId?: string;
   initialMessage?: string;
-  embedded?: boolean; // FIX: Added prop
-  className?: string; // FIX: Added prop
+  embedded?: boolean;
+  className?: string;
+  // ✅ ADDED: Props for "Highlight to Ask"
+  initialQuery?: string;
+  onQueryConsumed?: () => void;
 }
 
 interface Message {
@@ -33,7 +36,10 @@ export function ChatInterface({
   projectId, 
   initialMessage, 
   embedded = false, 
-  className 
+  className,
+  // ✅ ADDED: Destructure new props
+  initialQuery,
+  onQueryConsumed
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -45,7 +51,7 @@ export function ChatInterface({
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Initial Greeting
+  // 1. Initial Greeting
   useEffect(() => {
     if (initialMessage && messages.length === 0) {
       setMessages([{
@@ -55,9 +61,20 @@ export function ChatInterface({
         createdAt: new Date()
       }]);
     }
-  }, [initialMessage]);
+  }, [initialMessage]); // Removed messages dependency to prevent loops
 
-  // Auto-scroll
+  // ✅ ADDED: Handle "Highlight to Ask" updates
+  useEffect(() => {
+    if (initialQuery && initialQuery.trim() !== '') {
+      setInput(initialQuery);
+      // We consume the query so it doesn't loop or stick around
+      if (onQueryConsumed) {
+        onQueryConsumed();
+      }
+    }
+  }, [initialQuery, onQueryConsumed]);
+
+  // 2. Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isListening, isLoading]);
@@ -65,34 +82,30 @@ export function ChatInterface({
   // --- Voice Logic ---
   const startListening = async () => {
     try {
-      // 1. Get Audio Stream for the Visualizer
+      // Get Audio Stream for the Visualizer
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setMediaStream(stream);
       setIsListening(true);
 
-      // 2. Start Speech Recognition (Browser Native)
+      // Start Speech Recognition (Browser Native)
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
-        recognition.continuous = true;     // Keep listening even if user pauses
-        recognition.interimResults = true; // Show results as they speak
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
 
         recognition.onresult = (event: any) => {
-          let interimTranscript = '';
           let finalTranscript = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
               finalTranscript += transcript;
-            } else {
-              interimTranscript += transcript;
             }
           }
 
-          // Append final results to input
           if (finalTranscript) {
              setInput(prev => {
                 const needsSpace = prev.length > 0 && !prev.endsWith(' ');
@@ -104,12 +117,6 @@ export function ChatInterface({
         recognition.onerror = (event: any) => {
           console.error("Speech recognition error", event.error);
           stopListening();
-        };
-
-        recognition.onend = () => {
-           if (isListening) {
-             // Optional: recognition.start(); 
-           }
         };
 
         recognition.start();
@@ -155,6 +162,7 @@ export function ChatInterface({
     setIsLoading(true);
 
     try {
+      // Manual fetch (Keeping your original logic)
       const res = await fetch('/api/chat/project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,6 +186,7 @@ export function ChatInterface({
       setMessages(prev => [...prev, aiMsg]);
 
     } catch (error) {
+      console.error(error);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
@@ -193,8 +202,8 @@ export function ChatInterface({
   return (
     <div className={cn(
       "flex flex-col h-full bg-background",
-      !embedded && "border-l border-border/50", // FIX: Conditionally apply border
-      className // FIX: Apply custom classes
+      !embedded && "border-l border-border/50", 
+      className
     )}>
       
       {/* Messages Area */}

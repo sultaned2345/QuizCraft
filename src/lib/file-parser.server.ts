@@ -1,44 +1,21 @@
 // src/lib/file-parser.server.ts
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'; 
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
 import { cleanExtractedText } from '@/lib/file-parser'; 
-
-// Ensure worker is imported for PDF.js in Node environment
-import 'pdfjs-dist/legacy/build/pdf.worker.mjs';
+import pdfParse from 'pdf-parse-fork'; // ✅ Switched to Node-optimized parser
 
 export const runtime = 'nodejs';
 
 // --- Text Extraction Helpers ---
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const data = new Uint8Array(buffer);
-  
   try {
-    const loadingTask = getDocument({
-      data,
-      useSystemFonts: true, 
-      disableFontFace: true, 
-      stopAtErrors: false,
-    });
-
-    const pdfDocument = await loadingTask.promise;
-    const numPages = pdfDocument.numPages;
-    let fullText = '';
-
-    for (let i = 1; i <= numPages; i++) {
-      const page = await pdfDocument.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      fullText += pageText + '\n';
-    }
-
-    return fullText;
+    // pdf-parse-fork efficiently extracts text without needing Canvas/DOM polyfills
+    const data = await pdfParse(buffer);
+    return data.text || '';
   } catch (err: any) {
-    console.error("PDFJS Error:", err);
+    console.error("PDF Parsing Error:", err);
     throw new Error(`Failed to parse PDF: ${err.message}`);
   }
 }
@@ -68,6 +45,7 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
       const slideFile = zip.file(fileName);
       
       if (!slideFile) {
+        // Try next slide just in case (sometimes numbering skips)
         const nextFile = zip.file(`ppt/slides/slide${slideIndex + 1}.xml`);
         if(!nextFile) break;
         slideIndex++;
@@ -89,6 +67,9 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
   }
 }
 
+/**
+ * Extracts text from various file types using server-side libraries.
+ */
 export async function extractTextFromServerFile(
   file: File,
   buffer: Buffer
@@ -115,7 +96,9 @@ export async function extractTextFromServerFile(
       throw new Error(`Unsupported file type: ${fileType}. Please upload PDF, DOCX, PPTX, or TXT.`);
     }
 
+    // Validation: Ensure we actually got text
     if (!rawText || rawText.trim().length < 50) {
+      // Specific check for PDFs to trigger OCR fallback
       if ((fileNameLower.endsWith('.pdf') || fileType === 'application/pdf') && rawText.trim().length === 0) {
          throw new Error('No text found. This PDF appears to be a scanned image. Please use OCR.');
       }
@@ -126,7 +109,8 @@ export async function extractTextFromServerFile(
 
   } catch (error: any) {
     console.error("Extraction Logic Error:", error);
-    throw new Error(error.message || `Text extraction failed`);
+    // Propagate the specific error message (like "scanned image") so the route can handle it
+    throw error;
   }
 }
 

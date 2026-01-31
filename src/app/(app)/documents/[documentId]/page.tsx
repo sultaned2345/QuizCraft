@@ -16,6 +16,7 @@ import {
   Sparkles, Bot, Loader2, PenTool, Play, BookOpen
 } from "lucide-react";
 
+// Components
 import { PdfViewer } from "@/components/PdfViewer";
 import { ChatInterface } from "@/components/ChatInterface";
 import { PodcastPlayer } from "@/components/PodcastPlayer";
@@ -33,25 +34,29 @@ export default function StudyWorkspacePage() {
   const rawId = params?.documentId;
   const router = useRouter();
 
-  // Redirect invalid IDs
-  useEffect(() => {
-    if (rawId === 'undefined' || rawId === 'null') {
-      router.push('/documents');
-    }
-  }, [rawId, router]);
-  
+  // Validate ID
   const documentId = (typeof rawId === 'string' && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
   
-  // UI State
+  // Redirect if invalid
+  useEffect(() => {
+    if (!documentId) {
+      router.push('/documents');
+    }
+  }, [documentId, router]);
+  
+  // --- UI State ---
   const [isContentOpen, setIsContentOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("document");
+  
+  // --- "Highlight to Ask" State ---
+  const [initialChatQuery, setInitialChatQuery] = useState<string>("");
 
-  // Data State
+  // --- Data State ---
   const [docData, setDocData] = useState<{
     title: string;
     content: string;
     podcast?: any;
-    processingStatus?: string; // Added processing status
+    processingStatus?: string; 
   } | null>(null);
   
   const [studySet, setStudySet] = useState<StudySet>({ note: null, quiz: null, deck: null });
@@ -74,7 +79,7 @@ export default function StudyWorkspacePage() {
              title: data.file_name || "Document",
              content: data.extracted_text || "",
              podcast: data.podcast,
-             processingStatus: data.processing_status // Capture status
+             processingStatus: data.processing_status 
            });
         }
 
@@ -98,24 +103,40 @@ export default function StudyWorkspacePage() {
     }
   }, [docData?.processingStatus, refreshData]);
 
-  // Hook Integration
+  // --- Turbo Hook (For generating content manually) ---
   const { generate, isGenerating } = useTurboGenerator(documentId || '', {
     onSuccess: () => refreshData() 
   });
   
-  // Initial Load
+  // --- Initial Load ---
   useEffect(() => {
-    if (!documentId) return;
-    setIsLoading(true);
-    refreshData().finally(() => setIsLoading(false));
+    if (documentId) {
+       setIsLoading(true);
+       refreshData().finally(() => setIsLoading(false));
+    }
   }, [documentId, refreshData]);
 
-  // Helper to determine if a specific tab is generating
+  // --- Handlers ---
+
+  // 1. Highlight Text -> Send to Chat
+  const handleAskAI = (text: string) => {
+    setInitialChatQuery(`Explain this section: "${text}"`);
+    // Optionally open the chat panel if it was closed
+    // setIsContentOpen(true); 
+  };
+
+  // 2. Clear query after chat consumes it
+  const handleQueryConsumed = () => {
+    setInitialChatQuery("");
+  };
+
+  // Helper to check if a specific tab is busy
   const isTabGenerating = (tabType: string) => {
     return isGenerating || docData?.processingStatus === 'processing';
   };
 
-  // Loading State
+  // --- Render ---
+
   if (!documentId) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
@@ -142,7 +163,11 @@ export default function StudyWorkspacePage() {
              </Button>
           </div>
           <div className="flex-1 overflow-hidden relative">
-             <ChatInterface documentId={documentId} />
+             <ChatInterface 
+               documentId={documentId} 
+               initialQuery={initialChatQuery}
+               onQueryConsumed={handleQueryConsumed}
+             />
           </div>
         </ResizablePanel>
 
@@ -170,7 +195,10 @@ export default function StudyWorkspacePage() {
                 
                 {/* 1. PDF Viewer */}
                 <TabsContent value="document" className="h-full m-0 p-0">
-                  <PdfViewer documentId={documentId} />
+                  <PdfViewer 
+                    documentId={documentId} 
+                    onAskAI={handleAskAI} 
+                  />
                 </TabsContent>
                 
                 {/* 2. Notes Editor */}
