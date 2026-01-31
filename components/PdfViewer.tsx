@@ -19,12 +19,10 @@ import {
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
-// --- Debug: Log Worker Configuration ---
-// [FIX] Ensure this matches the file in your /public folder exactly.
-// Based on your package.json, it should be .mjs
-const WORKER_SRC = '/pdf.worker.mjs'; 
-pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
-console.log('[PdfViewer] Initializing Worker Src:', pdfjs.GlobalWorkerOptions.workerSrc);
+// --- Worker Configuration ---
+// [FIX] Use dynamic CDN to match the exact version of pdfjs-dist running in the bundle.
+// This prevents "Version Mismatch" errors (e.g., API v5.x vs Worker v4.x).
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PdfViewerProps {
   documentId?: string | null;
@@ -33,17 +31,12 @@ interface PdfViewerProps {
 }
 
 export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
-  // --- Debug: Log Props ---
-  useEffect(() => {
-    console.log('[PdfViewer] Props Received:', { documentId, url });
-  }, [documentId, url]);
-
   // --- State ---
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
   const [rotation, setRotation] = useState<number>(0);
-  const [loadError, setLoadError] = useState<Error | null>(null); // Track specific error
+  const [loadError, setLoadError] = useState<Error | null>(null);
   
   // Selection State for "Highlight to Ask"
   const [selection, setSelection] = useState<{
@@ -54,35 +47,22 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
 
   // --- Layout & Sizing ---
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // ✅ Custom Resize Hook (No external dependency needed)
   const { width } = useContainerWidth(containerRef);
 
   // Determine the source URL
+  // We append mode=binary to ensure our API returns the raw PDF stream
   const fileUrl = url || (documentId ? `/api/documents/${documentId}/content?mode=binary` : null);
-
-  // --- Debug: Log computed URL ---
-  useEffect(() => {
-    if (fileUrl) {
-      console.log('[PdfViewer] Attempting to load from URL:', fileUrl);
-    } else {
-      console.log('[PdfViewer] No URL available to load.');
-    }
-  }, [fileUrl]);
 
   // --- Handlers ---
   
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-    console.log('[PdfViewer] Load Success. Total Pages:', numPages);
     setNumPages(numPages);
     setPageNumber(1);
     setLoadError(null);
   }
 
   function onDocumentLoadError(error: Error) {
-    console.error('[PdfViewer] CRITICAL LOAD ERROR:', error);
-    console.error('[PdfViewer] Error Name:', error.name);
-    console.error('[PdfViewer] Error Message:', error.message);
+    console.error('[PdfViewer] Load Error:', error);
     setLoadError(error);
   }
 
@@ -91,7 +71,6 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
     const handleSelection = () => {
       const activeSelection = window.getSelection();
       
-      // If no selection or selection is empty/collapsed, hide menu
       if (!activeSelection || activeSelection.isCollapsed) {
         setSelection(null);
         return;
@@ -119,7 +98,6 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
       }
     };
 
-    // Attach listener to document so we catch selection events bubble up
     document.addEventListener('selectionchange', handleSelection);
     return () => document.removeEventListener('selectionchange', handleSelection);
   }, []);
@@ -132,7 +110,6 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
   // --- Render ---
 
   // High-DPI Scaling Logic:
-  // Render at (scale * devicePixelRatio) for sharpness, but style width at (scale * 100)%
   const pixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
 
   return (
@@ -187,34 +164,20 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
           <Document
             file={fileUrl}
             onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError} // Capture detailed error
+            onLoadError={onDocumentLoadError}
             loading={
               <div className="flex flex-col items-center gap-2 mt-20">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Loading Document...</p>
-                <p className="text-xs text-muted-foreground font-mono">{fileUrl}</p>
               </div>
             }
             error={
-               <div className="mt-20 flex flex-col items-center text-destructive max-w-lg text-center gap-4 p-6 border border-destructive/20 rounded-lg bg-destructive/5">
-                 <AlertCircle className="w-10 h-10" />
-                 <div>
-                   <p className="font-semibold text-lg">Failed to load PDF</p>
-                   {loadError && (
-                     <div className="mt-2 text-left bg-white/50 p-2 rounded text-xs font-mono overflow-auto max-h-32 border border-destructive/10">
-                       <p><strong>Error:</strong> {loadError.message}</p>
-                       <p><strong>Name:</strong> {loadError.name}</p>
-                     </div>
-                   )}
-                 </div>
-                 <div className="text-xs text-muted-foreground space-y-1 text-left w-full">
-                   <p><strong>Troubleshooting:</strong></p>
-                   <ul className="list-disc list-inside">
-                     <li>Check Browser Console (F12) for network errors (404/500).</li>
-                     <li>Verify worker file exists at: <code>{WORKER_SRC}</code></li>
-                     <li>Ensure API returns binary PDF, not JSON.</li>
-                   </ul>
-                 </div>
+               <div className="mt-20 flex flex-col items-center text-destructive max-w-sm text-center gap-2 p-4">
+                 <AlertCircle className="w-8 h-8" />
+                 <p className="font-medium">Failed to load PDF</p>
+                 <p className="text-xs text-muted-foreground">
+                   {loadError?.message || "The file might be corrupted or missing."}
+                 </p>
                </div>
             }
             className="shadow-2xl"
@@ -223,13 +186,11 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
               pageNumber={pageNumber} 
               scale={scale} 
               rotate={rotation}
-              // Enhances sharpness on retina screens
               devicePixelRatio={pixelRatio} 
-              // Limits render width to container (prevent huge horizontal scroll)
               width={width ? Math.min(width * 0.95, 1000) : undefined} 
               className="bg-white shadow-lg"
-              renderTextLayer={true} // Essential for selection
-              renderAnnotationLayer={true} // Essential for links
+              renderTextLayer={true}
+              renderAnnotationLayer={true}
               loading={
                 <div className="h-[800px] w-[600px] bg-white animate-pulse rounded shadow-lg" />
               }
@@ -248,17 +209,16 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
           className="fixed z-50 animate-in fade-in zoom-in duration-200"
           style={{ 
             left: selection.x, 
-            top: selection.y - 50, // Position slightly above the text
+            top: selection.y - 50,
             transform: 'translateX(-50%)' 
           }}
         >
           <Button 
             size="sm" 
             onClick={() => {
-              console.log('[PdfViewer] Asking AI about:', selection.text);
               if (onAskAI) onAskAI(selection.text);
-              setSelection(null); // Close menu
-              window.getSelection()?.removeAllRanges(); // Deselect visual text
+              setSelection(null);
+              window.getSelection()?.removeAllRanges();
             }}
             className="rounded-full shadow-xl bg-primary text-primary-foreground hover:scale-105 transition-all gap-2"
           >
@@ -266,7 +226,6 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
             Ask AI
           </Button>
           
-          {/* Tooltip Arrow */}
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-primary" />
         </div>
       )}
@@ -275,7 +234,7 @@ export function PdfViewer({ documentId, url, onAskAI }: PdfViewerProps) {
   );
 }
 
-// --- Internal Helper Hook (No External Dependency) ---
+// --- Internal Helper Hook ---
 function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
   const [width, setWidth] = useState<number>(0);
 
@@ -285,7 +244,6 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
     const observer = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       setWidth(entries[0].contentRect.width);
-      // console.log('[PdfViewer] Container Resized:', entries[0].contentRect.width); // Uncomment if layout issues occur
     });
 
     observer.observe(ref.current);
