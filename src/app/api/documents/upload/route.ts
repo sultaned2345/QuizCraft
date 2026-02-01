@@ -1,7 +1,9 @@
+// src/app/api/documents/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { extractTextFromFile } from '@/lib/file-parser.server';
+// [FIX] Updated import to match the new robust server parser
+import { extractTextFromServerFile } from '@/lib/file-parser.server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
@@ -26,8 +28,9 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) throw new Error("Storage upload failed");
 
-    // 2. Extract Text
-    const text = await extractTextFromFile(file, buffer);
+    // 2. Extract Text (Using the fixed function)
+    const text = await extractTextFromServerFile(file, buffer);
+    
     if (!text) {
       await supabaseAdmin.storage.from('documents').remove([storagePath]);
       return NextResponse.json({ error: 'Failed to extract text' }, { status: 400 });
@@ -49,7 +52,6 @@ export async function POST(req: NextRequest) {
       });
 
       // Create Jobs (Note, Quiz, Flashcards)
-      // This tells the backend worker what to do
       await tx.generation_jobs.createMany({
         data: ['note', 'quiz', 'flashcard'].map(type => ({
           user_id: user.id,
@@ -62,8 +64,7 @@ export async function POST(req: NextRequest) {
       return doc;
     });
 
-    // 4. Trigger Background Worker (Fire and Forget)
-    // We send a request to our own API to start processing the jobs we just created.
+    // 4. Trigger Background Worker
     const workerUrl = new URL('/api/generation-jobs/start', req.url);
     fetch(workerUrl.toString(), {
       method: 'POST',
@@ -71,10 +72,10 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ documentId: result.id })
     }).catch(err => console.error("Worker trigger failed:", err));
 
-    // 5. Return ID immediately so frontend can redirect
+    // 5. Return ID
     return NextResponse.json({ 
       success: true, 
-      documentId: result.id, // Flat ID for easy frontend access
+      documentId: result.id, 
       message: "Upload successful. Processing started." 
     });
 
