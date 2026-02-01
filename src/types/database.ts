@@ -100,9 +100,18 @@ export interface DocumentMetadata {
 }
 
 // --- Graded Essay Types ---
+
+export interface RubricSettings {
+  academicLevel: 'High School' | 'Undergraduate' | 'Graduate';
+  tone: 'Formal' | 'Creative' | 'Persuasive' | 'Analytical';
+  strictness: 'Lenient' | 'Standard' | 'Strict';
+}
+
 export interface EssayFeedbackHighlight {
   text: string;
   comment: string;
+  type?: 'error' | 'warning' | 'praise' | 'neutral'; // For UI color coding
+  replacement?: string; // For "Fix It" functionality
 }
 
 export interface EssayFeedbackCategory {
@@ -116,7 +125,12 @@ export interface GradedEssayFeedback {
   argument?: EssayFeedbackCategory | string;
   grammar?: EssayFeedbackCategory | string;
   summary: string;
-  [key: string]: EssayFeedbackCategory | string | undefined;
+  thesis?: {
+    detected: boolean;
+    statement?: string;
+    critique?: string;
+  };
+  [key: string]: EssayFeedbackCategory | string | object | undefined;
 }
 
 export type GenericJsonValue =
@@ -141,6 +155,7 @@ export interface GradedEssay {
 export interface GradeEssayData {
   essayText: string;
   rubricText?: string;
+  rubricSettings?: RubricSettings;
   essayTitle?: string;
 }
 
@@ -384,7 +399,6 @@ export interface Database {
           similarity: number;
         }[];
       };
-      // FIX: Added missing match_related_content definition
       match_related_content: {
         Args: {
           query_embedding: number[];

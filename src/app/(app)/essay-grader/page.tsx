@@ -2,26 +2,29 @@
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { 
-    Loader2, Sparkles, FileSignature, Upload, FileText, AlertCircle, 
-    Info, History, Eye, CheckCircle, Star, RefreshCw,
-    Scale, PenSquare
+    Loader2, Sparkles, AlertCircle, 
+    CheckCircle, Star, RefreshCw,
+    Scale, PenSquare, Minimize2, Maximize2,
+    BookOpen, Gavel
 } from 'lucide-react';
-import { ApiResponse, GradeEssayResponseData, GradedEssayFeedback, GradedEssay } from '@/types/database';
-import { Input } from '@/components/ui/input';
-import { formatFileSize } from '@/lib/file-parser';
+import { 
+    ApiResponse, 
+    GradeEssayResponseData, 
+    GradedEssayFeedback, 
+    GradedEssay, 
+    RubricSettings, 
+    EssayFeedbackHighlight,
+    EssayFeedbackCategory
+} from '@/types/database';
 import { usePageContext } from '@/contexts/PageContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUpgradeModal } from '@/components/UpgradeModalContext';
@@ -32,14 +35,18 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+// --- Types ---
 type GradedEssayListItem = Pick<GradedEssay, 'id' | 'essay_title' | 'score' | 'graded_at'>;
-
-const rubricPresets = {
-    general: { name: "General", rubric: "Evaluate based on standard academic criteria: Clarity (Is the point clear?), Argument (Is the logic sound?), and Grammar (Are there errors?)." },
-    persuasive: { name: "Persuasive", rubric: "Evaluate this as a persuasive essay. Focus on: (1) The strength and clarity of the thesis statement, (2) The quality and relevance of supporting evidence, (3) The effectiveness of the counter-argument and rebuttal, and (4) The overall rhetorical impact." },
-    admission: { name: "Admission", rubric: "Evaluate this as a college admission essay. Focus on: (1) A compelling personal narrative, (2) A strong and unique authorial voice, (3) Clarity of thought and structure, and (4) Flawless grammar and style." }
-};
 
 interface AIUsageStatus {
     currentCount: number | undefined;
@@ -54,28 +61,61 @@ const countWords = (text: string): number => {
   return text.trim().split(/\s+/).length;
 };
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) {
-    return (
-      <div className="text-center mb-6">
-        <h3 className="text-sm font-medium text-muted-foreground mb-1">Estimated Score</h3>
-        <p className="text-4xl font-bold">N/A</p>
-      </div>
-    );
-  }
-  let colorClass = 'text-gray-600 dark:text-gray-400';
-  if (score >= 90) colorClass = 'text-green-600 dark:text-green-500';
-  else if (score >= 80) colorClass = 'text-blue-600 dark:text-blue-500';
-  else if (score >= 70) colorClass = 'text-yellow-600 dark:text-yellow-500';
-  else colorClass = 'text-red-600 dark:text-red-500';
+// --- Components ---
+
+function ScoreGauge({ score }: { score: number | null }) {
+  if (score === null) return null;
+  
+  // Calculate color
+  let color = '#ef4444'; // red-500
+  if (score >= 90) color = '#22c55e'; // green-500
+  else if (score >= 80) color = '#3b82f6'; // blue-500
+  else if (score >= 70) color = '#eab308'; // yellow-500
+
+  // SVG Gauge Logic
+  const radius = 70;
+  const stroke = 12;
+  const normalizedRadius = radius - stroke * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="text-center mb-6">
-      <h3 className="text-sm font-medium text-muted-foreground mb-1">Estimated Score</h3>
-      <p className={cn("text-6xl font-bold", colorClass)}>
-        {score}
-        <span className="text-4xl text-muted-foreground">/100</span>
-      </p>
+    <div className="flex flex-col items-center justify-center py-6">
+      <div className="relative flex items-center justify-center">
+        <svg
+          height={radius * 2}
+          width={radius * 2}
+          className="rotate-[-90deg] transition-all duration-1000 ease-out"
+        >
+           {/* Background Circle */}
+          <circle
+            stroke="#e5e7eb"
+            strokeWidth={stroke}
+            fill="transparent"
+            r={normalizedRadius}
+            cx={radius}
+            cy={radius}
+            className="dark:stroke-slate-800"
+          />
+          {/* Progress Circle */}
+          <circle
+            stroke={color}
+            strokeWidth={stroke}
+            strokeDasharray={circumference + ' ' + circumference}
+            style={{ strokeDashoffset }}
+            strokeLinecap="round"
+            fill="transparent"
+            r={normalizedRadius}
+            cx={radius}
+            cy={radius}
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
+        <div className="absolute flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
+            <span className="text-4xl font-bold" style={{ color }}>{score}</span>
+            <span className="text-xs text-muted-foreground uppercase font-semibold">Score</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -83,23 +123,27 @@ function ScoreBadge({ score }: { score: number | null }) {
 export default function EssayGraderPage() {
   const [essayText, setEssayText] = useState('');
   const [rubricText, setRubricText] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
+  const [rubricSettings, setRubricSettings] = useState<RubricSettings>({
+      academicLevel: 'Undergraduate',
+      tone: 'Formal',
+      strictness: 'Standard'
+  });
+  
   const [isLoading, setIsLoading] = useState(false);
   const [gradedEssay, setGradedEssay] = useState<GradeEssayResponseData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outputTab, setOutputTab] = useState<'feedback' | 'history'>('feedback');
   const [wordCount, setWordCount] = useState(0);
+  const [activeHighlight, setActiveHighlight] = useState<string | null>(null); // Text of the highlight currently focused
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const { session } = useAuth();
   const { toast } = useToast();
   const { setPageContext } = usePageContext();
-  const router = useRouter();
   const { openModal } = useUpgradeModal();
 
   const { 
     data: aiUsage, 
-    error: usageError, 
     isLoading: isUsageLoading,
     mutate: mutateUsage
   } = useSWR<AIUsageStatus>(
@@ -112,18 +156,15 @@ export default function EssayGraderPage() {
   );
 
   const { 
-    data: historyData, // Renamed to indicate it might be raw data
-    error: historyError, 
+    data: historyData, 
     isLoading: isHistoryLoading,
     mutate: mutateHistory
-  } = useSWR<GradedEssayListItem[]>( // FIX: Simplified generic type
+  } = useSWR<GradedEssayListItem[]>( 
     session ? '/api/graded-essays' : null,
-    // FIX: Unwrap response to guarantee GradedEssayListItem[] return type
     (url: string) => fetcher<GradedEssayListItem[]>(url, { headers: { 'Authorization': `Bearer ${session!.access_token}` } }).then(res => res.data || []), 
     { revalidateOnFocus: true }
   );
 
-  // FIX: historyData is now guaranteed to be an array (or undefined while loading), so we can use it directly
   const history: GradedEssayListItem[] = historyData || [];
   
   useEffect(() => {
@@ -135,53 +176,34 @@ export default function EssayGraderPage() {
     return () => setPageContext(null);
   }, [gradedEssay, setPageContext]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-     const file = e.target.files?.[0];
-     if (file) {
-       setError(null);
-       const maxSize = 3 * 1024 * 1024; // 3MB
-       const isValidMime = ['application/pdf', 'text/plain'].includes(file.type);
-       const isValidExt = ['.pdf', '.txt'].some(ext => file.name.toLowerCase().endsWith(ext));
-       if (!isValidMime && !isValidExt) {
-         setError("Invalid file type. PDF/TXT only.");
-         setSelectedFile(null);
-         if (e.target) e.target.value = '';
-         return;
-       }
-       if (file.size > maxSize) {
-         setError(`File exceeds 3MB (${formatFileSize(file.size)}). For larger files, use the Documents page.`);
-         setSelectedFile(null);
-         if (e.target) e.target.value = '';
-         return;
-       }
-       setSelectedFile(file);
-       setEssayText('');
-       setWordCount(0); 
-       setGradedEssay(null);
-       setOutputTab('history');
-     } else {
-       setSelectedFile(null);
-     }
-   };
-   
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
      const newText = e.target.value;
      const newWordCount = countWords(newText);
-     
      setEssayText(newText);
      setWordCount(newWordCount);
      
-     if(selectedFile) setSelectedFile(null); 
-     setGradedEssay(null);
-     setOutputTab('history');
+     // Reset results if user starts typing heavily
+     if (gradedEssay && Math.abs(newWordCount - countWords(gradedEssay.essay_content)) > 20) {
+        setGradedEssay(null); 
+     }
 
      if (newWordCount > WORD_LIMIT) {
        setError(`Word limit exceeded: ${newWordCount} / ${WORD_LIMIT} words.`);
-     } else if (error && error.startsWith('Word limit exceeded')) {
-       setError(null);
-     } else if (error && error.startsWith('Essay text is too short')) {
+     } else {
        setError(null);
      }
+   };
+   
+   const applyFix = (original: string, replacement: string) => {
+       if (!essayText.includes(original)) {
+           toast({ title: "Error", description: "Could not find original text to replace.", variant: "destructive" });
+           return;
+       }
+       // Replace only the first occurrence to avoid destroying subsequent text if the phrase is repeated
+       const newText = essayText.replace(original, replacement);
+       setEssayText(newText);
+       setWordCount(countWords(newText));
+       toast({ title: "Fix Applied", description: "Essay updated successfully." });
    };
 
   const handleViewHistoryItem = async (essayId: string) => {
@@ -189,8 +211,6 @@ export default function EssayGraderPage() {
     setIsLoading(true);
     setError(null);
     setGradedEssay(null);
-    setEssayText('');
-    setSelectedFile(null);
     setOutputTab('feedback');
     
     try {
@@ -198,13 +218,14 @@ export default function EssayGraderPage() {
             `/api/graded-essays/${essayId}`, 
             { headers: { 'Authorization': `Bearer ${session.access_token}` } }
         );
-        
-        // Unwrap if it's wrapped in 'data'
         const resultData: GradedEssay = result.data || result;
         
+        // Safe cast for feedback
+        const feedbackData = resultData.feedback as unknown as GradedEssayFeedback;
+
         const responseData: GradeEssayResponseData = {
             id: resultData.id,
-            feedback: resultData.feedback as GradedEssayFeedback,
+            feedback: feedbackData,
             score: resultData.score,
             suggestions: (resultData.feedback as any)?.suggestions || [],
             graded_at: resultData.graded_at,
@@ -216,11 +237,11 @@ export default function EssayGraderPage() {
         setRubricText(resultData.rubric_or_criteria || '');
         setWordCount(countWords(resultData.essay_content)); 
         
-        toast({ title: "History Loaded", description: `Displaying feedback for "${resultData.essay_title || 'graded essay'}".` });
+        toast({ title: "History Loaded", description: `Loaded "${resultData.essay_title || 'graded essay'}".` });
 
     } catch (err: any) {
-        setError(err.message || 'An unexpected error occurred while fetching history.');
-        toast({ title: "Failed to Load History", description: err.message, variant: "destructive" });
+        setError(err.message || 'Failed to fetch history.');
+        toast({ title: "Error", description: err.message, variant: "destructive" });
         setOutputTab('history');
     } finally {
         setIsLoading(false);
@@ -228,20 +249,16 @@ export default function EssayGraderPage() {
   };
 
   const handleSubmit = async () => {
-    if (inputMode === 'text' && wordCount > WORD_LIMIT) {
-        setError(`Word limit exceeded: ${wordCount} / ${WORD_LIMIT} words.`);
+    if (wordCount > WORD_LIMIT) {
+        setError(`Word limit exceeded.`);
         return;
     }
-    if ((inputMode === 'text' && !essayText.trim()) || (inputMode === 'file' && !selectedFile)) {
-      setError('Please provide an essay by pasting text or uploading a file.');
-      return;
-    }
-    if (essayText.trim().length > 0 && essayText.trim().length < 50) {
-       setError('Pasted essay text is too short (minimum 50 characters required).');
+    if (essayText.trim().length < 50) {
+       setError('Essay text is too short (min 50 chars).');
        return;
     }
     if (!session) {
-      toast({ title: "Authentication Error", description: "Please log in again.", variant: "destructive" });
+      toast({ title: "Login Required", description: "Please log in.", variant: "destructive" });
       return;
     }
     
@@ -250,421 +267,411 @@ export default function EssayGraderPage() {
     setGradedEssay(null);
 
     try {
-      let response: Response;
-      const headers: HeadersInit = { 'Authorization': `Bearer ${session.access_token}` };
-      let requestBody: BodyInit;
-      if (inputMode === 'file' && selectedFile) {
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        if (rubricText.trim()) formData.append('rubricText', rubricText.trim());
-        requestBody = formData;
-      } else {
-        headers['Content-Type'] = 'application/json';
-        const body: { essayText: string; rubricText?: string } = { essayText: essayText.trim() };
-        if (rubricText.trim()) body.rubricText = rubricText.trim();
-        requestBody = JSON.stringify(body);
-      }
-      response = await fetch('/api/grade-essay', { method: 'POST', headers: headers, body: requestBody });
+      const response = await fetch('/api/grade-essay', { 
+          method: 'POST', 
+          headers: { 
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+          }, 
+          body: JSON.stringify({ 
+              essayText: essayText.trim(),
+              rubricText: rubricText.trim(),
+              rubricSettings
+          }) 
+      });
+
       const result: ApiResponse<GradeEssayResponseData> = await response.json();
+      
       if (!response.ok || !result.success || !result.data) {
         if (result.error === 'limit_exceeded') {
           openModal();
-          throw new Error(result.message || 'AI generation limit reached.');
+          throw new Error('AI generation limit reached.');
         }
-         if (result.error?.includes("too short")) { throw new Error("The essay content is too short (minimum 50 characters required). Please provide more text."); }
-         if (result.error?.includes("word limit exceeded")) {
-             throw new Error(result.error);
-         }
-        throw new Error(result.error || `Grading failed. Status: ${response.status}`);
+        throw new Error(result.error || `Grading failed.`);
       }
       
       setGradedEssay(result.data);
       setOutputTab('feedback');
-      toast({ title: "Feedback Generated", description: "Your essay feedback is ready." });
-      
       mutateHistory();
       mutateUsage();
       
     } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred during grading.';
-      if (!errorMessage.includes('limit reached')) {
-        setError(errorMessage);
-        toast({ title: "Grading Failed", description: errorMessage, variant: "destructive" });
-      }
+      setError(err.message);
+      toast({ title: "Grading Failed", description: err.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
   
-  const renderHighlightedEssay = (text: string, feedback: GradedEssayFeedback) => {
-    const categories: ('clarity' | 'argument' | 'grammar')[] = ['clarity', 'argument', 'grammar'];
-    let parts: (string | React.ReactNode)[] = [text];
-    const colors = {
-        clarity: 'bg-blue-200 dark:bg-blue-900/50',
-        argument: 'bg-yellow-200 dark:bg-yellow-900/50',
-        grammar: 'bg-red-200 dark:bg-red-900/50',
-    };
-    categories.forEach(cat => {
-        const categoryData = feedback[cat];
-        if (typeof categoryData === 'object' && categoryData?.highlights) { // Added optional chaining
-            categoryData.highlights.forEach((highlight, index) => {
-                let newParts: (string | React.ReactNode)[] = [];
-                parts.forEach(part => {
-                    if (typeof part !== 'string') {
-                        newParts.push(part);
-                        return;
-                    }
-                    const splitText = part.split(highlight.text);
-                    if (splitText.length > 1) {
-                        for (let i = 0; i < splitText.length - 1; i++) {
-                            newParts.push(splitText[i]);
-                            newParts.push(
-                                <TooltipProvider key={`${cat}-${index}-${i}`} delayDuration={100}>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <mark className={cn("rounded px-0.5 py-0.5 cursor-pointer", colors[cat])}>
-                                                {highlight.text}
-                                            </mark>
-                                        </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs">
-                                            <p className="font-semibold capitalize">{cat}</p>
-                                            <p>{highlight.comment}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            );
-                        }
-                        newParts.push(splitText[splitText.length - 1]);
-                    } else {
-                        newParts.push(part);
-                    }
-                });
-                parts = newParts;
-            });
-        }
-    });
-    return <pre className="text-sm whitespace-pre-wrap break-words p-4">{parts.map((part, i) => <Fragment key={i}>{part}</Fragment>)}</pre>;
+  // --- Render Helpers ---
+
+  // Highlight Text in Editor
+  const HighlightedTextDisplay = () => {
+      if (!gradedEssay) return <pre className="whitespace-pre-wrap font-serif text-lg leading-relaxed">{essayText}</pre>;
+
+      const categories: ('clarity' | 'argument' | 'grammar' | 'strengths')[] = ['clarity', 'argument', 'grammar', 'strengths'];
+      let parts: (string | React.ReactNode)[] = [essayText];
+
+      const colors: Record<string, string> = {
+          clarity: 'bg-blue-100 dark:bg-blue-900/40 border-b-2 border-blue-400',
+          argument: 'bg-yellow-100 dark:bg-yellow-900/40 border-b-2 border-yellow-400',
+          grammar: 'bg-red-100 dark:bg-red-900/40 border-b-2 border-red-400',
+          strengths: 'bg-green-100 dark:bg-green-900/40 border-b-2 border-green-400',
+      };
+
+      categories.forEach(cat => {
+          // Explicit cast to ensure TS knows we are accessing a valid key
+          const catData = gradedEssay.feedback[cat as keyof GradedEssayFeedback];
+          
+          if (typeof catData === 'object' && catData && 'highlights' in catData && Array.isArray(catData.highlights)) {
+              (catData as EssayFeedbackCategory).highlights.forEach((h: EssayFeedbackHighlight) => {
+                  let newParts: (string | React.ReactNode)[] = [];
+                  parts.forEach(part => {
+                      if (typeof part !== 'string') { newParts.push(part); return; }
+                      
+                      const split = part.split(h.text);
+                      if (split.length > 1) {
+                          newParts.push(split[0]);
+                          newParts.push(
+                              <mark 
+                                key={`${cat}-${h.text.substring(0,10)}`}
+                                className={cn(
+                                    "cursor-pointer rounded px-0.5 transition-colors", 
+                                    colors[cat],
+                                    activeHighlight === h.text ? "ring-2 ring-offset-1 ring-primary" : ""
+                                )}
+                                onClick={() => setActiveHighlight(h.text)}
+                              >
+                                  {h.text}
+                              </mark>
+                          );
+                          newParts.push(split.slice(1).join(h.text)); 
+                      } else {
+                          newParts.push(part);
+                      }
+                  });
+                  parts = newParts;
+              });
+          }
+      });
+
+      return <div className="font-serif text-lg leading-relaxed whitespace-pre-wrap">{parts.map((p, i) => <Fragment key={i}>{p}</Fragment>)}</div>;
   };
 
-  const renderFeedback = (fb: GradedEssayFeedback | undefined | null) => {
-    if (!fb) return null;
-    const categories: {
-      key: 'strengths' | 'clarity' | 'argument' | 'grammar';
-      icon: React.ReactNode;
-    }[] = [
-      { key: 'strengths', icon: <Star className="w-4 h-4 text-yellow-500" /> },
-      { key: 'clarity', icon: <CheckCircle className="w-4 h-4 text-blue-500" /> },
-      { key: 'argument', icon: <Scale className="w-4 h-4 text-green-500" /> },
-      { key: 'grammar', icon: <PenSquare className="w-4 h-4 text-red-500" /> },
-    ];
-    
-    return (
-      <div className="space-y-4">
-        {fb.summary && (
-          <div className="mb-4 p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-semibold text-base mb-1">Overall Summary</h4>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{fb.summary}</p>
-          </div>
-        )}
-        <Accordion 
-          type="multiple" 
-          defaultValue={['strengths', 'clarity', 'argument', 'grammar']} 
-          className="w-full"
-        >
-          {categories.map(({ key, icon }) => {
-            const data = fb[key];
-            if (!data) return null;
-            if (typeof data === 'object' && data.summary) {
-              return (
-                <AccordionItem value={key} key={key}>
-                  <AccordionTrigger className="text-base font-semibold capitalize">
-                    <span className="flex items-center gap-2">{icon} {key}</span>
-                  </AccordionTrigger>
-                  <AccordionContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">"{data.summary}"</p>
-                    {/* FIX: Ensure highlights is an array before mapping */}
-                    {Array.isArray(data.highlights) && data.highlights.length > 0 && (
-                      <Accordion 
-                        type="single" 
-                        collapsible 
-                        defaultValue="item-1"
-                        className="w-full pt-2"
-                      >
-                        <AccordionItem value="item-1" className="border-none">
-                          <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline py-1 justify-start gap-1 font-medium">
-                            Show {data.highlights.length} annotated example(s)
-                          </AccordionTrigger>
-                          <AccordionContent className="pt-2">
-                            <ul className="space-y-2">
-                              {data.highlights.map((h, i) => (
-                                <li key={i} className="text-xs border-l-2 pl-3 py-1 border-border/50">
-                                  <blockquote className="font-mono text-foreground p-2 bg-muted rounded">"{h.text}"</blockquote>
-                                  <p className="text-muted-foreground mt-1">&rarr; {h.comment}</p>
-                                </li>
+  // Feedback Cards Side Panel
+  const FeedbackSidebar = () => {
+      if (!gradedEssay) return null;
+      const { feedback } = gradedEssay;
+      const categories = [
+        { id: 'strengths', label: 'Strengths', icon: <Star className="w-4 h-4 text-green-500" /> },
+        { id: 'clarity', label: 'Clarity', icon: <CheckCircle className="w-4 h-4 text-blue-500" /> },
+        { id: 'argument', label: 'Argument', icon: <Scale className="w-4 h-4 text-yellow-500" /> },
+        { id: 'grammar', label: 'Grammar', icon: <PenSquare className="w-4 h-4 text-red-500" /> },
+      ];
+
+      return (
+          <ScrollArea className="h-full pr-4">
+              <div className="space-y-6 pb-10">
+                  {/* Thesis Alert */}
+                  {feedback.thesis && (
+                      <Alert variant={feedback.thesis.detected ? "default" : "destructive"} className="border-l-4">
+                          <BookOpen className="h-4 w-4" />
+                          <AlertTitle>Thesis Statement {feedback.thesis.detected ? "Detected" : "Missing"}</AlertTitle>
+                          <AlertDescription className="text-sm mt-2">
+                             {feedback.thesis.detected ? (
+                                 <div className="space-y-2">
+                                     <div className="italic bg-muted/50 p-2 rounded text-xs border-l-2 border-primary">"{feedback.thesis.statement}"</div>
+                                     <p>{feedback.thesis.critique}</p>
+                                 </div>
+                             ) : (
+                                 "The AI could not clearly identify your thesis statement. Ensure your introduction ends with a strong, arguable claim."
+                             )}
+                          </AlertDescription>
+                      </Alert>
+                  )}
+
+                  {/* Summary */}
+                  <div className="bg-muted/30 p-4 rounded-lg border">
+                      <h4 className="font-semibold mb-2">Editor's Summary</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{feedback.summary}</p>
+                  </div>
+
+                  {/* Categories */}
+                  {categories.map(cat => {
+                      const data = feedback[cat.id as keyof GradedEssayFeedback];
+                      
+                      // Type guard to ensure data is an object with highlights
+                      if (!data || typeof data !== 'object' || !('highlights' in data) || !Array.isArray(data.highlights) || data.highlights.length === 0) return null;
+
+                      const categoryData = data as EssayFeedbackCategory;
+
+                      return (
+                          <div key={cat.id} className="space-y-3">
+                              <h3 className="font-semibold flex items-center gap-2 text-sm uppercase tracking-wider text-muted-foreground border-b pb-1">
+                                  {cat.icon} {cat.label}
+                              </h3>
+                              {categoryData.summary && <p className="text-xs italic text-muted-foreground mb-2">"{categoryData.summary}"</p>}
+                              
+                              {categoryData.highlights.map((h, idx) => (
+                                  <Card 
+                                    key={idx} 
+                                    className={cn(
+                                        "transition-all cursor-pointer border-l-4 hover:shadow-md",
+                                        activeHighlight === h.text ? "ring-1 ring-primary border-l-primary" : "border-l-transparent",
+                                        cat.id === 'grammar' ? "hover:border-l-red-400" : 
+                                        cat.id === 'clarity' ? "hover:border-l-blue-400" :
+                                        cat.id === 'strengths' ? "hover:border-l-green-400" : "hover:border-l-yellow-400"
+                                    )}
+                                    onClick={() => setActiveHighlight(h.text)}
+                                  >
+                                      <CardContent className="p-3 space-y-2">
+                                          <div className="text-xs font-mono bg-muted/50 p-1.5 rounded truncate">
+                                              "{h.text}"
+                                          </div>
+                                          <p className="text-sm">{h.comment}</p>
+                                          
+                                          {/* Apply Fix Button */}
+                                          {h.replacement && (
+                                              <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="w-full text-xs h-7 gap-1 mt-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 hover:text-green-800 border-green-200 dark:border-green-800"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    applyFix(h.text, h.replacement!);
+                                                }}
+                                              >
+                                                  <RefreshCw className="w-3 h-3" /> Fix: "{h.replacement}"
+                                              </Button>
+                                          )}
+                                      </CardContent>
+                                  </Card>
                               ))}
-                            </ul>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              );
-            }
-            if (typeof data === 'string') {
-               return (
-                 <AccordionItem value={key} key={key}>
-                    <AccordionTrigger className="text-base font-semibold capitalize">
-                       <span className="flex items-center gap-2">{icon} {key.replace(/_/g, ' ')}</span>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{data}</p>
-                    </AccordionContent>
-                 </AccordionItem>
-               );
-            }
-            return null;
-          })}
-        </Accordion>
-      </div>
-    );
+                          </div>
+                      );
+                  })}
+              </div>
+          </ScrollArea>
+      );
   };
-  
+
   const isOverLimit = !isUsageLoading && aiUsage && aiUsage.limit !== Infinity && (aiUsage.currentCount ?? 0) >= (aiUsage.limit ?? Infinity);
-  const isOverTextLimit = inputMode === 'text' && (wordCount > WORD_LIMIT || !essayText.trim());
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <h1 className="text-3xl font-bold">Essay Grader</h1>
-          <div className="text-sm text-muted-foreground">
-              {isUsageLoading ? (
-                  <span className="flex items-center gap-1"><Loader2 className="h-4 w-4 animate-spin" /> Checking AI usage...</span>
-              ) : usageError ? (
-                  <span className="text-destructive">Could not load AI usage.</span>
-              ) : aiUsage ? (
-                  aiUsage.isPro ? (
-                      <span className="font-medium text-primary flex items-center gap-1"><Star className="w-4 h-4" /> Pro Plan: Unlimited AI Generations</span>
-                  ) : (
-                      <span>
-                          AI Generations: <span className="font-medium text-foreground">{aiUsage.currentCount ?? '?'} / {aiUsage.limit}</span>
-                      </span>
-                  )
-              ) : null}
-          </div>
-      </div>
-      
-      <ResizablePanelGroup
-        direction="horizontal"
-        className="flex-1 rounded-lg border overflow-hidden"
-      >
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <ScrollArea className="h-full">
-            <div className="lg:col-span-1 space-y-6 p-4">
-              <Card>
-                  <CardHeader>
-                      <CardTitle>Your Essay</CardTitle>
-                      <CardDescription>Paste text or upload a file (PDF/TXT, Max 3MB).</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <div className="flex justify-center mb-4 border border-input rounded-lg p-1 w-min mx-auto bg-background">
-                          <Button variant={inputMode === "text" ? "secondary" : "ghost"} onClick={() => { setInputMode("text"); setSelectedFile(null); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 sm:mr-2" />Text</Button>
-                          <Button variant={inputMode === "file" ? "secondary" : "ghost"} onClick={() => { setInputMode("file"); setEssayText(''); setWordCount(0); setError(null); setGradedEssay(null);}} className="w-28 h-8 text-xs sm:text-sm"><Upload className="w-4 h-4 mr-1 sm:mr-2" />File</Button>
-                      </div>
-                      {inputMode === 'text' && (
-                          <div className="relative">
-                              <Textarea
-                                  placeholder="Paste your essay here..."
-                                  value={essayText}
-                                  onChange={handleTextChange}
-                                  className={cn(
-                                      "min-h-[250px] text-base border rounded-md",
-                                      wordCount > WORD_LIMIT ? "border-destructive focus-visible:ring-destructive" : ""
-                                  )}
-                                  disabled={isLoading}
-                              />
-                              <p className={cn(
-                                  "text-xs text-right mt-1.5",
-                                  wordCount > WORD_LIMIT ? "text-destructive" : "text-muted-foreground"
-                              )}>
-                                  {wordCount} / {WORD_LIMIT} words
-                              </p>
-                          </div>
-                      )}
-                      {inputMode === 'file' && (
-                          <div className="space-y-2">
-                              <Label htmlFor="file-upload" className="sr-only">Upload Essay File</Label>
-                              <Input
-                                  id="file-upload"
-                                  type="file"
-                                  accept=".pdf,.txt,application/pdf,text/plain" 
-                                  onChange={handleFileChange}
-                                  disabled={isLoading}
-                                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border rounded-md"
-                                />
-                                {selectedFile && <p className="text-xs text-muted-foreground truncate pt-1">Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})</p>}
-                          </div>
-                      )}
-                  </CardContent>
-              </Card>
-              <Card>
-                  <CardHeader>
-                      <CardTitle>Grading Criteria (Optional)</CardTitle>
-                      <CardDescription>Provide specific instructions or a rubric for the AI.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <Textarea
-                          placeholder="e.g., Focus on the use of historical evidence. Grade based on clarity (40%), argument (40%), grammar (20%)..."
-                          value={rubricText}
-                          onChange={(e) => setRubricText(e.target.value)}
-                          className="min-h-[100px] border rounded-md"
-                          disabled={isLoading}
-                      />
-                      <div className="mt-2 flex flex-wrap gap-2">
-                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.general.rubric)}>
-                              {rubricPresets.general.name}
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.persuasive.rubric)}>
-                              {rubricPresets.persuasive.name}
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" className="text-xs h-7" onClick={() => setRubricText(rubricPresets.admission.rubric)}>
-                              {rubricPresets.admission.name}
-                          </Button>
-                      </div>
-                  </CardContent>
-              </Card>
-              {error && (
-                  <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                      <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                      <span>{error}</span>
+    <div className={cn("flex flex-col h-full overflow-hidden transition-all duration-300", isFocusMode ? "bg-background fixed inset-0 z-50 p-4" : "")}>
+      {/* Header */}
+      {!isFocusMode && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                  <PenSquare className="w-8 h-8" /> Essay Grader
+              </h1>
+              <div className="flex items-center gap-4">
+                   {/* Usage Badge */}
+                  <div className="text-sm text-muted-foreground hidden md:block">
+                    {aiUsage?.isPro ? (
+                         <Badge variant="secondary" className="gap-1"><Sparkles className="w-3 h-3 text-primary" /> Pro Plan</Badge>
+                    ) : (
+                         <Badge variant="outline">Free: {aiUsage?.currentCount ?? 0}/{aiUsage?.limit ?? 5}</Badge>
+                    )}
                   </div>
-                )}
-              <Button
-                  size="lg"
-                  onClick={handleSubmit}
-                  disabled={
-                      isLoading || 
-                      isUsageLoading || 
-                      isOverLimit || 
-                      (inputMode === 'text' && (isOverTextLimit || wordCount === 0)) || 
-                      (inputMode === 'file' && !selectedFile)
-                  }
-                  className="w-full"
-              >
-                  {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
-                  {isLoading ? 'Grading...' : isOverLimit ? 'AI Limit Reached' : 'Get Feedback'}
-              </Button>
-              {isOverLimit && (
-                  <Button variant="link" className="text-xs text-destructive text-center w-full" onClick={openModal}>
-                      You have used all your free AI generations. Upgrade to Pro?
-                  </Button>
-              )}
+              </div>
+          </div>
+      )}
+
+      {/* Main Content */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1 rounded-xl border overflow-hidden shadow-sm bg-card">
+        
+        {/* LEFT PANEL: Editor */}
+        <ResizablePanel defaultSize={55} minSize={30} className="flex flex-col bg-background/50">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between p-2 border-b bg-muted/20">
+                 <div className="flex items-center gap-2">
+                     <Select 
+                        value={rubricSettings.academicLevel} 
+                        onValueChange={(v) => setRubricSettings(prev => ({...prev, academicLevel: v as RubricSettings['academicLevel']}))}
+                        disabled={isLoading || !!gradedEssay}
+                     >
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                            <SelectValue placeholder="Level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="High School">High School</SelectItem>
+                            <SelectItem value="Undergraduate">Undergraduate</SelectItem>
+                            <SelectItem value="Graduate">Graduate</SelectItem>
+                        </SelectContent>
+                     </Select>
+
+                     <Select 
+                        value={rubricSettings.tone} 
+                        onValueChange={(v) => setRubricSettings(prev => ({...prev, tone: v as RubricSettings['tone']}))}
+                        disabled={isLoading || !!gradedEssay}
+                     >
+                        <SelectTrigger className="w-[110px] h-8 text-xs">
+                            <SelectValue placeholder="Tone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Formal">Formal</SelectItem>
+                            <SelectItem value="Creative">Creative</SelectItem>
+                            <SelectItem value="Persuasive">Persuasive</SelectItem>
+                        </SelectContent>
+                     </Select>
+
+                     <Select 
+                        value={rubricSettings.strictness} 
+                        onValueChange={(v) => setRubricSettings(prev => ({...prev, strictness: v as RubricSettings['strictness']}))}
+                        disabled={isLoading || !!gradedEssay}
+                     >
+                        <SelectTrigger className="w-[110px] h-8 text-xs">
+                            <SelectValue placeholder="Strictness" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Lenient">Lenient</SelectItem>
+                            <SelectItem value="Standard">Standard</SelectItem>
+                            <SelectItem value="Strict">Strict</SelectItem>
+                        </SelectContent>
+                     </Select>
+                 </div>
+                 <div className="flex items-center gap-1">
+                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsFocusMode(!isFocusMode)}>
+                         {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                     </Button>
+                 </div>
             </div>
-          </ScrollArea>
+
+            {/* Editor Area */}
+            <ScrollArea className="flex-1 p-6 relative">
+                 {gradedEssay ? (
+                     <div className="max-w-3xl mx-auto">
+                        <HighlightedTextDisplay />
+                        <div className="h-20" /> {/* Bottom spacer */}
+                     </div>
+                 ) : (
+                     <Textarea
+                        placeholder="Start writing or paste your essay here..."
+                        value={essayText}
+                        onChange={handleTextChange}
+                        className="min-h-full resize-none border-none focus-visible:ring-0 text-lg font-serif leading-relaxed p-0 bg-transparent shadow-none"
+                        disabled={isLoading}
+                     />
+                 )}
+            </ScrollArea>
+            
+            {/* Footer Status Bar */}
+            <div className="p-2 border-t bg-muted/20 flex justify-between items-center text-xs text-muted-foreground px-4">
+                <span>{wordCount} words</span>
+                {gradedEssay && (
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setGradedEssay(null); setError(null); }}>
+                        <RefreshCw className="w-3 h-3 mr-1" /> Edit Essay
+                    </Button>
+                )}
+            </div>
         </ResizablePanel>
         
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <Card className="min-h-full flex flex-col border-0 rounded-none"> 
-                <Tabs value={outputTab} onValueChange={(value) => setOutputTab(value as 'feedback' | 'history')} className="flex-1 flex flex-col h-full overflow-hidden">
-                    <CardHeader className="pt-4 px-4">
+        {/* RIGHT PANEL: Results & History */}
+        <ResizablePanel defaultSize={45} minSize={30} className="bg-muted/10">
+            <div className="h-full flex flex-col">
+                <Tabs value={outputTab} onValueChange={(v) => setOutputTab(v as 'feedback' | 'history')} className="flex-1 flex flex-col overflow-hidden">
+                    <div className="px-4 pt-3 pb-0">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="feedback">AI Feedback</TabsTrigger>
-                            <TabsTrigger value="history">Grading History</TabsTrigger>
+                            <TabsTrigger value="feedback">Feedback</TabsTrigger>
+                            <TabsTrigger value="history">History</TabsTrigger>
                         </TabsList>
-                    </CardHeader>
-                    
-                    <TabsContent value="feedback" className="flex-1 flex flex-col mt-0 overflow-auto">
-                        <CardContent className="flex-1 flex flex-col">
-                            {isLoading ? ( 
-                                <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1">
-                                    <Loader2 className="w-8 h-8 animate-spin mb-4" />
-                                    <p>Analyzing your essay...</p>
-                                </div>
-                            ) : gradedEssay ? ( 
-                                <ScrollArea className="h-full p-1 pr-3">
-                                    <ScoreBadge score={gradedEssay.score} />
-                                    {renderFeedback(gradedEssay.feedback)}
-                                    {gradedEssay.suggestions && gradedEssay.suggestions.length > 0 && (
-                                        <div className="mt-6 pt-4 border-t">
-                                            <h4 className="font-semibold text-base mb-2">Suggestions for Improvement</h4>
-                                            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                                                {gradedEssay.suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </ScrollArea>
-                            ) : ( 
-                                 <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground flex-1 text-center">
-                                    <FileSignature className="w-12 h-12 mb-4" />
-                                    <p>Submit your essay to receive feedback.</p>
-                                </div>
-                            )}
-                        </CardContent>
+                    </div>
+
+                    <TabsContent value="feedback" className="flex-1 flex flex-col p-4 overflow-hidden data-[state=inactive]:hidden">
+                         {isLoading ? (
+                             <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4">
+                                 <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                 <p className="animate-pulse">Analyzing structure and logic...</p>
+                             </div>
+                         ) : gradedEssay ? (
+                             <div className="flex flex-col h-full gap-4">
+                                 {/* Score Card */}
+                                 <Card className="shrink-0 border-none shadow-sm bg-gradient-to-br from-background to-muted/50">
+                                     <CardContent className="pt-6 pb-2">
+                                         <div className="flex items-center justify-between">
+                                             <ScoreGauge score={gradedEssay.score} />
+                                             <div className="space-y-2 text-right">
+                                                 <div className="text-sm font-medium text-muted-foreground">Grade</div>
+                                                 <div className="text-2xl font-bold">
+                                                     {gradedEssay.score ? (gradedEssay.score >= 90 ? 'A' : gradedEssay.score >= 80 ? 'B' : gradedEssay.score >= 70 ? 'C' : 'F') : 'N/A'}
+                                                 </div>
+                                                 <Badge variant="outline">{rubricSettings.academicLevel}</Badge>
+                                             </div>
+                                         </div>
+                                     </CardContent>
+                                 </Card>
+                                 
+                                 {/* Dynamic Feedback Sidebar */}
+                                 <div className="flex-1 overflow-hidden">
+                                    <FeedbackSidebar />
+                                 </div>
+                             </div>
+                         ) : (
+                             <div className="flex flex-col items-center justify-center h-full text-center space-y-6 p-8">
+                                 <div className="w-24 h-24 bg-muted/50 rounded-full flex items-center justify-center">
+                                     <Gavel className="w-10 h-10 text-muted-foreground" />
+                                 </div>
+                                 <div className="space-y-2">
+                                     <h3 className="font-semibold text-lg">Ready to Grade</h3>
+                                     <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                                         Paste your essay on the left and select your criteria to get detailed AI feedback.
+                                     </p>
+                                 </div>
+                                 <Button 
+                                    size="lg" 
+                                    onClick={handleSubmit} 
+                                    disabled={!essayText.trim() || wordCount < 50 || isOverLimit}
+                                    className="w-full max-w-xs shadow-lg"
+                                 >
+                                     <Sparkles className="w-4 h-4 mr-2" />
+                                     {isOverLimit ? "Limit Reached" : "Get AI Feedback"}
+                                 </Button>
+                                 {error && (
+                                     <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 p-3 rounded-md">
+                                         <AlertCircle className="w-4 h-4" /> {error}
+                                     </div>
+                                 )}
+                             </div>
+                         )}
                     </TabsContent>
-                    
-                    <TabsContent value="history" className="flex-1 flex flex-col mt-0 overflow-auto">
-                        <CardContent className="flex-1 flex flex-col">
-                             {isHistoryLoading ? (
-                                <div className="space-y-2 p-4">
-                                    <Skeleton className="h-12 w-full" />
-                                    <Skeleton className="h-12 w-full" />
-                                    <Skeleton className="h-12 w-full" />
+
+                    <TabsContent value="history" className="flex-1 overflow-hidden p-4 data-[state=inactive]:hidden">
+                         <ScrollArea className="h-full">
+                            {isHistoryLoading ? (
+                                <div className="space-y-3">
+                                    <Skeleton className="h-16 w-full" />
+                                    <Skeleton className="h-16 w-full" />
                                 </div>
-                             ) : historyError ? (
-                                <div className="flex flex-col items-center justify-center pt-10 text-destructive text-center">
-                                    <AlertCircle className="w-12 h-12 mb-4" />
-                                    <p>Failed to load history.</p>
-                                </div>
-                            ) : !history || history.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center pt-10 text-muted-foreground text-center">
-                                    <History className="w-12 h-12 mb-4" />
-                                    <p>Your graded essays will appear here.</p>
-                                </div>
+                            ) : history.length === 0 ? (
+                                <p className="text-center text-muted-foreground py-10">No graded essays yet.</p>
                             ) : (
-                                <ScrollArea className="h-full p-4">
-                                    <Button variant="outline" size="sm" className="w-full mb-2" onClick={() => mutateHistory()} disabled={isHistoryLoading}>
-                                        <RefreshCw className={cn("w-4 h-4 mr-2", isHistoryLoading && "animate-spin")} />
-                                        Refresh History
-                                    </Button>
-                                    <div className="space-y-2">
-                                        {history.map(item => (
-                                            <div
-                                                key={item.id}
-                                                className={cn(
-                                                    "w-full justify-between h-auto p-3 flex items-center border rounded-md hover:bg-muted/50",
-                                                    isLoading ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-                                                )}
-                                                onClick={() => !isLoading && handleViewHistoryItem(item.id)}
-                                                tabIndex={0}
-                                                onKeyDown={(e) => (e.key === 'Enter' && !isLoading) && handleViewHistoryItem(item.id)}
-                                            >
-                                                <div className="text-left">
-                                                    <p className="font-medium text-sm truncate">{item.essay_title || 'Untitled Essay'}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {new Date(item.graded_at).toLocaleDateString()}
-                                                    </p>
+                                <div className="space-y-3">
+                                    {history.map(item => (
+                                        <Card 
+                                            key={item.id} 
+                                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                            onClick={() => handleViewHistoryItem(item.id)}
+                                        >
+                                            <CardContent className="p-4 flex items-center justify-between">
+                                                <div className="space-y-1">
+                                                    <p className="font-medium truncate max-w-[150px] sm:max-w-[200px]">{item.essay_title || 'Untitled'}</p>
+                                                    <p className="text-xs text-muted-foreground">{new Date(item.graded_at).toLocaleDateString()}</p>
                                                 </div>
-                                                {item.score !== null && (
-                                                    <span className={cn(
-                                                        "font-bold text-lg ml-2",
-                                                        item.score >= 90 ? 'text-green-600' :
-                                                        item.score >= 80 ? 'text-blue-600' :
-                                                        item.score >= 70 ? 'text-yellow-600' : 'text-red-600'
-                                                    )}>
-                                                        {item.score}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </ScrollArea>
+                                                <Badge variant={item.score && item.score >= 80 ? 'default' : 'secondary'}>
+                                                    {item.score ?? 'N/A'}
+                                                </Badge>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
                             )}
-                        </CardContent>
+                         </ScrollArea>
                     </TabsContent>
                 </Tabs>
-           </Card>
+            </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
