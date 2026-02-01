@@ -7,6 +7,8 @@ import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/u
 import { ApiResponse } from '@/types/database';
 import { callAIToGenerateNote } from '@/lib/aiGeneration';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { extractTextFromServerFile } from '@/lib/file-parser.server';
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Allow 60s for AI generation
@@ -23,8 +25,7 @@ function extractTextFromHtml(html: string): string {
     // Replace tags with spaces
     cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
     // Collapse whitespace
-    cleanHtml = cleanHtml.replace(/\s+/g, ' ').trim();
-    return cleanHtml;
+    return cleanHtml.replace(/\s+/g, ' ').trim();
 }
 
 function isContentMeaningful(content: string): boolean {
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     let { text, url, youtubeUrl, documentId } = body;
     console.log(`[API] Payload: docId=${documentId}, url=${!!url}, youtube=${!!youtubeUrl}, textLength=${text?.length}`);
 
-    // 3. ROBUSTNESS FIX: Backfill Text from DB
+    // 3. ROBUSTNESS FIX: Backfill & Self-Heal Text from DB
     // If we only have a documentId (and no explicit text/url), fetch the text content from the database.
     if (!text && !url && !youtubeUrl && documentId) {
         // Trap invalid "undefined" string from frontend bugs
@@ -65,25 +66,70 @@ export async function POST(request: NextRequest) {
              return NextResponse.json<ApiResponse>({ success: false, error: "Invalid document ID provided." }, { status: 400 });
         }
 
-        console.log(`[API] Fetching extracted_text for documentId: ${documentId}`);
+        console.log(`[API] Fetching documentId: ${documentId}`);
         const doc = await prisma.documents.findUnique({
             where: { id: documentId, user_id: user.id },
-            select: { extracted_text: true, file_name: true }
+            select: { id: true, extracted_text: true, file_name: true, storage_path: true, file_type: true }
         });
 
-        if (doc && doc.extracted_text) {
+        if (!doc) {
+            return NextResponse.json<ApiResponse>({ success: false, error: "Document not found." }, { status: 404 });
+        }
+
+        if (doc.extracted_text && doc.extracted_text.length >= MIN_CONTENT_LENGTH) {
             console.log(`[API] Text retrieved from DB (${doc.extracted_text.length} chars)`);
             text = doc.extracted_text;
         } else {
-            return NextResponse.json<ApiResponse>({ success: false, error: "Document not found or has no extracted text." }, { status: 404 });
+            // --- SELF HEALING START ---
+            // If DB text is missing, attempt to re-download and re-parse the file
+            console.warn(`[API] Text missing/short for ${doc.file_name}. Attempting re-extraction...`);
+            
+            if (!doc.storage_path) {
+                return NextResponse.json<ApiResponse>({ success: false, error: "Document has no text and no storage path to recover from." }, { status: 400 });
+            }
+
+            // Download file from Supabase
+            const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+                .from('documents')
+                .download(doc.storage_path);
+
+            if (downloadError || !fileData) {
+                console.error("Self-healing download failed:", downloadError);
+                return NextResponse.json<ApiResponse>({ success: false, error: "Failed to retrieve file for re-processing." }, { status: 500 });
+            }
+
+            // Convert Blob to Buffer
+            const arrayBuffer = await fileData.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            // Mock File object for the parser
+            const mockFile = {
+                name: doc.file_name,
+                type: fileData.type || 'application/octet-stream',
+            } as unknown as File;
+
+            try {
+                // Re-run extraction using our fixed server parser
+                text = await extractTextFromServerFile(mockFile, buffer);
+                console.log(`[API] Re-extraction successful. Length: ${text.length}`);
+
+                // Update Database (Fix it for future calls)
+                await prisma.documents.update({
+                    where: { id: doc.id },
+                    data: { 
+                        extracted_text: text, 
+                        processing_status: 'completed' 
+                    }
+                });
+            } catch (extractError: any) {
+                console.error("Self-healing extraction failed:", extractError);
+                return NextResponse.json<ApiResponse>({ success: false, error: "Could not extract text from this file." }, { status: 422 });
+            }
+            // --- SELF HEALING END ---
         }
     }
 
     // 4. Input Validation
-    if (!url && !text && !youtubeUrl) { 
-        return NextResponse.json<ApiResponse>({ success: false, error: "Either text, a URL, a YouTube URL, or a valid documentId is required." }, { status: 400 }); 
-    }
-    
     let sourceContent = text || "";
     let noteTitlePrefix = "Notes from text";
 
@@ -194,7 +240,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: any) {
-    if (error instanceof Response) return error;
+    if (error instanceof Response) return error; // Auth error
     console.error("Error in /api/generate-notes POST handler:", error);
     
     if (error instanceof Prisma.PrismaClientInitializationError) {
