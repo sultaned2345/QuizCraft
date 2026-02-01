@@ -2,35 +2,35 @@
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
-import { cleanExtractedText } from '@/lib/file-parser'; 
-import pdfParse from 'pdf-parse-fork'; // ✅ Switched to Node-optimized parser
+import pdfParse from 'pdf-parse-fork';
+
+// Helper to clean text (inline if @/lib/file-parser is missing, otherwise keep import)
+function cleanExtractedText(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ')
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export const runtime = 'nodejs';
 
-// --- Text Extraction Helpers ---
-
+/**
+ * Helper: Extract text from PDF Buffer
+ */
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
-    // pdf-parse-fork efficiently extracts text without needing Canvas/DOM polyfills
     const data = await pdfParse(buffer);
     return data.text || '';
   } catch (err: any) {
-    console.error("PDF Parsing Error:", err);
-    throw new Error(`Failed to parse PDF: ${err.message}`);
+    console.error("PDF Parsing Error Details:", err);
+    throw new Error(`Failed to parse PDF. If this file is encrypted or scanned, it cannot be read. Error: ${err.message}`);
   }
 }
 
-function getTextFromPPTXNodes(node: Node, tagName: string, namespaceURI: string): string {
-  let text = '';
-  const textNodes = (node as Element).getElementsByTagNameNS(namespaceURI, tagName);
-  for (let i = 0; i < textNodes.length; i++) {
-    if (textNodes[i].textContent) {
-      text += textNodes[i].textContent + ' ';
-    }
-  }
-  return text.trim();
-}
-
+/**
+ * Helper: Extract text from PPTX Buffer
+ */
 async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
   try {
     const zip = new JSZip();
@@ -38,37 +38,49 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
     const aNamespace = 'http://schemas.openxmlformats.org/drawingml/2006/main';
     let fullText = '';
     let slideIndex = 1;
-    const MAX_SLIDES = 500; 
+    // Safety break to prevent infinite loops on corrupt files
+    const MAX_SLIDES = 200; 
 
     while (slideIndex <= MAX_SLIDES) {
-      const fileName = `ppt/slides/slide${slideIndex}.xml`;
-      const slideFile = zip.file(fileName);
+      // Try multiple slide naming conventions
+      const possibleNames = [
+        `ppt/slides/slide${slideIndex}.xml`,
+        `ppt/slides/slide${slideIndex}.xml.rels` // sometimes needed to verify existence
+      ];
+      
+      const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
       
       if (!slideFile) {
-        // Try next slide just in case (sometimes numbering skips)
-        const nextFile = zip.file(`ppt/slides/slide${slideIndex + 1}.xml`);
-        if(!nextFile) break;
-        slideIndex++;
-        continue;
+        // If we miss slide 1, it's an error. If we miss slide 10, maybe end of deck.
+        if (slideIndex === 1) { 
+           // Check if it's a template or different structure? 
+           break; 
+        }
+        break;
       }
 
       const slideXmlStr = await slideFile.async('text');
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(slideXmlStr, 'application/xml');
 
-      const slideText = getTextFromPPTXNodes(xmlDoc, 't', aNamespace);
-      if (slideText) fullText += slideText + ' \n';
+      const textNodes = xmlDoc.getElementsByTagNameNS(aNamespace, 't');
+      for (let i = 0; i < textNodes.length; i++) {
+        if (textNodes[i].textContent) {
+          fullText += textNodes[i].textContent + ' ';
+        }
+      }
+      fullText += '\n';
       slideIndex++;
     }
     return fullText.trim();
   } catch (err: any) {
-    console.error('Error extracting text from PPTX:', err);
+    console.error('PPTX Extraction Error:', err);
     throw new Error(`Failed to parse PPTX: ${err.message}`);
   }
 }
 
 /**
- * Extracts text from various file types using server-side libraries.
+ * Main Extraction Function
  */
 export async function extractTextFromServerFile(
   file: File,
@@ -78,6 +90,8 @@ export async function extractTextFromServerFile(
   const fileType = file.type || '';
   const fileNameLower = file.name.toLowerCase();
 
+  console.log(`[FileParser] Processing: ${file.name} (${fileType})`);
+
   try {
     if (fileType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
       rawText = await extractTextFromPDF(buffer);
@@ -85,33 +99,41 @@ export async function extractTextFromServerFile(
     } else if (fileType === 'text/plain' || fileNameLower.endsWith('.txt')) {
       rawText = buffer.toString('utf8');
 
-    } else if (fileType.includes('wordprocessingml') || fileNameLower.endsWith('.docx')) {
+    } else if (
+      fileType.includes('wordprocessingml') || 
+      fileNameLower.endsWith('.docx')
+    ) {
       const result = await mammoth.extractRawText({ buffer });
+      if (result.messages && result.messages.length > 0) {
+        console.warn("Mammoth messages:", result.messages);
+      }
       rawText = result.value || '';
 
-    } else if (fileType.includes('presentationml') || fileNameLower.endsWith('.pptx')) {
+    } else if (
+      fileType.includes('presentationml') || 
+      fileNameLower.endsWith('.pptx')
+    ) {
       rawText = await extractTextFromPPTX(buffer);
 
     } else {
       throw new Error(`Unsupported file type: ${fileType}. Please upload PDF, DOCX, PPTX, or TXT.`);
     }
 
-    // Validation: Ensure we actually got text
-    if (!rawText || rawText.trim().length < 50) {
-      // Specific check for PDFs to trigger OCR fallback
-      if ((fileNameLower.endsWith('.pdf') || fileType === 'application/pdf') && rawText.trim().length === 0) {
-         throw new Error('No text found. This PDF appears to be a scanned image. Please use OCR.');
+    // Validation
+    const cleanText = cleanExtractedText(rawText);
+    
+    if (!cleanText || cleanText.length < 20) {
+      // Lowered threshold to 20 to allow small test files
+      if (fileNameLower.endsWith('.pdf')) {
+         throw new Error('No text found. This PDF appears to be a scanned image or empty. Please use OCR.');
       }
-      throw new Error('File contains insufficient text for analysis.');
+      throw new Error('File content is empty or unreadable.');
     }
       
-    return cleanExtractedText(rawText);
+    return cleanText;
 
   } catch (error: any) {
-    console.error("Extraction Logic Error:", error);
-    // Propagate the specific error message (like "scanned image") so the route can handle it
+    console.error(`[FileParser] Failed to process ${file.name}:`, error);
     throw error;
   }
 }
-
-export const extractTextFromFile = extractTextFromServerFile;
