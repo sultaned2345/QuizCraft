@@ -43,13 +43,12 @@ export function useTurboGenerator(
   const { session } = useAuth();
 
   // --- Helper: Fetch Text Content First ---
-  // This solves the "docId=undefined" bug by verifying we can get text BEFORE hitting the generation API
   const fetchDocumentText = useCallback(async (id: string) => {
     if (!id || id === 'undefined' || id === 'null') {
         throw new Error("Invalid Document ID");
     }
     
-    // Fetch metadata from your own API which returns { data: { extracted_text: ... } }
+    // Fetch metadata
     const res = await fetch(`/api/documents/${id}`);
     
     if (!res.ok) {
@@ -59,15 +58,17 @@ export function useTurboGenerator(
     const json = await res.json();
     const text = json.data?.extracted_text || json.extracted_text;
     
+    // [FIX] Do NOT throw error if text is missing. 
+    // Return empty string instead so the backend can detect it and run self-healing.
     if (!text || text.length < 50) {
-        throw new Error("Document has no text content to analyze (or it is too short).");
+        console.warn(`[Turbo] Document ${id} text is missing/short. Delegating to backend for repair.`);
+        return ""; 
     }
     return text;
   }, []);
 
   /**
    * Core generation function.
-   * Usage: generate('quiz') OR generate({ type: 'quiz', docId: '...' })
    */
   const generate = useCallback(async (
     argInput: TurboJobType | { type: TurboJobType, docId?: string, metadata?: any }, 
@@ -99,14 +100,13 @@ export function useTurboGenerator(
       setIsGenerating(true);
       setStatus(`Preparing to generate ${type}...`);
 
-      // 1. PRE-FETCH TEXT (The Fix)
-      // We explicitly fetch the text here so the backend doesn't have to look it up blindly
+      // 1. PRE-FETCH TEXT 
+      // This will now return "" if empty, instead of throwing.
       const textContent = await fetchDocumentText(targetDocId);
       
       setStatus(`Generating ${type} with AI...`);
 
       // 2. Prepare Payload
-      // We send BOTH the text (for generation) and the documentId (for linking/saving)
       let endpoint = '';
       let body: any = { 
           text: textContent, 
@@ -127,8 +127,6 @@ export function useTurboGenerator(
           if (!body.numberOfCards) body.numberOfCards = 15;
           break;
         case 'podcast':
-          // Podcasts might be handled differently (e.g. strict long-running jobs)
-          // But for now, we follow the same pattern if you have a sync endpoint
           endpoint = '/api/podcasts/generate'; 
           break;
         default:
@@ -155,7 +153,6 @@ export function useTurboGenerator(
       setResults(prev => ({ ...prev, [type]: 'completed' }));
       toast({ title: "Success", description: `${type} generated successfully!` });
       
-      // Trigger callback
       if (options?.onSuccess) {
          setTimeout(() => options.onSuccess?.(), 1000);
       }
@@ -172,7 +169,6 @@ export function useTurboGenerator(
       });
       return { success: false, error: error.message };
     } finally {
-      // Only reset if not running a full suite
       if (status !== 'Starting Turbo Mode...') {
           setIsGenerating(false);
       }
@@ -180,7 +176,7 @@ export function useTurboGenerator(
   }, [initialDocId, session, options, fetchDocumentText, toast, status]);
 
   /**
-   * Wrapper for "Turbo" button (Runs multiple jobs in sequence/parallel)
+   * Wrapper for "Turbo" button
    */
   const startTurbo = useCallback(async () => {
      if (!initialDocId) return;
@@ -193,9 +189,6 @@ export function useTurboGenerator(
      let completedCount = 0;
      
      try {
-       // We run them sequentially or in parallel. 
-       // Parallel is faster but might hit rate limits.
-       // Let's do Promise.all for speed.
        await Promise.all(types.map(async (t) => {
          try {
            await generate(t);
