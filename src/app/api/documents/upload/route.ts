@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-// [FIX] Updated import to match the new robust server parser
 import { extractTextFromServerFile } from '@/lib/file-parser.server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -17,6 +16,7 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
     // 1. Upload to Supabase Storage
+    // Sanitize filename to prevent storage issues
     const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storagePath = `uploads/${user.id}/${Date.now()}_${safeName}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -28,10 +28,11 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) throw new Error("Storage upload failed");
 
-    // 2. Extract Text (Using the fixed function)
+    // 2. Extract Text (Using the robust server parser)
     const text = await extractTextFromServerFile(file, buffer);
     
     if (!text) {
+      // Clean up storage if text extraction fails to avoid orphan files
       await supabaseAdmin.storage.from('documents').remove([storagePath]);
       return NextResponse.json({ error: 'Failed to extract text' }, { status: 400 });
     }
@@ -47,11 +48,12 @@ export async function POST(req: NextRequest) {
           file_size: BigInt(file.size),
           extracted_text: text,
           storage_path: storagePath,
-          processing_status: 'processing' // Mark as processing
+          processing_status: 'processing'
         }
       });
 
-      // Create Jobs (Note, Quiz, Flashcards)
+      // Create Jobs (Note, Quiz, Flashcard)
+      // Uses singular 'flashcard' which matches the DB/Worker expectation
       await tx.generation_jobs.createMany({
         data: ['note', 'quiz', 'flashcard'].map(type => ({
           user_id: user.id,
@@ -65,10 +67,17 @@ export async function POST(req: NextRequest) {
     });
 
     // 4. Trigger Background Worker
-    const workerUrl = new URL('/api/generation-jobs/start', req.url);
-    fetch(workerUrl.toString(), {
+    // [FIX] Construct absolute URL using headers for reliability in production (matches start/route.ts pattern)
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('host');
+    const workerUrl = `${protocol}://${host}/api/generation-jobs/start`;
+    
+    fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.get('cookie') || '' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Cookie': req.headers.get('cookie') || '' 
+      },
       body: JSON.stringify({ documentId: result.id })
     }).catch(err => console.error("Worker trigger failed:", err));
 

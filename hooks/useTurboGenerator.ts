@@ -5,7 +5,8 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-export type TurboJobType = 'quiz' | 'note' | 'flashcard' | 'podcast' | 'embedding';
+// [CHANGE] Added 'flashcards' to type definition to support the plural variant
+export type TurboJobType = 'quiz' | 'note' | 'flashcard' | 'flashcards' | 'podcast' | 'embedding';
 
 interface TurboResults {
   quiz?: string;
@@ -58,7 +59,6 @@ export function useTurboGenerator(
     const json = await res.json();
     const text = json.data?.extracted_text || json.extracted_text;
     
-    // [FIX] Do NOT throw error if text is missing. 
     // Return empty string instead so the backend can detect it and run self-healing.
     if (!text || text.length < 50) {
         console.warn(`[Turbo] Document ${id} text is missing/short. Delegating to backend for repair.`);
@@ -101,7 +101,6 @@ export function useTurboGenerator(
       setStatus(`Preparing to generate ${type}...`);
 
       // 1. PRE-FETCH TEXT 
-      // This will now return "" if empty, instead of throwing.
       const textContent = await fetchDocumentText(targetDocId);
       
       setStatus(`Generating ${type} with AI...`);
@@ -122,15 +121,33 @@ export function useTurboGenerator(
         case 'quiz':
           endpoint = '/api/generate-quiz?mode=content&numQuestions=10&difficulty=medium';
           break;
+        
+        // [FIX] Added 'flashcards' case to handle plural input gracefully
         case 'flashcard':
+        case 'flashcards':
           endpoint = '/api/generate-flashcards';
           if (!body.numberOfCards) body.numberOfCards = 15;
           break;
+          
         case 'podcast':
           endpoint = '/api/podcasts/generate'; 
           break;
+        
+        case 'embedding':
+             // Assuming there's an endpoint or logic for embeddings, otherwise handle accordingly
+             // If embedding generation is handled differently, add logic here.
+             // For now, logging warning if no endpoint mapping exists for embedding but it's in types.
+             console.warn("Embedding generation triggered via Turbo but no direct endpoint mapped in switch.");
+             break;
+
         default:
           throw new Error(`Unknown job type: ${type}`);
+      }
+
+      // If we fell through 'embedding' without an endpoint, skip fetch or handle it. 
+      // Assuming 'embedding' might not need a fetch here or uses a different pattern.
+      if (!endpoint && type === 'embedding') {
+          return { success: false, message: "Embedding generation not fully implemented in client hook." };
       }
 
       // 4. Send Request
@@ -150,7 +167,10 @@ export function useTurboGenerator(
       }
       
       // 5. Success State
-      setResults(prev => ({ ...prev, [type]: 'completed' }));
+      // Normalize 'flashcards' to 'flashcard' for results state consistency if desired
+      const resultKey = type === 'flashcards' ? 'flashcard' : type;
+      setResults(prev => ({ ...prev, [resultKey]: 'completed' }));
+      
       toast({ title: "Success", description: `${type} generated successfully!` });
       
       if (options?.onSuccess) {
@@ -185,6 +205,7 @@ export function useTurboGenerator(
      setProgress(5);
      setStatus('Starting Turbo Mode...');
 
+     // Ensure we use the singular types internally for the loop
      const types: TurboJobType[] = ['note', 'flashcard', 'quiz'];
      let completedCount = 0;
      
