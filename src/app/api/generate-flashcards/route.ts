@@ -2,168 +2,169 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { checkAIGenerationUsageLimit } from '@/lib/usage-limits';
-import { ApiResponse, FlashcardDeck } from '@/types/database';
+import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
 import { callAIToGenerateFlashcards } from '@/lib/aiGeneration';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { Prisma } from '@prisma/client';
+import { extractTextFromServerFile } from '@/lib/file-parser.server';
+import { YoutubeTranscript } from 'youtube-transcript';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // Allow 60s for AI generation
+export const maxDuration = 60; // Allow 60s for AI processing
 
-// --- Helper to Update AI Usage using SERVICE ROLE ---
-// This bypasses RLS and uses RPC for atomicity if available
-async function updateAIUsage(userId: string, month: Date, count: number = 1) {
-    if (count <= 0) return;
-    const firstDayOfMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1)).toISOString().split('T')[0];
-    const supabase = supabaseAdmin; 
-    try {
-        // 1. Try RPC (Best Practice)
-        const { error: rpcError } = await (supabase.rpc as any)('increment_ai_usage', {
-            p_user_id: userId,
-            p_amount: count,
-            p_month: firstDayOfMonth
-        });
+const MIN_CONTENT_LENGTH = 50;
 
-        if (!rpcError) return; // Success
-
-        // 2. Fallback to Manual Upsert (If RPC missing)
-        console.warn("[Admin] RPC increment_ai_usage missing, falling back to manual upsert.");
-        
-        // We use 'any' casting to handle dynamic table access without explicit Typescript definitions
-        const { data: currentUsage, error: fetchError } = await (supabase
-            .from('ai_usage' as any) as any)
-            .select('usage_count')
-            .eq('user_id', userId)
-            .eq('usage_month', firstDayOfMonth)
-            .maybeSingle();
-
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(`Failed fetching usage: ${fetchError.message}`);
-        
-        const currentCount = currentUsage?.usage_count ?? 0;
-        const newCount = currentCount + count;
-        
-        const { error: upsertError } = await (supabase
-            .from('ai_usage' as any) as any)
-            .upsert({ 
-                user_id: userId, 
-                usage_month: firstDayOfMonth, 
-                usage_count: newCount, 
-                updated_at: new Date().toISOString(), 
-            }, { onConflict: 'user_id, usage_month' });
-
-        if (upsertError) throw new Error(`Failed upserting usage: ${upsertError.message}`);
-    } catch (error) { console.error(`[Admin] Error updating AI usage:`, error); }
+// Helper to clean HTML from URLs
+function extractTextFromHtml(html: string): string {
+    let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
+    cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
+    return cleanHtml.replace(/\s+/g, ' ').trim();
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  try {
+    const user = await requireAuth(req);
+    
+    // 1. Parse Body
+    let body: any = {};
     try {
-        // 1. Auth Check
-        const user = await requireAuth(request);
-
-        // 2. Safe Body Parsing
-        let body: any = {};
-        try { 
-            const textBody = await request.text();
-            if (textBody) body = JSON.parse(textBody);
-        } catch (e) { 
-            return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid JSON body' }, { status: 400 }); 
-        }
-        
-        let { documentId, text, numberOfCards = 10, deckTitle } = body;
-        
-        console.log(`[API] Generate Flashcards: docId=${documentId}, textLen=${text?.length}`);
-
-        // 3. ROBUSTNESS FIX: Content Backfilling
-        let sourceText = "";
-        let finalDeckTitle = deckTitle?.trim() || "Generated Flashcards";
-
-        // Case A: Provided Text (High Priority)
-        if (text) {
-             sourceText = text;
-             if (!deckTitle) finalDeckTitle = "Flashcards from Text";
-        } 
-        // Case B: Document ID (Backfill)
-        else if (documentId) {
-             if (documentId === 'undefined' || documentId === 'null') {
-                 return NextResponse.json<ApiResponse>({ success: false, error: "Invalid document ID." }, { status: 400 });
-             }
-
-             console.log(`[Flashcards] Fetching from DB for doc: ${documentId}`);
-             const doc = await prisma.documents.findUnique({ 
-                 where: { id: documentId, user_id: user.id }, 
-                 select: { extracted_text: true, file_name: true } 
-             });
-             
-             if (!doc || !doc.extracted_text) {
-                 return NextResponse.json<ApiResponse>({ success: false, error: 'Document not found or contains no text.' }, { status: 404 });
-             }
-             
-             sourceText = doc.extracted_text;
-             if (!deckTitle) finalDeckTitle = `Flashcards from ${doc.file_name}`;
-        }
-
-        // 4. Validation
-        if (!sourceText || sourceText.length < 50) {
-            return NextResponse.json<ApiResponse>({ success: false, error: "Content too short (minimum 50 chars)." }, { status: 400 });
-        }
-        
-        const validNumCards = Math.max(3, Math.min(50, Number(numberOfCards) || 10));
-
-        // 5. Usage Check
-        const usageCheck = await checkAIGenerationUsageLimit(user.id);
-        if (!usageCheck.isValid || !usageCheck.canGenerate) {
-            return NextResponse.json<ApiResponse>({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
-        }
-
-        // 6. Generate with AI
-        const generatedCards = await callAIToGenerateFlashcards(sourceText.trim(), validNumCards);
-
-        if (!generatedCards || generatedCards.length === 0) {
-             return NextResponse.json<ApiResponse>({ success: false, error: 'AI failed to generate valid flashcards.' }, { status: 500 });
-        }
-
-        const actualGeneratedCount = generatedCards.length;
-
-        // 7. Save to Database (Transaction)
-        const newDeckAndCards = await prisma.$transaction(async (tx) => {
-            // Create Deck
-            const newDeck = await tx.flashcard_decks.create({ 
-                data: { user_id: user.id, title: finalDeckTitle.substring(0, 255) }, 
-                select: { id: true, title: true } 
-            });
-            
-            // Create Cards
-            const cardsToCreate = generatedCards.map((card: any) => ({ 
-                deck_id: newDeck.id, 
-                front_content: card.front_content, 
-                back_content: card.back_content 
-            }));
-            
-            await tx.flashcards.createMany({ data: cardsToCreate });
-            
-            return newDeck;
-        });
-
-        // 8. Update Usage
-        await updateAIUsage(user.id, new Date(), 1);
-
-        const responseDeck: FlashcardDeck = { 
-            ...newDeckAndCards, 
-            user_id: user.id, 
-            created_at: new Date().toISOString(), 
-            updated_at: new Date().toISOString() 
-        };
-
-        return NextResponse.json<ApiResponse<FlashcardDeck>>({ 
-            success: true, 
-            data: responseDeck, 
-            message: `${actualGeneratedCount} cards generated.` 
-        }, { status: 201 });
-
-    } catch (error: any) {
-        if (error instanceof Response) return error;
-        console.error('Error in /api/generate-flashcards:', error);
-        return NextResponse.json<ApiResponse>({ success: false, error: error.message || 'Failed to generate cards' }, { status: 500 });
+      const textBody = await req.text();
+      if (textBody) body = JSON.parse(textBody);
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
+
+    let { text, documentId, url, youtubeUrl, numberOfCards } = body;
+
+    // 2. Card Count Logic (Default 10, range 5-20)
+    if (!numberOfCards) {
+        numberOfCards = 10;
+    } else {
+        numberOfCards = Math.min(20, Math.max(5, numberOfCards));
+    }
+
+    // 3. Source Resolution & Self-Healing
+    
+    // A. Handle Document ID (with Self-Healing)
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && documentId) {
+       console.log(`[FlashcardAPI] Text missing/short for doc ${documentId}. Checking DB...`);
+       
+       const doc = await prisma.documents.findUnique({
+         where: { id: documentId, user_id: user.id },
+         select: { id: true, extracted_text: true, file_name: true, storage_path: true, file_type: true }
+       });
+
+       if (!doc) {
+         return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+       }
+
+       // Case 1: Text exists in DB
+       if (doc.extracted_text && doc.extracted_text.length >= MIN_CONTENT_LENGTH) {
+         text = doc.extracted_text;
+         console.log(`[FlashcardAPI] Retrieved text from DB (${text.length} chars).`);
+       } 
+       // Case 2: Text missing -> Self-Heal from Storage
+       else if (doc.storage_path) {
+         console.warn(`[FlashcardAPI] Triggering Self-Healing for ${doc.file_name}...`);
+         
+         const { data: fileData, error: dlError } = await supabaseAdmin.storage
+           .from('documents')
+           .download(doc.storage_path);
+           
+         if (dlError || !fileData) {
+           console.error("[FlashcardAPI] Download failed:", dlError);
+           return NextResponse.json({ error: 'Failed to recover file content from storage.' }, { status: 500 });
+         }
+
+         const buffer = Buffer.from(await fileData.arrayBuffer());
+         const mockFile = { name: doc.file_name, type: fileData.type } as unknown as File;
+         
+         try {
+           // Use the robust server-side parser
+           text = await extractTextFromServerFile(mockFile, buffer);
+           
+           // Update DB to prevent doing this again
+           await prisma.documents.update({
+             where: { id: doc.id },
+             data: { extracted_text: text, processing_status: 'completed' }
+           });
+           console.log(`[FlashcardAPI] Self-Healing successful. Recovered ${text.length} chars.`);
+         } catch (err) {
+           console.error("[FlashcardAPI] Re-parse failed:", err);
+           return NextResponse.json({ error: 'Failed to re-process document text.' }, { status: 422 });
+         }
+       }
+    }
+
+    // B. Handle URL
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to fetch URL");
+            text = extractTextFromHtml(await response.text());
+        } catch (e: any) {
+            return NextResponse.json({ error: `URL error: ${e.message}` }, { status: 400 });
+        }
+    }
+
+    // C. Handle YouTube
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && youtubeUrl) {
+        try {
+            const transcript = await YoutubeTranscript.fetchTranscript(youtubeUrl);
+            text = transcript.map(t => t.text).join(' ');
+        } catch (e: any) {
+            return NextResponse.json({ error: "No transcript available for this video." }, { status: 400 });
+        }
+    }
+
+    // 4. Final Validation
+    if (!text || text.length < MIN_CONTENT_LENGTH) {
+      return NextResponse.json({ error: 'No text content available to generate flashcards.' }, { status: 400 });
+    }
+
+    // 5. Usage Check
+    const usage = await checkAIGenerationUsageLimit(user.id);
+    if (!usage.canGenerate) {
+      return NextResponse.json({ error: usage.error }, { status: 403 });
+    }
+
+    // 6. Generate Flashcards
+    console.log(`[FlashcardAPI] Generating ${numberOfCards} cards...`);
+    const flashcardsData = await callAIToGenerateFlashcards(text, numberOfCards);
+    
+    if (!flashcardsData || flashcardsData.length === 0) {
+      throw new Error("AI returned no flashcards.");
+    }
+
+    // 7. Save to DB (Corrected Schema)
+    // Using prisma.flashcard_decks based on 'model flashcard_decks'
+    const deck = await prisma.flashcard_decks.create({
+      data: {
+        user_id: user.id, // Matches schema field
+        document_id: documentId || null,
+        title: "Generated Flashcards", // You could ask AI for a better title
+        flashcards: { 
+          // Schema defines relation 'flashcards' on 'flashcard_decks' model
+          create: flashcardsData.map((card: any) => ({
+             // Schema defines 'front_content' and 'back_content'
+             front_content: card.front_content, 
+             back_content: card.back_content
+          }))
+        }
+      }
+    });
+
+    // 8. Increment Usage
+    await incrementAIGenerationUsage(user.id, 1);
+
+    return NextResponse.json({ 
+        success: true, 
+        deckId: deck.id,
+        message: `Generated ${flashcardsData.length} flashcards.` 
+    });
+
+  } catch (error: any) {
+    console.error("Flashcard Gen Error:", error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  }
 }

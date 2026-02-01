@@ -2,208 +2,173 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { QuestionType } from '@/types/database';
 import { checkAIGenerationUsageLimit, incrementAIGenerationUsage } from '@/lib/usage-limits';
-import { callAIToGenerateQuiz, callAIToGenerateQuizFromTopic } from '@/lib/aiGeneration'; 
+import { callAIToGenerateQuiz } from '@/lib/aiGeneration';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { extractTextFromServerFile } from '@/lib/file-parser.server';
 import { YoutubeTranscript } from 'youtube-transcript';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; 
+export const maxDuration = 60; // Allow 60s for AI processing
 
-type Difficulty = 'easy' | 'medium' | 'hard';
-type QuestionTypeOption = QuestionType | 'MIXED';
+const MIN_CONTENT_LENGTH = 50;
 
-// --- Helpers ---
-
+// Helper to clean HTML from URLs
 function extractTextFromHtml(html: string): string {
     let cleanHtml = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '');
     cleanHtml = cleanHtml.replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '');
     cleanHtml = cleanHtml.replace(/<\/?[^>]+(>|$)/g, " ");
-    cleanHtml = cleanHtml.replace(/\s+/g, ' ').trim();
-    return cleanHtml;
+    return cleanHtml.replace(/\s+/g, ' ').trim();
 }
 
-function parseQuery(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const numQuestions = Math.min(15, Math.max(5, Number(searchParams.get('numQuestions') ?? '10')));
-  const difficulty = (['easy', 'medium', 'hard'].includes(searchParams.get('difficulty') as string) ? searchParams.get('difficulty') : 'medium') as Difficulty;
-  const questionType = (['MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_THE_BLANK', 'MATCHING', 'MIXED'].includes(searchParams.get('questionType') as string) ? searchParams.get('questionType') : 'MIXED') as QuestionTypeOption;
-  const immediateFeedback = searchParams.get('immediateFeedback') !== 'false';
-  const mode = searchParams.get('mode') === 'topic' ? 'topic' : 'content';
-
-  return { numQuestions, difficulty, questionType, immediateFeedback, mode };
-}
-
-// Fixed: Pass the already-read raw text to avoid double-reading the stream
-async function resolveInputText(request: NextRequest, body: any, rawBodyText: string): Promise<string> {
-    // 1. Priority: JSON Body
-    if (body && (body.text || body.topic)) {
-        return (body.text || body.topic).trim();
-    }
-
-    // 2. Check FormData (if applicable)
-    const contentType = request.headers.get('content-type') || '';
-    if (contentType.includes('multipart/form-data')) {
-        try {
-            const form = await request.formData();
-            return (form.get('text') as string)?.trim() || '';
-        } catch (e) {
-            console.warn("Error parsing form data:", e);
-            return '';
-        }
-    }
-
-    // 3. Fallback: Use the raw body text we already read
-    if (contentType.includes('text/plain') && rawBodyText) {
-        return rawBodyText.trim();
-    }
-    
-    return '';
-}
-
-// --- Main Handler ---
-
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // 1. Auth Check
-    const user = await requireAuth(request);
-
-    // 2. Usage Check
-    const usageCheck = await checkAIGenerationUsageLimit(user.id);
-    if (!usageCheck.isValid || !usageCheck.canGenerate) {
-      return NextResponse.json({ success: false, error: usageCheck.error, message: usageCheck.message }, { status: 403 });
+    const user = await requireAuth(req);
+    
+    // 1. Parse Body
+    let body: any = {};
+    try {
+      const textBody = await req.text();
+      if (textBody) body = JSON.parse(textBody);
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    // 3. Parse Query Params
-    const { numQuestions, difficulty, questionType, immediateFeedback, mode } = parseQuery(request);
+    let { text, documentId, url, youtubeUrl, numQuestions, difficulty = 'medium', type = 'MIXED' } = body;
+
+    // 2. Question Count Logic (7 to 12 questions default)
+    if (!numQuestions) {
+        // Random number between 7 and 12
+        numQuestions = Math.floor(Math.random() * (12 - 7 + 1)) + 7;
+    } else if (numQuestions < 5) {
+        numQuestions = 7; // Enforce minimum
+    }
+
+    // 3. Source Resolution & Self-Healing
     
-    // 4. Safe Body Parsing (Read ONCE)
-    let body: any = {};
-    let rawBodyText = '';
-    try {
-        rawBodyText = await request.text();
-        if (rawBodyText && (rawBodyText.startsWith('{') || rawBodyText.startsWith('['))) {
-             body = JSON.parse(rawBodyText);
-        }
-    } catch { /* ignore JSON errors, body remains empty */ }
+    // A. Handle Document ID (with Self-Healing)
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && documentId) {
+       console.log(`[QuizAPI] Text missing/short for doc ${documentId}. Checking DB...`);
+       
+       const doc = await prisma.documents.findUnique({
+         where: { id: documentId, user_id: user.id },
+         select: { id: true, extracted_text: true, file_name: true, storage_path: true, file_type: true }
+       });
 
-    // 5. Resolve Text and Metadata
-    let text = await resolveInputText(request, body, rawBodyText); 
-    const { url, youtubeUrl, documentId } = body;
+       if (!doc) {
+         return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+       }
 
-    console.log(`[API] Generate Quiz: mode=${mode}, docId=${documentId}, url=${!!url}, yt=${!!youtubeUrl}, textLen=${text?.length}`);
+       // Case 1: Text exists in DB
+       if (doc.extracted_text && doc.extracted_text.length >= MIN_CONTENT_LENGTH) {
+         text = doc.extracted_text;
+         console.log(`[QuizAPI] Retrieved text from DB (${text.length} chars).`);
+       } 
+       // Case 2: Text missing -> Self-Heal from Storage
+       else if (doc.storage_path) {
+         console.warn(`[QuizAPI] Triggering Self-Healing for ${doc.file_name}...`);
+         
+         const { data: fileData, error: dlError } = await supabaseAdmin.storage
+           .from('documents')
+           .download(doc.storage_path);
+           
+         if (dlError || !fileData) {
+           console.error("[QuizAPI] Download failed:", dlError);
+           return NextResponse.json({ error: 'Failed to recover file content from storage.' }, { status: 500 });
+         }
 
-    // 6. SOURCE RESOLUTION 
-    
-    // A. URL Source
-    if (!text && url) {
+         const buffer = Buffer.from(await fileData.arrayBuffer());
+         const mockFile = { name: doc.file_name, type: fileData.type } as unknown as File;
+         
+         try {
+           // Use the robust server-side parser
+           text = await extractTextFromServerFile(mockFile, buffer);
+           
+           // Update DB to prevent doing this again
+           await prisma.documents.update({
+             where: { id: doc.id },
+             data: { extracted_text: text, processing_status: 'completed' }
+           });
+           console.log(`[QuizAPI] Self-Healing successful. Recovered ${text.length} chars.`);
+         } catch (err) {
+           console.error("[QuizAPI] Re-parse failed:", err);
+           return NextResponse.json({ error: 'Failed to re-process document text.' }, { status: 422 });
+         }
+       }
+    }
+
+    // B. Handle URL
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && url) {
         try {
-            const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to fetch URL");
             text = extractTextFromHtml(await response.text());
         } catch (e: any) {
-            return NextResponse.json({ success: false, error: `URL error: ${e.message}` }, { status: 400 });
+            return NextResponse.json({ error: `URL error: ${e.message}` }, { status: 400 });
         }
     }
-    
-    // B. YouTube Source
-    else if (!text && youtubeUrl) {
+
+    // C. Handle YouTube
+    if ((!text || text.length < MIN_CONTENT_LENGTH) && youtubeUrl) {
         try {
             const transcript = await YoutubeTranscript.fetchTranscript(youtubeUrl);
-            if (!transcript?.length) throw new Error("No transcript found.");
-            text = transcript.map(item => item.text).join(' ');
+            text = transcript.map(t => t.text).join(' ');
         } catch (e: any) {
-            return NextResponse.json({ success: false, error: `YouTube error: ${e.message}` }, { status: 400 });
+            return NextResponse.json({ error: "No transcript available for this video." }, { status: 400 });
         }
     }
+
+    // 4. Final Validation
+    if (!text || text.length < MIN_CONTENT_LENGTH) {
+      return NextResponse.json({ error: 'No text content available to generate quiz.' }, { status: 400 });
+    }
+
+    // 5. Usage Check
+    const usage = await checkAIGenerationUsageLimit(user.id);
+    if (!usage.canGenerate) {
+      return NextResponse.json({ error: usage.error }, { status: 403 });
+    }
+
+    // 6. Generate Quiz
+    console.log(`[QuizAPI] Generating ${numQuestions} questions...`);
+    const quizData = await callAIToGenerateQuiz(text, numQuestions, difficulty, type);
     
-    // C. Database Backfill
-    else if (mode !== 'topic' && (!text || text.length < 50) && documentId) {
-        if (documentId === 'undefined' || documentId === 'null') {
-             return NextResponse.json({ success: false, error: 'Invalid document ID.' }, { status: 400 });
-        }
-
-        console.log(`[Quiz] Fetching text from DB for doc: ${documentId}`);
-        const doc = await prisma.documents.findUnique({
-            where: { id: documentId, user_id: user.id },
-            select: { extracted_text: true }
-        });
-
-        if (doc && doc.extracted_text) {
-            text = doc.extracted_text;
-        } else {
-             return NextResponse.json({ success: false, error: 'Document not found or empty.' }, { status: 404 });
-        }
-    }
-
-    // 7. Validation
-    const minLength = mode === 'topic' ? 3 : 100;
-    if (!text || text.length < minLength) {
-      return NextResponse.json({ success: false, error: `Content too short (min ${minLength} chars).` }, { status: 400 });
-    }
-
-    // 8. Generate with AI
-    let quizData;
-    if (mode === 'topic') {
-      const cleanTopic = text.replace(/^TOPIC:\s*/i, '').trim();
-      quizData = await callAIToGenerateQuizFromTopic(cleanTopic, numQuestions, difficulty, questionType);
-    } else {
-      quizData = await callAIToGenerateQuiz(text, numQuestions, difficulty, questionType);
-    }
-
     if (!quizData) {
-        return NextResponse.json({ success: false, error: 'ai_generation_failed', message: 'Failed to generate quiz.' }, { status: 500 });
+        throw new Error("AI failed to generate quiz structure.");
     }
 
-    // 9. Save to DB
-    const questionsToCreate = quizData.questions.map((q: any) => ({
-      question_text: q.question_text,
-      question_type: q.question_type,
-      correct_answer: q.correct_answer,
-      options: Array.isArray(q.options) ? q.options : undefined,
-      prompts: Array.isArray(q.prompts) ? q.prompts : undefined,
-      explanation: q.explanation || '',
-    }));
-
-    const saved = await prisma.quiz.create({
+    // 7. Save to DB (Corrected Schema)
+    // Using prisma.quiz (singular) based on 'model Quiz' in schema.prisma
+    const savedQuiz = await prisma.quiz.create({
       data: {
-        title: quizData.title || 'Generated Quiz',
+        userId: user.id, // Matches 'userId' field in schema
+        document_id: documentId || null,
+        title: quizData.title || `Generated ${difficulty} Quiz`,
+        // Note: 'description', 'score', 'status' fields are NOT in your schema, so we skip them.
         is_public: false,
-        immediate_feedback: immediateFeedback,
-        userId: user.id,
-        questions: { create: questionsToCreate },
-      },
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
         questions: {
-          select: {
-            id: true,
-            question_text: true,
-            question_type: true,
-            options: true,
-            prompts: true,
-            correct_answer: true,
-            explanation: true,
-          },
-        },
-      },
+          create: quizData.questions.map((q: any) => ({
+             question_text: q.question_text,
+             question_type: q.question_type,
+             correct_answer: q.correct_answer,
+             options: q.options || [], // Ensure JSON compatibility
+             explanation: q.explanation || ''
+          }))
+        }
+      }
     });
 
+    // 8. Increment Usage
     await incrementAIGenerationUsage(user.id, 1);
 
-    return NextResponse.json({
-      success: true,
-      id: saved.id,
-      title: saved.title,
-      createdAt: saved.createdAt,
-      questions: saved.questions,
+    return NextResponse.json({ 
+        success: true, 
+        quizId: savedQuiz.id,
+        message: `Generated ${quizData.questions.length} questions.`
     });
 
   } catch (error: any) {
-    if (error instanceof Response) return error;
-    console.error('Quiz generation error:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Server error' }, { status: 500 });
+    console.error("Quiz Gen Error:", error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
