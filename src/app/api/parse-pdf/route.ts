@@ -1,101 +1,73 @@
-import { NextRequest, NextResponse } from "next/server";
-import pdfParse from "pdf-parse-fork";
+// src/app/api/parse-file/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { extractTextFromServerFile } from '@/lib/file-parser.server';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
+
+// Increase max duration for processing large files (if platform allows)
+export const maxDuration = 60; 
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.docx', '.pptx'];
 
 export async function POST(request: NextRequest) {
   try {
-    const contentType = request.headers.get("content-type") || "";
-    if (!contentType.includes("multipart/form-data")) {
-      return NextResponse.json({ 
-        success: false,
-        error: "Expected multipart/form-data content type" 
-      }, { status: 400 });
+    // 1. Auth Check
+    const user = await requireAuth(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const form = await request.formData();
-    const file = form.get("file") as File | null;
+    // 2. Form Data Parsing
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
 
     if (!file) {
-      return NextResponse.json({ 
-        success: false,
-        error: "No file provided. Please select a PDF file to parse." 
-      }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'No file provided.' },
+        { status: 400 }
+      );
     }
 
-    // 1. Strict File Type Validation
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      return NextResponse.json({ 
-        success: false,
-        error: "Invalid file type. Only PDF files are supported." 
-      }, { status: 400 });
+    // 3. Validation
+    const hasValidExtension = ALLOWED_EXTENSIONS.some((ext) =>
+      file.name.toLowerCase().endsWith(ext)
+    );
+    
+    if (!hasValidExtension) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid file type. Only PDF, TXT, DOCX, and PPTX allowed.' },
+        { status: 400 }
+      );
     }
 
-    // 2. Size Limit (10MB)
-    const maxSize = 10 * 1024 * 1024; 
-    if (file.size > maxSize) {
-      return NextResponse.json({ 
-        success: false,
-        error: `File exceeds 10MB limit. Current size: ${(file.size / 1024 / 1024).toFixed(2)}MB` 
-      }, { status: 400 });
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { success: false, error: 'File exceeds 10MB limit.' },
+        { status: 400 }
+      );
     }
 
-    // Convert file to buffer
-    let buffer: Buffer;
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } catch (bufferError) {
-      console.error("Buffer conversion error:", bufferError);
-      return NextResponse.json({ 
-        success: false,
-        error: "Failed to read file. Please try another PDF file." 
-      }, { status: 400 });
-    }
+    // 4. Processing
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const extractedText = await extractTextFromServerFile(file, buffer);
 
-    // 3. Parsing
-    let extractedText: string;
-    try {
-      const result = await pdfParse(buffer, {
-        max: 0, 
-        version: 'v1.10.100', 
-      });
-      
-      extractedText = result.text || "";
-      
-      // Check: Scanned Document Detection
-      if (!extractedText || extractedText.trim().length < 50) {
-        return NextResponse.json({ 
-          success: false,
-          error: "No text detected. This document appears to be a scanned image. Please use a text-based PDF or OCR tool." 
-        }, { status: 422 });
-      }
-
-    } catch (error: any) {
-      console.error("PDF parsing internal error:", error.message || error);
-      return NextResponse.json({ 
-        success: false,
-        error: "This PDF might be locked, corrupted, or unreadable. Try another file." 
-      }, { status: 400 });
-    }
-
-    // Return the extracted text - FIXED STRUCTURE
-    return NextResponse.json({ 
+    // 5. Success Response
+    return NextResponse.json({
       success: true,
-      // Wrap in 'data' object to match client expectation
-      data: {
-        text: extractedText,
-        fileName: file.name,
-        fileSize: file.size,
-        textLength: extractedText.length
-      }
+      data: { text: extractedText },
     });
 
   } catch (error: any) {
-    console.error("PDF parsing API fatal error:", error);
-    return NextResponse.json({ 
-      success: false,
-      error: "Internal server error during PDF parsing" 
-    }, { status: 500 });
+    console.error('API Error /api/parse-file:', error);
+    
+    // Return appropriate status codes
+    const status = error.message.includes('scanned image') ? 422 : 500;
+
+    return NextResponse.json(
+      { success: false, error: error.message || 'Internal server error.' },
+      { status }
+    );
   }
 }

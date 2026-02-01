@@ -4,16 +4,18 @@ import JSZip from 'jszip';
 import { DOMParser } from 'xmldom';
 import pdfParse from 'pdf-parse-fork';
 
-// Helper to clean text (inline if @/lib/file-parser is missing, otherwise keep import)
+export const runtime = 'nodejs';
+
+/**
+ * Helper: Clean up text artifacts (null bytes, weird spacing)
+ */
 function cleanExtractedText(text: string): string {
   return text
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ')
-    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ') // Standardize spaces
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
     .trim();
 }
-
-export const runtime = 'nodejs';
 
 /**
  * Helper: Extract text from PDF Buffer
@@ -23,8 +25,8 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
     const data = await pdfParse(buffer);
     return data.text || '';
   } catch (err: any) {
-    console.error("PDF Parsing Error Details:", err);
-    throw new Error(`Failed to parse PDF. If this file is encrypted or scanned, it cannot be read. Error: ${err.message}`);
+    console.error("PDF Parsing Error:", err);
+    throw new Error(`Failed to parse PDF: ${err.message}. The file might be encrypted, corrupted, or scanned.`);
   }
 }
 
@@ -38,24 +40,16 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
     const aNamespace = 'http://schemas.openxmlformats.org/drawingml/2006/main';
     let fullText = '';
     let slideIndex = 1;
-    // Safety break to prevent infinite loops on corrupt files
-    const MAX_SLIDES = 200; 
+    const MAX_SLIDES = 200; // Safety limit
 
     while (slideIndex <= MAX_SLIDES) {
-      // Try multiple slide naming conventions
-      const possibleNames = [
-        `ppt/slides/slide${slideIndex}.xml`,
-        `ppt/slides/slide${slideIndex}.xml.rels` // sometimes needed to verify existence
-      ];
-      
+      // PPTX slides are usually named slide1.xml, slide2.xml, etc.
       const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
       
       if (!slideFile) {
-        // If we miss slide 1, it's an error. If we miss slide 10, maybe end of deck.
-        if (slideIndex === 1) { 
-           // Check if it's a template or different structure? 
-           break; 
-        }
+        // If slide 1 is missing, it's likely not a standard PPTX structure.
+        // If later slides are missing, we likely reached the end.
+        if (slideIndex === 1) break; 
         break;
       }
 
@@ -63,6 +57,7 @@ async function extractTextFromPPTX(buffer: Buffer): Promise<string> {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(slideXmlStr, 'application/xml');
 
+      // Extract text from <a:t> nodes
       const textNodes = xmlDoc.getElementsByTagNameNS(aNamespace, 't');
       for (let i = 0; i < textNodes.length; i++) {
         if (textNodes[i].textContent) {
@@ -104,8 +99,8 @@ export async function extractTextFromServerFile(
       fileNameLower.endsWith('.docx')
     ) {
       const result = await mammoth.extractRawText({ buffer });
-      if (result.messages && result.messages.length > 0) {
-        console.warn("Mammoth messages:", result.messages);
+      if (result.messages?.length) {
+        console.warn("Mammoth warnings:", result.messages);
       }
       rawText = result.value || '';
 
@@ -123,9 +118,9 @@ export async function extractTextFromServerFile(
     const cleanText = cleanExtractedText(rawText);
     
     if (!cleanText || cleanText.length < 20) {
-      // Lowered threshold to 20 to allow small test files
+      // Specific error for PDFs that are likely scanned images
       if (fileNameLower.endsWith('.pdf')) {
-         throw new Error('No text found. This PDF appears to be a scanned image or empty. Please use OCR.');
+         throw new Error('No text found. This PDF appears to be a scanned image or empty. Please use a file with selectable text.');
       }
       throw new Error('File content is empty or unreadable.');
     }
