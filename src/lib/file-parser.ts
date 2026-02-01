@@ -1,40 +1,50 @@
 // src/lib/file-parser.ts
-/* sultanedfdes/quizcraft/QuizCraft-299c50df67d8e1c14520128a0d0d8414fbf33d1b/src/lib/file-parser.ts */
 // Client-side file parser utilities
 
 /**
  * Extracts text from a file (PDF, TXT, DOCX, PPTX) by calling the server-side API.
+ * Routes PDFs to the specialized /api/parse-pdf endpoint and others to /api/parse-file.
  */
-// --- MODIFICATION: Added 'token' argument ---
 export async function extractTextFromFile(
   file: File,
-  token: string, // <-- ADDED
+  token: string,
 ): Promise<string> {
   try {
-    // Create FormData to send file to API
     const formData = new FormData();
     formData.append('file', file);
 
-    // Call the new server-side file parsing API
-    const response = await fetch('/api/parse-file', {
+    // --- MODIFICATION: Deterministic Routing ---
+    // Check if the file is a PDF based on MIME type or extension
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    
+    // Route to the appropriate endpoint
+    const endpoint = isPdf ? '/api/parse-pdf' : '/api/parse-file';
+    // -------------------------------------------
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       body: formData,
-      // --- MODIFICATION: Add Authorization header ---
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      // ---
     });
 
     const result = await response.json();
 
     if (!response.ok || !result.success) {
-      // --- MODIFICATION: Pass auth error message through ---
       if (response.status === 401) {
         throw new Error('Authentication required');
       }
-      // ---
       throw new Error(result.error || 'Failed to parse file');
+    }
+
+    // Validate response structure (expects { success: true, data: { text: "..." } })
+    if (!result.data || typeof result.data.text !== 'string') {
+       // Fallback: Check if the API returned text at the root level (legacy support)
+       if (result.text && typeof result.text === 'string') {
+         return result.text;
+       }
+       throw new Error("Invalid response format from parsing service");
     }
 
     return result.data.text;
@@ -46,37 +56,39 @@ export async function extractTextFromFile(
   }
 }
 
+/**
+ * Cleans extracted text while PRESERVING paragraphs/newlines.
+ */
 export function cleanExtractedText(input: string): string {
   if (!input) return '';
 
-  // Step 1: Remove non-printable characters except common whitespace
-  const withoutControl = input.replace(
-    /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g,
-    ' '
-  );
+  // 1. Remove control characters (keep newlines \n, \r and tabs \t)
+  let text = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
 
-  // Step 2: Normalize unicode spaces and special characters
-  const normalized = withoutControl
-    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ') // Unicode spaces
-    .replace(/[\u2018\u2019]/g, "'") // Smart quotes
-    .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
-    .replace(/[\u2013\u2014]/g, '-') // En/em dashes
-    .replace(/[\u2026]/g, '...') // Ellipsis
-    .replace(/[\u00B7]/g, ' '); // Middle dot
+  // 2. Normalize varied line endings (\r\n or \r becomes \n)
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Step 3: Collapse multiple whitespace characters
-  const collapsedWhitespace = normalized.replace(/\s+/g, ' ');
+  // 3. Normalize special unicode spaces to standard spaces
+  text = text.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
+             .replace(/[\u2018\u2019]/g, "'") // Smart quotes
+             .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
+             .replace(/[\u2013\u2014]/g, '-') // Dashes
+             .replace(/[\u2026]/g, '...');    // Ellipsis
 
-  // Step 4: Remove excessive line breaks and normalize paragraphs
-  const normalizedParagraphs = collapsedWhitespace
-    .replace(/\n\s*\n\s*\n+/g, '\n\n') // Max 2 consecutive line breaks
-    .replace(/^\s+|\s+$/g, ''); // Trim start and end
+  // 4. Collapse multiple horizontal spaces (tabs/spaces) into one, 
+  //    BUT ignore newlines so paragraphs aren't merged.
+  text = text.replace(/[ \t]+/g, ' ');
 
-  // Step 5: Final cleanup - ensure minimum content quality
-  const finalText = normalizedParagraphs.trim();
+  // 5. Fix paragraph breaks:
+  //    - Ensure 3+ newlines become 2 (standard paragraph gap)
+  //    - Ensure 2 newlines are preserved
+  text = text.replace(/\n{3,}/g, '\n\n');
 
-  // Validate minimum content length
-  if (finalText.length < 10) {
+  // 6. Trim start/end whitespace
+  const finalText = text.trim();
+
+  // Validate minimum content length (relaxed to 5 chars to allow short valid inputs)
+  if (finalText.length < 5) {
     throw new Error('Extracted text is too short to be meaningful');
   }
 
@@ -86,7 +98,7 @@ export function cleanExtractedText(input: string): string {
 // Additional utility functions for file processing
 export function validateFileType(fileName: string, mimeType?: string): boolean {
   const nameLower = fileName.toLowerCase();
-  // --- MODIFIED: Added docx and pptx ---
+  
   const validExtensions = ['.pdf', '.txt', '.docx', '.pptx'];
   const validMimeTypes = [
     'application/pdf',
@@ -94,30 +106,26 @@ export function validateFileType(fileName: string, mimeType?: string): boolean {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   ];
-  // ---
 
   const hasValidExtension = validExtensions.some((ext) =>
     nameLower.endsWith(ext)
   );
   const hasValidMimeType = !mimeType || validMimeTypes.includes(mimeType);
 
-  return hasValidExtension || hasValidMimeType; // Use OR to be more permissive
+  return hasValidExtension || hasValidMimeType; 
 }
 
 export function formatFileSize(bytes: number | bigint): string {
-  // --- FIX IS HERE ---
   // Convert bigint or number to a number for Math operations
   const bytesAsNumber = Number(bytes);
 
   if (bytesAsNumber === 0) return '0 Bytes';
-  // --- END OF FIX ---
 
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  // Use the converted number
+  
   const i = Math.floor(Math.log(bytesAsNumber) / Math.log(k));
 
-  // Use the converted number
   return parseFloat((bytesAsNumber / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 

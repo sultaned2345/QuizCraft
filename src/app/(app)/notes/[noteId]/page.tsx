@@ -58,7 +58,8 @@ export default async function EditNotePage({ params }: { params: { noteId: strin
       noteId={note.id}
       initialTitle={note.title}
       initialContent={note.content}
-      initialTags={note.tags} // ✅ Passing tags allows "Confidence" status to work
+      initialTags={note.tags}
+      initialLinkedIds={note.linked_note_ids} // ✅ Passed to enable Knowledge Connections
     />
   );
 }

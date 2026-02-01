@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Loader2, 
-  Sparkles, 
   ChevronLeft,
   Save,
   Tag as TagIcon,
@@ -13,9 +12,7 @@ import {
   BookOpen,
   Maximize2,
   Minimize2,
-  Clock,
-  BrainCircuit,
-  GraduationCap
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,7 +32,6 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Sub-Components ---
-import { NoteQuizGenerator } from './NoteQuizGenerator';
 import { NoteConnections } from './NoteConnections';
 
 interface NoteEditorProps {
@@ -74,8 +70,6 @@ export function NoteEditor({
   const [isStudyMode, setIsStudyMode] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [isAiGenerating, setIsAiGenerating] = useState(false);
   
   // --- Study Features State ---
   const [isPlaying, setIsPlaying] = useState(false);
@@ -89,6 +83,7 @@ export function NoteEditor({
 
   // --- Derived Stats ---
   const readingTime = useMemo(() => {
+    // Remove HTML tags to count actual words
     const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
     return Math.ceil(words / 200); // ~200 wpm average
   }, [content]);
@@ -99,7 +94,7 @@ export function NoteEditor({
   useEffect(() => {
     if (isReadOnly) return;
     const timer = setTimeout(() => {
-      // Check for any changes
+      // Check for any changes before triggering save
       if (activeId && (
           title !== initialTitle || 
           content !== initialContent || 
@@ -123,7 +118,7 @@ export function NoteEditor({
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.onend = () => setIsPlaying(false);
     
-    // Optional: Select a better voice if available
+    // Select a better voice if available (prioritize Google or English)
     const voices = window.speechSynthesis.getVoices();
     const preferredVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices[0];
     if (preferredVoice) utterance.voice = preferredVoice;
@@ -140,7 +135,7 @@ export function NoteEditor({
 
     setIsSaving(true);
     try {
-      // Filter out old status tag and add new one
+      // Filter out old status tag and add new one based on current confidence
       const cleanTags = tags.filter(t => !t.startsWith('status:'));
       const finalTags = [...cleanTags, `status:${confidence}`];
 
@@ -160,8 +155,7 @@ export function NoteEditor({
 
       if (!res.ok) throw new Error();
       
-      setLastSaved(new Date());
-      // Update local tags state to match what we sent (to prevent infinite save loops)
+      // Update local tags state to match what we sent (prevents re-saving same state)
       setTags(finalTags); 
       
       if (manual) toast({ description: "Note saved." });
@@ -186,17 +180,6 @@ export function NoteEditor({
 
   const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(t => t !== tagToRemove));
-  };
-
-  const handleAiExpand = async () => {
-     setIsAiGenerating(true);
-     toast({ title: "Neural Engine Active", description: "Analyzing context and generating expansion..." });
-     
-     // Simulate AI delay (Replace with actual API call to /api/notes/expand later)
-     setTimeout(() => {
-         setContent(prev => prev + `<p><strong>[AI Insight]:</strong> Expanding on <em>${title}</em>... consider how this concept applies to real-world distributed systems.</p>`);
-         setIsAiGenerating(false);
-     }, 2000);
   };
 
   return (
@@ -300,8 +283,8 @@ export function NoteEditor({
                             {headers.map((header, i) => (
                                 <a 
                                     key={i} 
-                                    href={`#`} // Ideally link to element ID
-                                    onClick={(e) => { e.preventDefault(); /* Scroll logic here */ }}
+                                    href={`#`} 
+                                    onClick={(e) => { e.preventDefault(); /* Scroll logic placeholder */ }}
                                     className={cn(
                                         "block text-sm py-1.5 px-3 -ml-px border-l-2 border-transparent transition-colors hover:border-primary/50 hover:bg-muted/50",
                                         "text-muted-foreground hover:text-foreground",
@@ -351,9 +334,9 @@ export function NoteEditor({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="learning">🟡 Learning</SelectItem>
-                                <SelectItem value="review">🔴 To Review</SelectItem>
-                                <SelectItem value="mastered">🟢 Mastered</SelectItem>
+                                <SelectItem value="learning">泯 Learning</SelectItem>
+                                <SelectItem value="review">閥 To Review</SelectItem>
+                                <SelectItem value="mastered">泙 Mastered</SelectItem>
                             </SelectContent>
                          </Select>
 
@@ -410,48 +393,9 @@ export function NoteEditor({
                           onLinksChange={setLinkedIds}
                        />
                     )}
-
-                    {/* AI Expand Action */}
-                    {!isStudyMode && (
-                         <div className="flex justify-center pt-8 opacity-50 hover:opacity-100 transition-opacity">
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={handleAiExpand} 
-                                disabled={isAiGenerating} 
-                                className="gap-2 shadow-sm"
-                            >
-                                 {isAiGenerating ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                 ) : (
-                                    <Sparkles className="w-3 h-3 text-purple-500" />
-                                 )}
-                                 {isAiGenerating ? 'Generating Insight...' : 'AI Expand Note'}
-                            </Button>
-                         </div>
-                    )}
                 </div>
             </div>
         </div>
-
-        {/* Right Column: AI & Quiz Generator */}
-        <AnimatePresence>
-            {!isFocusMode && (
-                <motion.div 
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 320 }} // Slightly wider for better quiz UI
-                    exit={{ opacity: 0, width: 0 }}
-                    className="hidden xl:block border-l border-border/50 bg-muted/10"
-                >
-                    <NoteQuizGenerator 
-                       noteId={activeId || ''}
-                       noteTitle={title}
-                       noteContent={content}
-                    />
-                </motion.div>
-            )}
-        </AnimatePresence>
-
       </div>
     </div>
   );

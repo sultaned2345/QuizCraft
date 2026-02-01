@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Size Limit (10MB)
-    // Increased to handle textbooks/slides without crashing
     const maxSize = 10 * 1024 * 1024; 
     if (file.size > maxSize) {
       return NextResponse.json({ 
@@ -45,7 +44,6 @@ export async function POST(request: NextRequest) {
     let buffer: Buffer;
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Safe Buffer usage (avoids DeprecationWarning)
       buffer = Buffer.from(arrayBuffer);
     } catch (bufferError) {
       console.error("Buffer conversion error:", bufferError);
@@ -55,18 +53,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 3. Parsing with Scanned Doc Detection
+    // 3. Parsing
     let extractedText: string;
     try {
       const result = await pdfParse(buffer, {
-        max: 0, // No page limit
-        version: 'v1.10.100', // Specific version for stability
+        max: 0, 
+        version: 'v1.10.100', 
       });
       
       extractedText = result.text || "";
       
       // Check: Scanned Document Detection
-      // If text is empty or extremely short, it's likely an image-only PDF
       if (!extractedText || extractedText.trim().length < 50) {
         return NextResponse.json({ 
           success: false,
@@ -75,7 +72,6 @@ export async function POST(request: NextRequest) {
       }
 
     } catch (error: any) {
-      // Log specific error to help debug "TT: undefined function" or password issues
       console.error("PDF parsing internal error:", error.message || error);
       return NextResponse.json({ 
         success: false,
@@ -83,13 +79,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Return the extracted text
+    // Return the extracted text - FIXED STRUCTURE
     return NextResponse.json({ 
       success: true,
-      text: extractedText,
-      fileName: file.name,
-      fileSize: file.size,
-      textLength: extractedText.length
+      // Wrap in 'data' object to match client expectation
+      data: {
+        text: extractedText,
+        fileName: file.name,
+        fileSize: file.size,
+        textLength: extractedText.length
+      }
     });
 
   } catch (error: any) {
